@@ -8,7 +8,7 @@
  * one gold NEXT COIN, the next coin's tag and "See my shelf".
  *
  * The hero never gives up size first: the stage grows into what the page leaves and the coin is
- * at least winHeroSize (110 on the SE, about 145 on the 17 Pro); on a short phone the window
+ * at least winHeroSize (110 on the SE, 135 on the 17 Pro); on a short phone the window
  * shrinks under it and the coin breaks the window's top edge, and the prize names give way (the
  * art says what each prize is; VoiceOver still hears the names).
  *
@@ -40,7 +40,7 @@ import Tag from '../Tag';
 import { Body, Caps, Count, Title } from '../Text';
 import { ART, ART_RATIO } from '../art';
 import { ART_SIZE, SPACE } from '../tokens';
-import { mapLayer } from './ProofMap';
+import { mapBehind } from './ProofMap';
 import { useParkCoins } from './proofCoins';
 import { WIN_BEATS, countSteps, winsLeft } from './proofData';
 
@@ -138,7 +138,7 @@ function WinScreen({ coins, ready }: { readonly coins: Readonly<Record<string, I
     <View key="t" ref={chipRefs.tickets} collapsable={false}><CurrencyChip kind="tickets" value={chips.tickets} /></View>,
   ] };
   // Until the art is on the phone, the map the coin was won on stays exactly as it was.
-  if (!ready) return <Screen testID="proof-win-wait" ground="map" mapLayer={mapLayer} scroll={false} header={header} />;
+  if (!ready) return <Screen testID="proof-win-wait" ground="map" mapLayer={mapBehind} scroll={false} header={header} />;
   const next = coins[NEXT];
   const won = coins[WON];
   const nextTag = (
@@ -147,7 +147,7 @@ function WinScreen({ coins, ready }: { readonly coins: Readonly<Record<string, I
   );
   const shelf = <GhostButton label="See my shelf" onPress={noop} />;
   return (
-    <Screen testID="proof-win" ground="map" mapLayer={mapLayer} dim header={header}
+    <Screen testID="proof-win" ground="map" mapLayer={mapBehind} dim header={header}
       fx={(
         <View ref={fxRef} collapsable={false} style={{ flex: 1 }}>
           {flights.map(f => <Flight key={f.key} source={f.art} ratio={f.ratio} from={f.from} to={f.to} delay={f.delay} onLand={landers[f.chip]} />)}

@@ -88,7 +88,7 @@ function ProgressBarImpl({ value, second = 0, prize, label, width, showDot = tru
     <View accessible accessibilityRole="progressbar" accessibilityLabel={label}
       accessibilityValue={{ min: 0, max: 100, now: Math.round(clamp01(value) * 100) }}
       style={[{ minHeight: boxH, justifyContent: prize || above ? 'flex-end' : 'center', paddingRight: room, width, paddingBottom: prize ? (BAR.dot - BAR.height) / 2 : 0 }, style]}>
-      {above ? <View style={{ marginBottom: SPACE.base + (BAR.dot - BAR.height) / 2 }}>{above}</View> : null}
+      {above ? <View style={{ marginBottom: SPACE.base + (BAR.dot - BAR.height) / 2, marginRight: prize ? prize.width - room + SPACE.base : 0 }}>{above}</View> : null}
       <View onLayout={onLayout} style={{ height: BAR.height }}>
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: BAR.height / 2, borderWidth: LINE.chip, borderColor: INK.navy,
           backgroundColor: paper ? SHADE.barPaper : INK.blueLip, overflow: 'hidden' }}>

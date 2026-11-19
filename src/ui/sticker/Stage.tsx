@@ -6,7 +6,7 @@
  * Reduce Motion. Level 2: it lives inside a page, and takes the page's inner width by default.
  *
  * The hero never gives up size first. With `hero` the stage `grow`s into the height its page
- * leaves and draws the hero at least `hero.min` (winHeroSize: 110 on the SE, about 145 on the
+ * leaves and draws the hero at least `hero.min` (winHeroSize: 110 on the SE, 135 on the
  * 17 Pro). When the room is short the window shrinks under it and the hero breaks the window's
  * top edge (art breaks the box), inside the stage's own box, so nothing above is ever covered.
  *
@@ -50,9 +50,9 @@ export type StageProps = {
 const PAD = SPACE.base * 2;
 const MIN_WINDOW = 64;
 
-/** The won coin's least size on a phone of this height: 110 on the SE, about 145 on the 17 Pro, at most 150. Pure, tested. */
+/** The won coin's least size on a phone of this height: 110 on the SE, 135 on the 17 Pro (today's coin with its ring), at most 150. Pure, tested. */
 export function winHeroSize(windowHeight: number): number {
-  return Math.max(110, Math.min(150, Math.round(windowHeight * 0.165)));
+  return Math.max(110, Math.min(150, Math.round(windowHeight * 0.155)));
 }
 
 /**
@@ -69,9 +69,9 @@ export function stageLayout(box: number, min: number): { readonly hero: number; 
   return { hero: min, heroTop, windowTop, windowHeight: box - windowTop };
 }
 
-/** The least box a hero stage takes: the hero and its pad, so it never needs to reach above itself. */
+/** The least box a hero stage takes: the hero standing on its pad, its top flush with the box, so it never reaches above itself. */
 export function stageMinBox(min: number): number {
-  return min + PAD * 2;
+  return min + PAD;
 }
 
 const SPARKLES = [{ x: 0.86, y: 0.2, s: 22 }, { x: 0.13, y: 0.7, s: 16 }, { x: 0.78, y: 0.8, s: 12 }] as const;

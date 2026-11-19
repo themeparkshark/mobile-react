@@ -17,7 +17,7 @@ import Spot from '../Spot';
 import { Body, Name } from '../Text';
 import { ART, ART_RATIO } from '../art';
 import { SPACE, SPOT } from '../tokens';
-import { mapLayer } from './ProofMap';
+import { FOOTER_ITEMS, mapLayer } from './ProofMap';
 import { weekSpots } from './proofData';
 
 const TODAY = 3;
@@ -26,7 +26,7 @@ const noop = () => undefined;
 export default function ProofRewards() {
   const week = weekSpots(TODAY);
   return (
-    <Screen testID="proof-rewards" ground="map" mapLayer={mapLayer} scroll={false} header={{ children: [
+    <Screen testID="proof-rewards" ground="map" mapLayer={mapLayer} scroll={false} footer={{ items: FOOTER_ITEMS, picked: 'map' }} header={{ children: [
       <CurrencyChip key="c" kind="coins" value={4850} />,
       <CurrencyChip key="e" kind="energy" value={935} />,
       <CurrencyChip key="t" kind="tickets" value={6} />,

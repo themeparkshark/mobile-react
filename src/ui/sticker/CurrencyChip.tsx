@@ -13,6 +13,8 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSequence, withS
 import { SPRING } from '../motion';
 import useUiReducedMotion from '../useUiReducedMotion';
 import StickerText from './StickerText';
+import { PlaceProvider } from './StickerContext';
+import { insidePage } from './level';
 import { ART, ART_RATIO } from './art';
 import { TEXT } from './textRoles';
 import { CHIP, INK, LINE, SHADE, STICK } from './tokens';
@@ -75,7 +77,10 @@ function CurrencyChipImpl({ kind, value, art: artProp, unit, label, style }: Cur
         paddingLeft: CHIP.padLeft, paddingRight: CHIP.padRight, alignItems: 'center', justifyContent: 'center' }}>
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: CHIP.height / 2, borderTopWidth: 3, borderColor: SHADE.grooveInset }} />
         <Animated.View style={[{ paddingTop: 3 }, numStyle]}>
-          <StickerText spec={SPEC} lineHeight={22} role="none" tabular={!unit}>{unit ? `${value} ${unit}` : String(value)}</StickerText>
+          {/* The groove is blue wherever the chip sits (on paper too): its count is white on blue. */}
+          <PlaceProvider value={insidePage()}>
+            <StickerText spec={SPEC} lineHeight={22} role="none" tabular={!unit}>{unit ? `${value} ${unit}` : String(value)}</StickerText>
+          </PlaceProvider>
         </Animated.View>
       </View>
       {/* The pale line under the groove (kit.css: 1.5 pt of white at 28 percent). */}

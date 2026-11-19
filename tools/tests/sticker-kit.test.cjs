@@ -955,8 +955,8 @@ test('proofs carry no hand gaps: named gaps and SPACE only', () => {
 
 test('the win card arrives whole over the map it was won on: no blank world, no empty box', () => {
   const win = source(path.join(dir, 'proof', 'ProofWin.tsx'));
-  assert.match(win, /if \(!ready\) return <Screen testID="proof-win-wait" ground="map" mapLayer=\{mapLayer\}/, 'while the art loads, the map stays as it was');
-  assert.match(win, /ground="map" mapLayer=\{mapLayer\} dim/, 'the card sits over the dimmed map');
+  assert.match(win, /if \(!ready\) return <Screen testID="proof-win-wait" ground="map" mapLayer=\{mapBehind\}/, 'while the art loads, the map stays as it was');
+  assert.match(win, /ground="map" mapLayer=\{mapBehind\} dim/, 'the card sits over the dimmed map');
   assert.match(win, /<Spot state="empty" stickAt=/, 'each prize is stuck into its own empty spot');
   assert.match(source(path.join(dir, 'Stage.tsx')), /<Spot state="next"/, 'a next spot waits where the coin lands');
   assert.match(source(path.join(dir, 'proof', 'ProofRewards.tsx')), /ground="map" mapLayer=\{mapLayer\}/, 'Rewards opens over the map');

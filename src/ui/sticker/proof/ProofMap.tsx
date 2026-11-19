@@ -73,9 +73,10 @@ export function platePlacement(w: number, h: number, attribution: number): { rea
 }
 
 /** The real park, full screen, under everything (the ground, never content). Its credit ends clear of the footer. */
-export function ParkMap({ attribution }: { readonly attribution: number }) {
+export function ParkMap({ attribution }: { readonly attribution?: number }) {
   const { width, height } = useWindowDimensions();
-  const at = platePlacement(width, height, attribution);
+  // Default: placed as on the map screen, under its footer (a sheet or the win card over the map).
+  const at = platePlacement(width, height, attribution ?? mapAttributionBottom(width));
   return <Image source={MAP} resizeMode="stretch" fadeDuration={0} style={{ position: 'absolute', left: at.left, top: at.top, width: at.width, height: at.height }} accessible={false} />;
 }
 
@@ -93,6 +94,8 @@ function ParkTag() {
 
 /** The map layer: the plate placed from the Screen's attribution line. */
 export const mapLayer = (insets: ScreenInsets) => <ParkMap attribution={insets.attribution} />;
+/** The map as it sits under the map screen's footer, for a sheet or card that opens over it. */
+export const mapBehind = <ParkMap />;
 
 export default function ProofMap({ toastOnOpen = false, bare = false }: { readonly toastOnOpen?: boolean; readonly bare?: boolean }) {
   const { width } = useWindowDimensions();
@@ -109,7 +112,7 @@ export default function ProofMap({ toastOnOpen = false, bare = false }: { readon
     return () => clearTimeout(t);
   }, [play, toastOnOpen]);
   // The baseline for the cover measurement: the same plate, placed as under the footer, with nothing on it.
-  if (bare) return <Screen testID="proof-map-bare" ground="map" mapLayer={<ParkMap attribution={mapAttributionBottom(width)} />} scroll={false} />;
+  if (bare) return <Screen testID="proof-map-bare" ground="map" mapLayer={<ParkMap />} scroll={false} />;
   return (
     <Screen testID="proof-map" ground="map" mapLayer={mapLayer} scroll={false}
       header={{ children: [<CurrencyChip key="c" kind="coins" value={350} />, <CurrencyChip key="t" kind="tickets" value={2} />] }}
