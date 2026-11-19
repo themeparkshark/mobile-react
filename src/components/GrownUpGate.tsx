@@ -138,8 +138,9 @@ const MISS_KEY = 'grown-up-gate:misses';
  * gate's request on a busy phone). This module writes both and keeps them in memory, so one read at start is enough.
  */
 let restReady: Promise<void> | null = null;
+let restDone = false;
 function restLoaded(): Promise<void> {
-  restReady ??= loadRest();
+  restReady ??= loadRest().finally(() => { restDone = true; });
   return restReady;
 }
 
@@ -237,15 +238,18 @@ export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(M
 export function askGrownUpOutcome(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<GateOutcome> {
   if (!showGate) return Promise.resolve('unshown');
   pressTrace('gate.asked', () => `reason=${reason?.kind ?? 'none'} open=${!!open}`);
-  open ??= restLoaded()
-    .then(() => new Promise<GateOutcome>(resolve => {
-      if (!showGate) { resolve('unshown'); return; }
-      const request: GateRequest = { seed: now < gateRestUntil ? -1 : seed, reason,
-        resolve: ok => resolve(request.unshown ? 'unshown' : ok ? 'yes' : 'no') };
-      pressTrace('gate.request', () => `reason=${reason?.kind ?? 'none'}`);
-      showGate(request);
-    }))
-    .finally(() => { open = null; });
+  if (open) return open;
+  const start = () => new Promise<GateOutcome>(resolve => {
+    if (!showGate) { resolve('unshown'); return; }
+    const request: GateRequest = { seed: now < gateRestUntil ? -1 : seed, reason,
+      resolve: ok => resolve(request.unshown ? 'unshown' : ok ? 'yes' : 'no') };
+    pressTrace('gate.request', () => `reason=${reason?.kind ?? 'none'}`);
+    showGate(request);
+  });
+  // Rest already read (every ask after the first second of a launch): the gate is asked for inside the very press
+  // that wanted it, so it draws in that press's own render. Behind a promise it waited for the end of the whole touch
+  // batch (React Native runs promise callbacks after it): 170 to 280 ms on a busy phone (fix pass w5, ROOT-GATE).
+  open = (restDone ? start() : restLoaded().then(start)).finally(() => { open = null; });
   return open;
 }
 

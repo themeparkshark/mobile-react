@@ -215,8 +215,8 @@ test('ROOT-GATE N02: a gate ask reads the saved rest once per launch, and a gate
   // Phase log, need_ticket row: 179 ms from the row's touch to the gate's request (two storage reads on every ask),
   // then a passive-effect flush before the sheet drew it. Fails on 535be9b0.
   const gate = src('src/components/GrownUpGate.tsx');
-  assert.match(gate, /open \?\?= restLoaded\(\)/);
+  assert.match(gate, /open = \(restDone \? start\(\) : restLoaded\(\)\.then\(start\)\)\.finally/, 'asked inside the press once the rest is read');
   assert.doesNotMatch(gate, /open \?\?= loadRest\(\)/, 'never two storage round trips per ask');
-  assert.match(gate, /function restLoaded\(\): Promise<void> \{\s*restReady \?\?= loadRest\(\);\s*return restReady;\s*\}/);
+  assert.match(gate, /function restLoaded\(\): Promise<void> \{\s*restReady \?\?= loadRest\(\)\.finally\(\(\) => \{ restDone = true; \}\);\s*return restReady;\s*\}/);
   assert.match(gate, /useLayoutEffect\(\(\) => \{\s*if \(!sheetOverlay \|\| bodyRef\.current === sentRef\.current\) return;/);
 });
