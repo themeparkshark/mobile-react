@@ -61,7 +61,7 @@ export default function HoldDemo({ subject, motion, reduced, size = 46 }: {
   });
   const ringStyle = useAnimatedStyle(() => {
     const q = holdPose(t.value, motion);
-    return { opacity: 0.25 + 0.75 * q.press, transform: [{ translateX: motion === 'slide' ? 18 * q.slide : 0 }, { scale: 0.6 + 0.4 * q.press }] };
+    return { opacity: 0.5 + 0.5 * q.press, transform: [{ translateX: motion === 'slide' ? 18 * q.slide : 0 }, { scale: 0.6 + 0.4 * q.press }] };
   });
   const heroStyle = useAnimatedStyle(() => {
     const q = holdPose(t.value, motion);

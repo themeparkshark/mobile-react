@@ -96,7 +96,9 @@ export interface EngineInput {
 export const TAP_SWIM_STEPS = 9;
 
 /** Pure: should a pending release apply now (the press has swum at least TAP_SWIM_STEPS)? */
-export function releaseDue(simHolding: boolean, step: number, holdStart: number, minSteps: number = TAP_SWIM_STEPS): boolean {
+export function releaseDue(simHolding: boolean, step: number, holdStart: number, minSteps: number): boolean {
+  // No default parameter: a worklet's default value is not captured on the UI runtime (it threw
+  // "Property 'TAP_SWIM_STEPS' doesn't exist" on device); the caller passes the constant.
   'worklet';
   return simHolding && step - holdStart >= minSteps;
 }
@@ -336,7 +338,7 @@ export function useSharkyEngine(
       // T045: a quick tap's release lands once the press has swum TAP_SWIM_STEPS (logged like any input).
       if (inp.releasePending) {
         if (!s.holding) inp.releasePending = false;
-        else if (releaseDue(!!s.holding, s.step, s.holdStart)) {
+        else if (releaseDue(!!s.holding, s.step, s.holdStart, TAP_SWIM_STEPS)) {
           applyInput(s, IN_RELEASE, 0, 0);
           pushEvent(r, BR_INPUT, IN_RELEASE, 0, 0, s.step);
           inp.releasePending = false;

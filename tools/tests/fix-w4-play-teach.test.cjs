@@ -70,7 +70,7 @@ test('N03: the shared lock is the T046 lock (same timings, the dimmed look, a ca
 test('T045: a quick tap gives Sharky a short swim: the release waits until the press has swum TAP_SWIM_STEPS', () => {
   const engine = read('src/games/sharky/useSharkyEngine.ts');
   assert.match(engine, /export const TAP_SWIM_STEPS = 9;/);
-  assert.match(engine, /if \(inp\.releasePending\) \{\s*if \(!s\.holding\) inp\.releasePending = false;\s*else if \(releaseDue\(!!s\.holding, s\.step, s\.holdStart\)\) \{\s*applyInput\(s, IN_RELEASE, 0, 0\);\s*pushEvent\(r, BR_INPUT, IN_RELEASE, 0, 0, s\.step\);/,
+  assert.match(engine, /if \(inp\.releasePending\) \{\s*if \(!s\.holding\) inp\.releasePending = false;\s*else if \(releaseDue\(!!s\.holding, s\.step, s\.holdStart, TAP_SWIM_STEPS\)\) \{\s*applyInput\(s, IN_RELEASE, 0, 0\);\s*pushEvent\(r, BR_INPUT, IN_RELEASE, 0, 0, s\.step\);/,
     'the delayed release is applied and logged like any input (replays and the verifier see plain inputs)');
   const swim = read('src/games/sharky/SharkySwim.tsx');
   assert.match(swim, /if \(inp\.holding\) inp\.releasePending = true;/, 'lifting the finger asks for the release, never sends it at once');
@@ -79,10 +79,12 @@ test('T045: a quick tap gives Sharky a short swim: the release waits until the p
   const { loadTs } = require('./helpers/ts-module.cjs');
   const src = engine.slice(engine.indexOf('export function releaseDue'), engine.indexOf('}', engine.indexOf('export function releaseDue')) + 1);
   // eslint-disable-next-line no-new-func
-  const releaseDue = new Function(`${src.replace(/export function/, 'function').replace(/: (boolean|number)/g, '').replace(/= TAP_SWIM_STEPS/, '= 9')}; return releaseDue;`)();
-  assert.equal(releaseDue(true, 104, 100), false);
-  assert.equal(releaseDue(true, 109, 100), true);
-  assert.equal(releaseDue(false, 200, 100), false);
+  const releaseDue = new Function(`${src.replace(/export function/, 'function').replace(/: (boolean|number)/g, '')}; return releaseDue;`)();
+  assert.equal(releaseDue(true, 104, 100, 9), false);
+  assert.equal(releaseDue(true, 109, 100, 9), true);
+  assert.equal(releaseDue(false, 200, 100, 9), false);
+  // A worklet never reads a module constant through a default parameter (the device crash).
+  assert.doesNotMatch(src, /minSteps: number =/);
   void loadTs;
 });
 
