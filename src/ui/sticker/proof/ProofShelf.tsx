@@ -15,6 +15,7 @@ import { memo, useContext, useEffect, useMemo, useState } from 'react';
 import { Image, ScrollView, View, useWindowDimensions, type ImageSourcePropType } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AuthContext } from '../../../context/AuthProvider';
+import type { TaskType } from '../../../models/task-type';
 import { fetchParkShelf, type ParkShelfData } from '../../../services/collection/parkShelfPrefetch';
 import Card from '../Card';
 import CurrencyChip from '../CurrencyChip';
@@ -40,7 +41,7 @@ const noop = () => undefined;
 type Coin = { readonly id: number; readonly name: string; readonly source: ImageSourcePropType; readonly state: ProofSpotState; readonly limited: boolean };
 
 const CoinCell = memo(function CoinCell({ coin, size }: { coin: Coin; size: number }) {
-  const said = coin.state === 'yours' ? 'found' : coin.state === 'next' ? 'next up' : coin.state === 'empty' ? 'not out yet' : 'not yet';
+  const said = coin.state === 'yours' ? 'found' : coin.state === 'next' ? 'next up' : coin.state === 'empty' ? 'still hidden' : 'not yet';
   return <Spot state={coin.state} art={coin.state === 'empty' ? undefined : coin.source} size={size} label={`${coin.name}, ${said}`} />;
 });
 
@@ -73,16 +74,19 @@ function useShelfCoins(): { coins: Coin[]; sample: boolean; failed: boolean } {
   return useMemo(() => {
     if (!data) return { coins: [], sample: false, failed };
     const seen = new Set<number>();
-    const tasks = [...data.available.map(t => ({ t, limited: false })), ...data.limited.map(t => ({ t, limited: true }))]
-      .filter(({ t }) => (seen.has(t.id) ? false : (seen.add(t.id), true))).slice(0, TOTAL);
+    // The park's secret coins close the shelf as empty spots (no art until found); up to 5 of them.
+    const secret = data.secret.slice(0, 5).map(t => ({ id: t.id, name: t.name, coin_url: '', limited: null as TaskType['limited'] }));
+    const open = [...data.available, ...data.limited].filter(t => (seen.has(t.id) ? false : (seen.add(t.id), true)));
+    const tasks = [...open.slice(0, TOTAL - secret.length).map(t => ({ t, limited: !!t.limited, secret: false })),
+      ...secret.map(t => ({ t, limited: false, secret: true }))];
     const done = new Set(data.completed.map(t => t.id));
     const realFound = tasks.map(({ t }) => done.has(t.id));
     const sample = realFound.filter(Boolean).length < 3;
-    const found = sample ? sampleFound(tasks.length, 15) : realFound;
-    const coming = tasks.map(({ t, limited }) => limited && !(t.limited?.active ?? false));
+    const found = sample ? sampleFound(open.slice(0, TOTAL - secret.length).length, 15).concat(secret.map(() => false)) : realFound;
+    const coming = tasks.map(({ t, secret: isSecret }) => isSecret || (!!t.limited && !t.limited.active));
     const states = shelfStates(found, coming);
     return {
-      coins: tasks.map(({ t, limited }, i) => ({ id: t.id, name: t.name, source: { uri: t.coin_url }, state: states[i], limited })),
+      coins: tasks.map(({ t, limited, secret: isSecret }, i) => ({ id: isSecret ? -t.id : t.id, name: isSecret ? 'Secret coin' : t.name, source: { uri: t.coin_url }, state: states[i], limited })),
       sample, failed,
     };
   }, [data, failed]);
