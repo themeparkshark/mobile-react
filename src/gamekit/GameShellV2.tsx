@@ -67,7 +67,7 @@ import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovem
 import { RideChallengeContext } from './RideChallengeContext';
 import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
-import { StageHoldContext } from './StageHoldContext';
+import { StageDrawnContext, StageHoldContext } from './StageHoldContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
@@ -449,6 +449,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const stageHeld = useContext(StageHoldContext);
     const stageHeldRef = useRef(stageHeld);
     stageHeldRef.current = stageHeld;
+    /** Told once the held stage is drawn, so the ride's punch hands over onto a drawn board (w4 N04). */
+    const onStageDrawn = useContext(StageDrawnContext);
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
@@ -808,6 +810,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // The field shows once the art is drawn (N04): a stage that is drawn but still dealing is seen, never a blank page.
     const fieldOn = (stageDrawn ?? stageReady) || stageOn;
     const fieldIn = useSharedValue(fieldOn ? 1 : 0);
+    useEffect(() => {
+      if (fieldOn && stageHeld) onStageDrawn?.();
+    }, [fieldOn, stageHeld, onStageDrawn]);
     useEffect(() => {
       if (fieldOn) fieldIn.value = withTiming(1, { duration: DURATION.enter, easing: EASE.out });
       else fieldIn.value = 0;

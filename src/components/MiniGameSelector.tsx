@@ -25,7 +25,7 @@ import { getLinePlayChapter } from '../services/lineplay/chapters';
 import { useHelp } from './help/HelpProvider';
 import GameIntroCard from './help/GameIntroCard';
 import { gameIntroTip } from '../services/help/helpTopics';
-import { StageHoldContext } from '../gamekit/StageHoldContext';
+import { StageDrawnContext, StageHoldContext } from '../gamekit/StageHoldContext';
 import { stageHoldFor } from '../gamekit/stageHold';
 
 const USE_QUEUE_KIT_GAMES = true;
@@ -65,6 +65,8 @@ interface Props {
    * (it never starts or counts) so it is drawn the moment the punch hands over.
    */
   prewarm?: boolean;
+  /** Fix round w4 N04: the held game's stage is drawn (the punch may hand over now). */
+  onStageDrawn?: () => void;
   onClose: () => void;
   onComplete: (multiplier: number, rewards: { coins: number; xp: number }, proof?: TaskGameProof) => void;
 }
@@ -86,6 +88,7 @@ export default function MiniGameSelector({
   excludeGames = [],
   kid = false,
   prewarm = false,
+  onStageDrawn,
   onClose,
   onComplete,
 }: Props) {
@@ -233,7 +236,9 @@ export default function MiniGameSelector({
   if (stage.introOnly) return intro;
   // One tree for held and live, so the hand-over never remounts the game (its board stays drawn).
   const held = (game: React.ReactNode) => (
-    <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+    <StageDrawnContext.Provider value={onStageDrawn ?? null}>
+      <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+    </StageDrawnContext.Provider>
   );
 
   // A Ticket was already spent when the server created this attempt.

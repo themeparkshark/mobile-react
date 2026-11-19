@@ -13,3 +13,10 @@ export const StageHoldContext = createContext<boolean>(false);
 export function useStageHold(): boolean {
   return useContext(StageHoldContext);
 }
+
+/**
+ * Fix round w4 (N04, T036): told once when a held game's stage art is drawn, so the ride's ticket punch can hand
+ * over the moment the board is really on screen (a short punch on TRY AGAIN, never a blank page after it).
+ * Null outside a ride challenge's punch.
+ */
+export const StageDrawnContext = createContext<(() => void) | null>(null);

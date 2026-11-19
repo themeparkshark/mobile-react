@@ -318,6 +318,12 @@ export default function RedeemRedeemableModal({
    */
   const [punchCard, setPunchCard] = useState(false);
   useEffect(() => { if (flowState !== 'spinning') setPunchCard(false); }, [flowState]);
+  /** w4 N04: the game mounted under the punch has drawn its board; the punch hands over onto it. */
+  const [boardDrawn, setBoardDrawn] = useState(false);
+  const markBoardDrawn = useCallback(() => setBoardDrawn(true), []);
+  useEffect(() => { if (flowState !== 'spinning') setBoardDrawn(false); }, [flowState]);
+  /** w4 N04: this punch is a TRY AGAIN of the game just played: the game card's short stay. */
+  const repeatPunchRef = useRef(false);
   /** The deal step, readable from the spend callback declared above it (T036, T044). */
   const selectAssignedGameRef = useRef<() => boolean>(() => false);
   const savedAttemptIdRef = useRef<number | null>(null);
@@ -841,12 +847,13 @@ export default function RedeemRedeemableModal({
     proofRef.current = null;
     setSelectedGame(null);
     setSelectedGameData(null);
+    repeatPunchRef.current = true;
     setFlowState('spinning');
     try {
       await clearAttemptCheckpoint();
       await handleStartWheel();
       // A start that could not begin (no saved place to play from) goes back to the loss card, never a punch that bobs on.
-      if (flowStateRef.current === 'spinning' && !attemptRef.current && !spendingRef.current) setFlowState('lost');
+      if (flowStateRef.current === 'spinning' && !attemptRef.current && !spendingRef.current) { repeatPunchRef.current = false; setFlowState('lost'); }
     } catch (error) {
       console.warn('Could not prepare protected ride retry:', error);
       setFlowState('save-error');
@@ -1427,7 +1434,9 @@ export default function RedeemRedeemableModal({
               note={proofRejected ? 'Same game. No new Ticket.' : redealt ? 'Picture game. No new Ticket.'
                 : attemptRef.current?.rescue_pass ? (redeemable?.rescue_pass_source === 'daily' ? 'Today’s free try' : 'An extra try') : undefined}
               onCardShown={() => setPunchCard(true)}
-              onDone={() => { setRedealt(false); setFlowState('minigame'); }}
+              boardReady={boardDrawn}
+              quick={repeatPunchRef.current}
+              onDone={() => { repeatPunchRef.current = false; setRedealt(false); setFlowState('minigame'); }}
             />
           )}
           {/* T044: only a game this build does not know ever stops here; a known game goes straight to the punch. */}
@@ -1497,6 +1506,7 @@ export default function RedeemRedeemableModal({
                 attemptSeed={attemptRef.current?.seed}
                 rewardMode="task-attempt"
                 prewarm={flowState === 'spinning'}
+                onStageDrawn={markBoardDrawn}
                 kid={kidRulesFor(attemptRef.current, pictureOnlyRef.current)}
                 parkId={park.id}
                 triviaDeal={attemptRef.current?.trivia ?? null}

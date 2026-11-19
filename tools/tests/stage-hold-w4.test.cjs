@@ -72,7 +72,7 @@ test('T036: the game mounts under the punch once the tear starts, so its mount n
   assert.match(modal, /useEffect\(\(\) => \{ if \(flowState !== 'spinning'\) setPunchCard\(false\); \}, \[flowState\]\);/);
   // Called after the UI-thread tear and card springs are set, in both the full and the Reduce Motion punch.
   assert.match(punch, /cardShown\.current = true;\n\s+if \(reduced\) \{\n\s+onCardShown\?\.\(\);/);
-  assert.match(punch, /at\(PUNCH_T\.done - PUNCH_T\.punch \+ 400, finish\); \/\/ safety net\n[^\n]*\n\s+onCardShown\?\.\(\);/);
+  assert.match(punch, /at\(safetyMs\(PUNCH_T\.done - PUNCH_T\.punch \+ 400\), finish\); \/\/ safety net\n[^\n]*\n\s+onCardShown\?\.\(\);/);
 });
 
 
@@ -88,5 +88,28 @@ test('N04: TRY AGAIN starts the ticket punch on the press, never a Setting Up lo
   assert.ok(body.indexOf('setSelectedGame(null);') < punch, 'the lost game is cleared before the punch, so it never pops the old card');
   assert.doesNotMatch(body, /setFlowState\('retrying'\)/);
   // A start that could not begin goes back to the loss card.
-  assert.match(body, /if \(flowStateRef\.current === 'spinning' && !attemptRef\.current && !spendingRef\.current\) setFlowState\('lost'\);/);
+  assert.match(body, /if \(flowStateRef\.current === 'spinning' && !attemptRef\.current && !spendingRef\.current\) \{ repeatPunchRef\.current = false; setFlowState\('lost'\); \}/);
+  assert.match(body, /repeatPunchRef\.current = true;\n\s+setFlowState\('spinning'\);/, 'TRY AGAIN marks the punch as a repeat');
+});
+
+test('N04/T036: the punch hands over once the board under it is drawn, after a short card stay (shorter on TRY AGAIN)', () => {
+  const punch = fs.readFileSync('src/components/TicketPunch.tsx', 'utf8');
+  const modal = fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
+  const ctx = fs.readFileSync('src/gamekit/StageHoldContext.ts', 'utf8');
+  // The old beat waited for the card spring to settle plus a fixed 0.5 s (about 1.6 s after the tear on device).
+  assert.doesNotMatch(punch, /PUNCH_T\.done - PUNCH_T\.card - 500/);
+  assert.match(punch, /export const CARD_HOLD_MS = \{ first: 900, repeat: 450 \} as const;/);
+  assert.match(punch, /holdThen\(pop \+ \(quick \? CARD_HOLD_MS\.repeat : CARD_HOLD_MS\.first\)\);/);
+  // Board not drawn yet: the card stays (never a blank page), up to BOARD_WAIT_MAX_MS; a skip tap waits for it too.
+  assert.match(punch, /const tryFinish = \(\) => \{ if \(held\.current && boardReadyRef\.current !== false\) finish\(\); \};/);
+  assert.match(punch, /useEffect\(\(\) => \{ if \(boardReady\) tryFinish\(\); \}, \[boardReady\]\);/);
+  assert.match(punch, /const safetyMs = \(fixed: number\) => \(boardReady === undefined \? fixed : BOARD_WAIT_MAX_MS\);/);
+  assert.match(punch, /onPress=\{\(\) => \{ held\.current = true; tryFinish\(\); \}\}/);
+  // The held game tells the punch its board is drawn: shell -> StageDrawnContext -> MiniGameSelector -> modal.
+  assert.match(ctx, /export const StageDrawnContext = createContext<\(\(\) => void\) \| null>\(null\);/);
+  assert.match(shell, /if \(fieldOn && stageHeld\) onStageDrawn\?\.\(\);/);
+  assert.match(selector, /<StageDrawnContext\.Provider value=\{onStageDrawn \?\? null\}>/);
+  assert.match(modal, /onStageDrawn=\{markBoardDrawn\}/);
+  assert.match(modal, /boardReady=\{boardDrawn\}\n\s+quick=\{repeatPunchRef\.current\}/);
+  assert.match(modal, /useEffect\(\(\) => \{ if \(flowState !== 'spinning'\) setBoardDrawn\(false\); \}, \[flowState\]\);/);
 });
