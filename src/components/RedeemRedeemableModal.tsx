@@ -89,9 +89,11 @@ import { markWinShown } from '../services/task-attempt/pendingWins';
 import { dealTries, needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
 import { markCoinCardSeen } from './rewards/coinCardSeen';
 import { NeedTicketOfferSlot } from './rewards/offerSlots';
+import { warmCalmOffer } from './money/CalmOffer';
 import { taskHasLine } from '../services/lineplay/rideLines';
 import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
 import TicketClaimFlight from './rewards/TicketClaimFlight';
+import { holdHud } from './Topbar/hudPulse';
 import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
 import { coinFaceNote } from '../services/collection/rideFacts';
 import { noteNewestCoin } from '../services/collection/newestCoin';
@@ -362,6 +364,9 @@ export default function RedeemRedeemableModal({
     heldPasses: Number(redeemable?.rescue_passes ?? 0), queueTicketsOn,
   };
   const outOfTickets = isTaskType && !hasEnoughTickets;
+  // W4-SMOKE-3a: a card that opens with no Tickets warms its NEED A TICKET row (record, kid paths, Supplies catalog)
+  // while the coin draws, so the row is known when the panel draws instead of a gap filling seconds later.
+  useEffect(() => { if (open && outOfTickets && !previewOnly) warmCalmOffer(player?.id, 'need_ticket'); }, [open, outOfTickets, previewOnly, player?.id]);
   // Earned Tickets are looked up first, so the button never offers the free try before a claim.
   const stepReady = !outOfTickets || claimable !== null;
   const freeStep = outOfTickets && stepReady ? challengeNextStep(wallet) : null;
@@ -935,6 +940,9 @@ export default function RedeemRedeemableModal({
     if (claiming || !claimable?.length) return;
     setClaiming(true);
     setStartError(null);
+    // W4-SMOKE-3b: the wallet can change before the claim answers (the player read lands first). The header chip, and
+    // the card's line that mirrors it (hudShown), hold the old number until the Tickets fly in, then roll together.
+    holdHud('tickets', CLAIM_HOLD_MS);
     let failed = false;
     for (const source of claimable) {
       if (source.kind !== 'stamp' || typeof source.id !== 'number') continue;
@@ -1604,6 +1612,8 @@ export default function RedeemRedeemableModal({
 }
 
 /** The card's big button takes taps a little past its art on every side (T062: a tap on its lower edge was lost). */
+/** How long the Ticket chip waits for a claim's Tickets to fly in (hudPulse caps a hold at 3 s). */
+const CLAIM_HOLD_MS = 3000;
 export const MAIN_BUTTON_HIT_SLOP = { top: 6, bottom: 14, left: 12, right: 12 } as const;
 
 const styles = StyleSheet.create({

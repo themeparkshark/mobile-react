@@ -4,6 +4,8 @@
  * flight takes and the count-up steps (eased, landing exactly on the total).
  */
 export const MAX_CLAIM_PICTURES = 4;
+/** The header coin flight's length (CurrencyFlyProvider: 500 ms per coin). */
+export const CLAIM_FLIGHT_MS = 500;
 
 export function claimFlightPlan(amount: number): { pictures: number; flightMs: number; stepMs: number; steps: number[] } | null {
   const n = Number.isFinite(amount) ? Math.floor(amount) : 0;
@@ -15,5 +17,7 @@ export function claimFlightPlan(amount: number): { pictures: number; flightMs: n
     return 1 - Math.pow(1 - t, 2);
   });
   steps[steps.length - 1] = 1;
-  return { pictures, flightMs: 520 + pictures * 60, stepMs: 45, steps };
+  // 500 ms: the header's own coin flight (CurrencyFlyProvider), so the card's last Ticket lands on the frame the
+  // header chip (and the card's mirrored number, hudShown) starts to roll (fix pass w5, W4-SMOKE-3b).
+  return { pictures, flightMs: CLAIM_FLIGHT_MS, stepMs: 45, steps };
 }

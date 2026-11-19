@@ -14,7 +14,7 @@
  */
 import { useContext, useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import { AuthContext } from '../../context/AuthProvider';
 import { haptic } from '../../gamekit/Haptics';
 import * as RootNavigation from '../../RootNavigation';
@@ -28,13 +28,13 @@ import {
   type OfferPlacement, type OfferRecord,
 } from '../../services/money/naturalOffers';
 import { isParkDay, isStarter } from '../../services/money/suppliesPlan';
-import { buyPack, outcomeMessage, useSupplies } from '../../services/money/supplies';
+import { buyPack, outcomeMessage, refreshSupplies, useSupplies } from '../../services/money/supplies';
 import { trackImpression, trackMoney } from '../../services/money/track';
 import { storeAvailable } from '../../services/purchases';
 import { openMembership } from '../GrownUpGate';
 import { getSharkPass } from '../../api/endpoints/me/shark-pass';
 import { BRAND, FONT, GameIcon, gameAlert } from '../../ui';
-import { Contents, GotIt, MAX_FONT, PackArt, type PackArtKey } from './moneyUi';
+import { Contents, GotIt, MAX_FONT, PackArt, useRowEntrance, type PackArtKey } from './moneyUi';
 
 /** Dev captures only (tools/capture, never in a store bundle): read natural_offers as on. */
 function devSwitch(): boolean {
@@ -58,6 +58,38 @@ export function useNaturalOffersSwitch(): boolean {
   }, [on]);
   return on;
 }
+
+type OfferCtx = { kids: boolean; picture: boolean; record: OfferRecord | null };
+/**
+ * The kid paths and each placement's record, kept in memory per player (fix pass w5, W4-SMOKE-3a): a card that opens
+ * again today knows on its first frame whether its row shows, so the row never pops in, and never pops out, later.
+ */
+const ctxCache = new Map<string, OfferCtx>();
+const ctxKey = (playerId: string | number, placement: OfferPlacement) => `${playerId}:${placement}`;
+
+async function loadOfferCtx(playerId: string | number, placement: OfferPlacement): Promise<OfferCtx> {
+  const [crew, picture, records] = await Promise.all([
+    loadLastCrew(Number(playerId)).catch(() => null),
+    pictureOnlyFor(Number(playerId)).catch(() => false),
+    loadOfferRecords(playerId),
+  ]);
+  const ctx = { kids: crew?.kind === 'family' && hasKids(crew), picture: !!picture, record: records[placement] ?? null };
+  ctxCache.set(ctxKey(playerId, placement), ctx);
+  return ctx;
+}
+
+/**
+ * Warm a placement before its host draws it (the coin card calls this as it opens with no Tickets): the record and
+ * kid paths into memory and the shared Supplies catalog loading, so the NEED A TICKET row is known on its first frame.
+ */
+export function warmCalmOffer(playerId: string | number | null | undefined, placement: OfferPlacement): void {
+  if (playerId == null) return;
+  if (!ctxCache.has(ctxKey(playerId, placement))) void loadOfferCtx(playerId, placement).catch(() => undefined);
+  if ((placement === 'need_ticket' || placement === 'first_win') && storeAvailable()) void refreshSupplies();
+}
+
+/** The height of the slim row and of the place it keeps while its answer loads (pack art 40, padding 5 + 5, rim 2 + 4). */
+export const SLIM_ROW_HEIGHT = 56;
 
 export type CalmOfferProps = {
   readonly placement: OfferPlacement;
@@ -89,21 +121,23 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   const vip = !!player?.is_subscribed;
   const wantsPack = placement === 'need_ticket' || placement === 'first_win';
   const canBuy = !!player && storeAvailable();
-  const { catalog } = useSupplies(switchOn && wantsPack && canBuy && !loss);
+  const { catalog, status: catalogStatus } = useSupplies(switchOn && wantsPack && canBuy && !loss);
   // The kid paths and this placement's own record, read once per mount.
-  const [ctx, setCtx] = useState<{ kids: boolean; picture: boolean; record: OfferRecord | null } | null>(null);
+  const [ctx, setCtx] = useState<OfferCtx | null>(() => (playerId == null ? null : ctxCache.get(ctxKey(playerId, placement)) ?? null));
   useEffect(() => {
     if (playerId == null || !switchOn || loss) return undefined;
     let live = true;
-    void Promise.all([
-      loadLastCrew(Number(playerId)).catch(() => null),
-      pictureOnlyFor(Number(playerId)).catch(() => false),
-      loadOfferRecords(playerId),
-    ]).then(([crew, picture, records]) => {
-      if (live) setCtx({ kids: crew?.kind === 'family' && hasKids(crew), picture: !!picture, record: records[placement] ?? null });
-    });
+    void loadOfferCtx(playerId, placement).then((next) => { if (live) setCtx(next); }).catch(() => undefined);
     return () => { live = false; };
   }, [playerId, switchOn, loss, placement]);
+  /** Save a record and keep the memory copy in step, so the next card knows it on its first frame. */
+  const keepRecord = (record: OfferRecord) => {
+    if (playerId == null) return;
+    const key = ctxKey(playerId, placement);
+    const cached = ctxCache.get(key);
+    if (cached) ctxCache.set(key, { ...cached, record });
+    void saveOfferRecord(playerId, placement, record);
+  };
   // high_point: the Shark Pass card only while the row is on sale and not owned (read once per mount).
   const [passReady, setPassReady] = useState<boolean | null>(null);
   useEffect(() => {
@@ -130,7 +164,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   // Seen only once it really showed with its content: a slow load never burns the day (or the once-ever Starter Pack).
   useEffect(() => {
     if (!show || playerId == null) return;
-    void saveOfferRecord(playerId, placement, markShown(ctx?.record, today, Date.now()));
+    keepRecord(markShown(ctx?.record, today, Date.now()));
     trackImpression(`offer.${placement}`, pack?.product_id);
     // The Starter Pack's one showing (hold-fix 3): the server sets starter_seen_at, so "once ever" holds on every
     // phone and money:launch-funnel counts it (only the unmounted StarterOfferCard sent this before).
@@ -143,7 +177,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   const dismiss = () => {
     haptic('tapLight');
     setGone(true);
-    if (playerId != null) void saveOfferRecord(playerId, placement, markDismissed(ctx?.record, Date.now()));
+    keepRecord(markDismissed(ctx?.record, Date.now()));
   };
 
   const act = async () => {
@@ -169,12 +203,26 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
     if (message) gameAlert(message.title, message.body);
   };
 
+  // W4-SMOKE-3a: while this row's answer is still loading, the NEED A TICKET card keeps its place with a calm picture of
+  // the same height (the pack art on the row's own navy), never a blank gap and never a jump when the row arrives.
+  const answerPending = placement === 'need_ticket' && compact && !gone && !!player && switchOn && !loss && canBuy
+    && (ctx == null || (why === 'show' && !catalog && catalogStatus !== 'error'));
+  const [keptPlace, setKeptPlace] = useState(answerPending);
+  useEffect(() => { if (answerPending) setKeptPlace(true); }, [answerPending]);
+  const enterStyle = useRowEntrance(show, keptPlace ? 0 : placement === 'win_vip' ? 300 : 160);
   if (landed) return <GotIt grants={landed.grants} art={landed.art} onDone={() => setLanded(null)} />;
-  if (!show) return null;
+  if (!show) {
+    if (!answerPending) return null;
+    return (
+      <View style={[st.slim, st.slimKept, style]} accessible={false} importantForAccessibility="no-hide-descendants" pointerEvents="none">
+        <View style={st.keptArt}><PackArt art="bag" size={40} bob={false} /></View>
+      </View>
+    );
+  }
 
   if (placement === 'win_vip') {
     return (
-      <Animated.View entering={FadeIn.delay(300).duration(220)} style={[st.vipLine, style]}>
+      <Animated.View style={[st.vipLine, style, enterStyle]}>
         <Pressable onPress={() => void act()} accessibilityRole="button" style={st.vipTap}
           accessibilityLabel={`${vipText}. For grown-ups, opens VIP.`}>
           <GameIcon name="member" size={22} />
@@ -192,7 +240,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   const art: PackArtKey = placement === 'first_win' ? 'chest' : 'bag';
   if (compact) {
     return (
-      <Animated.View entering={FadeInUp.delay(200).springify().damping(16)} style={[st.slim, style]}>
+      <Animated.View style={[st.slim, style, enterStyle]}>
         <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button" accessibilityState={{ busy }}
           style={({ pressed }) => [st.slimTap, pressed && st.slimPressed, busy && st.slimBusy]}
           accessibilityLabel={`${copy.kicker}. ${copy.title}. ${copy.action}.`}>
@@ -213,7 +261,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
     );
   }
   return (
-    <Animated.View entering={FadeInUp.delay(200).springify().damping(16)} style={[st.wrap, style]}>
+    <Animated.View style={[st.wrap, style, enterStyle]}>
       <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button"
         accessibilityLabel={`${copy.kicker}. ${copy.title}.${'body' in copy ? ` ${copy.body}` : ''} ${copy.action}.`}
         style={({ pressed }) => [st.card, pressed && { transform: [{ translateY: 2 }] }]}>
@@ -249,8 +297,11 @@ const st = StyleSheet.create({
   // Its own small navy pill, so it reads on any host (cream ticket card or blue recap).
   notNow: { alignSelf: 'center', marginTop: 4, backgroundColor: '#123f80', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 3 },
   notNowText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
-  slim: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', backgroundColor: '#123f80', borderRadius: 16,
+  slim: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', minHeight: SLIM_ROW_HEIGHT, backgroundColor: '#123f80', borderRadius: 16,
     borderWidth: 2, borderColor: BRAND.gold, borderBottomWidth: 4, paddingLeft: 8, paddingRight: 10, paddingVertical: 5 },
+  // The place the row keeps while its answer loads: same navy and height, the pack art resting dim, no words.
+  slimKept: { height: SLIM_ROW_HEIGHT, opacity: 0.55 },
+  keptArt: { width: 40, height: 40, opacity: 0.6 },
   slimTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   // Pressed: the row dips under the finger. Busy (the gate is on its way): it rests a little dimmer, its arrow ringed in gold.
   slimPressed: { transform: [{ translateY: 2 }], opacity: 0.85 },

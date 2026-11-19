@@ -9,6 +9,7 @@ import { hudGlow, hudPunch, rollMs } from '../map/alive/mapWow';
 import { touchHeal, useCommitHeal } from '../map/alive/commitHeal';
 import RollingDigits, { type DigitStream } from './RollingDigits';
 import { hudClock, hudStreamId, onHudPulse } from './hudPulse';
+import { claimHudShown, publishHudShown, releaseHudShown } from './hudShown';
 import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
@@ -164,6 +165,19 @@ export default function Currency({ image, count, name, flyTarget, coverArt = fal
     });
     return () => { off(); if (release.current) clearTimeout(release.current); };
   }, [flyTarget, rollTo, reduced, bump]);
+  // Fix pass w5 (W4-SMOKE-3b): this chip owns its target's number; a mirror (the coin card's Ticket line) draws
+  // the same number with the same roll, so the two always move together.
+  const ownerRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!flyTarget) return undefined;
+    const owner = claimHudShown(flyTarget);
+    ownerRef.current = owner;
+    return () => { ownerRef.current = null; releaseHudShown(flyTarget, owner); };
+  }, [flyTarget]);
+  useEffect(() => {
+    if (!flyTarget || ownerRef.current == null) return;
+    publishHudShown(flyTarget, ownerRef.current, { value: shown.value, prev: shown.prev, stream: shown.stream ?? null, key: shown.key });
+  }, [flyTarget, shown]);
   // Round 5: the chip re-renders when a stream starts; its icon, glow and "+N" re-send for a moment after (commitHeal).
   const heal = useCommitHeal();
   const iconStyle = useAnimatedStyle(() => {
