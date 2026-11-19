@@ -924,6 +924,13 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       pressTrace('shell.retry', () => `${gameIdRef.current} round=${retryRound}`);
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [retryRound]);
+    // The reset is on screen (the commit after the reset above): the ride card may show the kept board now.
+    const retryShownRound = useRef(retryRound);
+    useEffect(() => {
+      if (retryShownRound.current === retryRound || phase !== 'countdown' || result || rescue) return;
+      retryShownRound.current = retryRound;
+      onStageDrawn?.();
+    }, [retryRound, phase, result, rescue, onStageDrawn]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {

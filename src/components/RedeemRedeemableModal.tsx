@@ -132,6 +132,8 @@ export function knownChallengeGame(game: string | null | undefined): boolean {
 }
 
 /** 'replay' (fix pass w5, N04): TRY AGAIN on the kept board, the board shown and held until the server deals the try. */
+/** The kept board shows by this time even if its stage never reports its reset (w5 N04). */
+export const REPLAY_SHOW_MAX_MS = 250;
 type FlowState = 'recovering' | 'auth-required' | 'preview' | 'retrying' | 'wheel' | 'spinning' | 'minigame' | 'postwin' | 'lost' | 'replay' | 'claim-error' | 'spend-error' | 'save-error' | 'expired';
 type GameType = 'tap' | 'memory' | 'trivia';
 
@@ -335,7 +337,11 @@ export default function RedeemRedeemableModal({
   useEffect(() => { if (flowState !== 'spinning') earlyGameRef.current = null; }, [flowState]);
   /** w4 N04: the game mounted under the punch has drawn its board; the punch hands over onto it. */
   const [boardDrawn, setBoardDrawn] = useState(false);
-  const markBoardDrawn = useCallback(() => setBoardDrawn(true), []);
+  const markBoardDrawn = useCallback(() => {
+    setBoardDrawn(true);
+    // w5 N04: on a TRY AGAIN of the kept board this is the shell saying its reset is on screen.
+    if (flowStateRef.current === 'replay' || replayRef.current) setReplayShown(true);
+  }, []);
   useEffect(() => { if (flowState !== 'spinning') setBoardDrawn(false); }, [flowState]);
   /** w4 N04: this punch is a TRY AGAIN of the game just played: the game card's short stay. */
   const repeatPunchRef = useRef(false);
@@ -347,9 +353,16 @@ export default function RedeemRedeemableModal({
   const sheetMargin = useWindowDimensions().width * 0.05;
   const [keepBoard, setKeepBoard] = useState(false);
   const [retryRound, setRetryRound] = useState(0);
-  /** The kept board's try is dealt: its instant punch tears and hands over (w5 N04). */
-  const [replayDealt, setReplayDealt] = useState(false);
-  useEffect(() => { if (flowState !== 'replay') setReplayDealt(false); }, [flowState]);
+  /**
+   * The kept board is shown only once its reset is on screen (the shell reports it through onStageDrawn, w5 N04),
+   * so no frame of the last try is ever seen; a stage that never reports shows after REPLAY_SHOW_MAX_MS.
+   */
+  const [replayShown, setReplayShown] = useState(false);
+  useEffect(() => {
+    if (flowState !== 'replay') { setReplayShown(false); return undefined; }
+    const t = setTimeout(() => setReplayShown(true), REPLAY_SHOW_MAX_MS);
+    return () => clearTimeout(t);
+  }, [flowState]);
   /** TRY AGAIN is resetting the kept board (set on the press, read by the deal before the next render). */
   const replayRef = useRef<string | null>(null);
   useEffect(() => {
@@ -636,8 +649,6 @@ export default function RedeemRedeemableModal({
     const known = selectAssignedGameRef.current();
     const next = flowAfterDeal({ replay: !!kept, keptGame: kept, dealtGame: attemptRef.current?.game, known });
     if (next === 'spinning' && kept) repeatPunchRef.current = true;
-    // The kept board's instant punch tears now and hands over (w5 N04).
-    if (next === 'replay') setReplayDealt(true);
     pressTrace('card.deal.flow', () => `${next} kept=${kept}`);
     return next;
   };
@@ -1290,7 +1301,7 @@ export default function RedeemRedeemableModal({
   // TRY AGAIN shows it without a new layout. Held there (never seen or touched), shown and still held in 'replay'.
   const boardKept = keepBoard && (flowState === 'lost' || flowState === 'replay');
   const boardOutset = fullBleed ? null : { top: -sheetMargin, left: -sheetMargin, right: -sheetMargin, bottom: -sheetMargin };
-  const boardHidden = flowState === 'spinning' || flowState === 'lost' || flowState === 'replay';
+  const boardHidden = flowState === 'spinning' || flowState === 'lost' || (flowState === 'replay' && !replayShown);
   const boardHeld = flowState === 'spinning' || flowState === 'lost' || flowState === 'replay';
 
   return (
@@ -1547,18 +1558,6 @@ export default function RedeemRedeemableModal({
           )}
 
           {/* TICKET PUNCH: the spent Ticket tears and this ride's game pops up. */}
-          {/* w5 N04: TRY AGAIN on the kept board: the ticket tears over the board while it resets, and hands over. */}
-          {flowState === 'replay' && (
-            <TicketPunch
-              instant
-              gameName={replayDealt ? selectedGameData?.name ?? null : null}
-              gameColor={selectedGameData?.color ?? '#ffcf3b'}
-              rideName={taskName}
-              kicker={punchLines(taskName, playFlagsNow().retrySameGame).kicker}
-              winLine={punchLines(taskName).win}
-              onDone={() => setFlowState('minigame')}
-            />
-          )}
           {flowState === 'spinning' && (
             <TicketPunch
               gameName={selectedGameData?.name ?? null}
