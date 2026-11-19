@@ -55,6 +55,8 @@ import CalmModal, { calmFace } from './CalmModal';
 import { GrownUpGateSlot } from '../GrownUpGate';
 import CalmOffer from '../money/CalmOffer';
 import DailyGiftModal from '../DailyGiftModal';
+// A stamp with no uploaded art shows the Stamp Book's own passport stamp (never a gift box).
+import { FALLBACK_ART as STAMP_FALLBACK_ART } from '../../screens/stampbook/art';
 import { tryAgainLine } from '../../services/connectionCopy';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
@@ -898,13 +900,13 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     const v = view;
     title = v.faces.length === 1 ? 'New stamp!' : `${v.faces.length} new stamps!`;
     const first = v.faces[0];
-    const face = first?.art ? { uri: first.art } : ICON_SOURCES.gift;
+    const face = first?.art ? { uri: first.art } : STAMP_FALLBACK_ART;
     // Before coin levels (rung 3) Energy lands on the Shelf button without a row (fix w4 T097: one idea at a time).
     const shown = v.rewards && !coinLevelsOpen ? { ...v.rewards, energy: 0 } : v.rewards;
     const footer = (
       <View style={{ alignSelf: 'stretch', alignItems: 'center', gap: 8 }}>
         {v.faces.length > 1 && <View style={styles.nextRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          {v.faces.slice(0, 5).map(f => <Image key={f.id} source={f.art ? { uri: f.art } : ICON_SOURCES.gift}
+          {v.faces.slice(0, 5).map(f => <Image key={f.id} source={f.art ? { uri: f.art } : STAMP_FALLBACK_ART}
             style={{ width: 44, height: 44 }} contentFit="contain" />)}
         </View>}
         {!!v.title && <View style={styles.nextRow}>

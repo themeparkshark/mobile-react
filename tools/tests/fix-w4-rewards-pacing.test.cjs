@@ -160,6 +160,7 @@ test('T100 CLAIM ALL opens the stamps face up; the tap claims, prizes land with 
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /case 'stamps': void openStampClaim\(\); return;/);
   assert.match(hook, /closedArt=\{face\} openArt=\{face\}/, 'the stamp itself is what you tap');
+  assert.match(hook, /const face = first\?\.art \? \{ uri: first\.art \} : STAMP_FALLBACK_ART;/, 'no uploaded art: the Stamp Book passport, never a gift');
   assert.match(hook, /onOpen=\{\(\) => \{ void claimStamps\(\); \}\} onDone=\{\(\) => finishStamps\(v\)\}/);
   assert.match(hook, /send\('xp', paid\.xp, 'xp', 240\);/, 'XP flies home too');
   assert.match(hook, /setRewardsNote\(stampClaimNote\(sum, v\.waiting\)\);/);
