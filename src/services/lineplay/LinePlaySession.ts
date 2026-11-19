@@ -1451,7 +1451,7 @@ export class LinePlaySession {
     const existing = this.playlist.find((item): item is Extract<ActivityItem, { kind: 'minigame' }> =>
       item.kind === 'minigame' && item.gameId === gameId);
     if (existing) return existing;
-    if (this.playlist.length >= MAX_SESSION_ACTIVITY_SLOTS) return null;
+    // One practice page more is fine even on a long wait's full playlist (the cap is for dealt rounds).
     const item: Extract<ActivityItem, { kind: 'minigame' }> = { kind: 'minigame', id: `extra-${gameId}`, gameId,
       seed: (this.playlistSeedOffset + this.playlist.length * 31) % 100_000 };
     this.playlist = appendBeforeCrewPrompts(this.playlist, [item]);

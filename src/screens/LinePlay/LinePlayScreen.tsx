@@ -1979,6 +1979,7 @@ export default function LinePlayScreen() {
         onChoose={(index) => {
           if (index === ADD_PARADE_BEAT) {
             const added = session.addPracticeGame(PARADE_BEAT_GAME);
+            if (__DEV__) console.log(`[arcade] parade added=${added?.id ?? 'none'} state=${session.getState()} pages=${snapshot.playlist.length}`);
             if (!added) return;
             queuedArcadeGame.current = added;
             setArcadeOpen(false);
