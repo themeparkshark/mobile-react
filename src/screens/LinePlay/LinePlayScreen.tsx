@@ -472,7 +472,11 @@ export default function LinePlayScreen() {
   const [rideLogged, setRideLogged] = useState<{ id: string; waited: number | null } | null>(null);
   const [adventureStamped, setAdventureStamped] = useState(false);
   const rideStepDone = useRef<string | null>(null);
+  // The wait's own ride (T088 walk): when LinePlay is opened for a new ride while the last wait is still
+  // finishing, the route already names the new ride. The finished wait logs and recaps its own ride.
+  const waitRide: RideContext | undefined = snapshot.ride ?? ride;
   useEffect(() => {
+    const ride = waitRide;
     // Only a wait with evidence of this line logs a ride (T071): games played from afar never claim one.
     if (!ride || snapshot.state !== 'complete' || !snapshot.boardingConfirmed || snapshot.startedAt == null ||
         !snapshot.waitTimed) return;
@@ -494,7 +498,7 @@ export default function LinePlayScreen() {
       if (!adventureRideStampDue(ticket, ride.rideId)) return;
       return celebrateAdventureTicket(ticket!.id).then(() => setAdventureStamped(true));
     }).catch(() => undefined);
-  }, [ride, snapshot.state, snapshot.boardingConfirmed, snapshot.startedAt, snapshot.boardingAt,
+  }, [waitRide, snapshot.state, snapshot.boardingConfirmed, snapshot.startedAt, snapshot.boardingAt,
     snapshot.serverSessionId, snapshot.waitTimed, player?.id]);
   const rideLoggedRef = useRef<{ id: string } | null>(null);
   rideLoggedRef.current = rideLogged;
@@ -506,6 +510,7 @@ export default function LinePlayScreen() {
     if (rideLogged) void releaseRideLogHold(rideLogged.id).catch(() => undefined);
   }, [rideLogged]);
   const openRideJournal = useCallback(() => {
+    const ride = waitRide;
     if (!ride || !rideLogged) return;
     RootNavigation.navigate('RideLog', {
       ...rideStepJournalParams({ rideId: ride.rideId, rideName: ride.rideName, parkId: ride.parkId ?? null,
@@ -513,7 +518,7 @@ export default function LinePlayScreen() {
         rideType: rideCatalog?.type ?? null }),
       detectionId: rideLogged.id,
     } as never);
-  }, [ride, rideLogged, player?.id, snapshot.startedAt, snapshot.boardingAt, rideCatalog?.type]);
+  }, [waitRide, rideLogged, player?.id, snapshot.startedAt, snapshot.boardingAt, rideCatalog?.type]);
 
   // -- Unlock ladder events (BLUEPRINT 4.4 "Who records what") --------------------------------
   // line_played: the first verified minute of a wait. line_part_earned: a Part lands on a coin you own.
@@ -1746,7 +1751,7 @@ export default function LinePlayScreen() {
               coinState={recapCoinState}
               playerEnergy={recapEnergy}
               energyUnavailable={recapEnergyUnavailable}
-              rideName={ride.rideName}
+              rideName={waitRide?.rideName ?? ride.rideName}
               endReason={snapshot.endReason}
               onStillInLine={snapshot.endReason === 'left_queue'
                 ? () => { noteRideQuestionAnswered(); void session.continueInLine(); } : undefined}

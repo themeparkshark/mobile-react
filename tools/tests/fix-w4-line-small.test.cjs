@@ -106,3 +106,10 @@ test('T090: the game banner title never auto-shrinks (it stuck at about 4 px aft
   assert.equal(slimTitleSize('Search for the lucky penny').fontSize, 17.5);
   assert.equal(slimTitleSize('Rebuild the park map and the dispatch').fontSize, 16);
 });
+
+test('T088 walk: a finished wait logs and recaps its own ride, even when LinePlay was opened for the next ride', () => {
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /const waitRide: RideContext \| undefined = snapshot\.ride \?\? ride;\n\s+useEffect\(\(\) => \{\n\s+const ride = waitRide;/);
+  assert.match(screen, /const openRideJournal = useCallback\(\(\) => \{\n\s+const ride = waitRide;/);
+  assert.match(screen, /rideName=\{waitRide\?\.rideName \?\? ride\.rideName\}\n\s+endReason=\{snapshot\.endReason\}/);
+});
