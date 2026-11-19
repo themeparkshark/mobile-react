@@ -37,7 +37,7 @@ test('T220 first_win and T230 win_vip: one offer at most on a win card, mounted 
   // The Starter card decides first; the VIP line waits for its "not shown" and the win-card pacing.
   assert.match(slots, /useState<boolean \| null>\(firstWin \? null : false\)/);
   assert.match(slots, /const vipLine = starterShown === false && nudge && !!line;/);
-  assert.match(slots, /\{firstWin && <CalmOffer placement="first_win" onShown=\{setStarterShown\} \/>\}/);
+  assert.match(slots, /\{firstWin && <CalmOffer placement="first_win" compact onShown=\{setStarterShown\} \/>\}/);
   assert.match(slots, /<CalmOffer placement="win_vip" vipLine=\{line\} beforeLeave=\{closeCard\}/);
   assert.match(slots, /const nudge = useVipNudge\(!isVip && winKey != null \? winKey : null\);/);
   assert.match(slots, /if \(shown\) markVipNudgeShown\(winKey\);/);

@@ -71,7 +71,7 @@ export function WinOfferSlot({ firstWin, coins, xp, winKey, closeCard }: WinOffe
   if (!firstWin && !vipLine) return null;
   return (
     <View style={{ alignSelf: 'stretch', marginTop: 10 }}>
-      {firstWin && <CalmOffer placement="first_win" onShown={setStarterShown} />}
+      {firstWin && <CalmOffer placement="first_win" compact onShown={setStarterShown} />}
       {vipLine && <CalmOffer placement="win_vip" vipLine={line} beforeLeave={closeCard}
         onShown={shown => { if (shown) markVipNudgeShown(winKey); }} />}
     </View>

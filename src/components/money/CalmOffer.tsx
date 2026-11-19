@@ -71,12 +71,17 @@ export type CalmOfferProps = {
    * vipWinOffer). Null: nothing to say, so the line stays away. Left out: the plain line.
    */
   readonly vipLine?: string | null;
-  /** Runs after the grown-up's yes and before another screen opens (a host sheet closes itself first). */
+  /** Runs before another screen opens (a host sheet closes itself first). */
   readonly beforeLeave?: () => void;
+  /**
+   * One slim row (the win card, where the coin and its rewards come first): the pack art, its name and the
+   * ask, with a small close in place of the Not now pill. The contents show on the gate's details card.
+   */
+  readonly compact?: boolean;
 };
 
 
-export default function CalmOffer({ placement, loss = false, style, onShown, vipLine, beforeLeave }: CalmOfferProps) {
+export default function CalmOffer({ placement, loss = false, style, onShown, vipLine, beforeLeave, compact = false }: CalmOfferProps) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const switchOn = useNaturalOffersSwitch();
   const passOn = useMoneyFlag('shark_pass');
@@ -180,6 +185,27 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
 
   const copy = OFFER_COPY[placement];
   const art: PackArtKey = placement === 'first_win' ? 'chest' : 'bag';
+  if (compact) {
+    return (
+      <Animated.View entering={FadeInUp.delay(200).springify().damping(16)} style={[st.slim, style]}>
+        <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button" style={st.slimTap}
+          accessibilityLabel={`${copy.kicker}. ${copy.title}. ${copy.action}.`}>
+          {placement === 'high_point' ? <GameIcon name="star" size={34} /> : <PackArt art={art} size={40} bob={false} />}
+          <View style={{ flex: 1 }}>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker.toUpperCase()}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.slimTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.title}</Text>
+          </View>
+          <View style={st.slimAsk}>
+            <GameIcon name={placement === 'high_point' ? 'arrow' : 'member'} size={16} />
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.slimAskText} numberOfLines={1}>{busy ? 'One moment' : copy.action}</Text>
+          </View>
+        </Pressable>
+        <Pressable onPress={dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Not now">
+          <GameIcon name="close" size={20} />
+        </Pressable>
+      </Animated.View>
+    );
+  }
   return (
     <Animated.View entering={FadeInUp.delay(200).springify().damping(16)} style={[st.wrap, style]}>
       <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button"
@@ -187,7 +213,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
         style={({ pressed }) => [st.card, pressed && { transform: [{ translateY: 2 }] }]}>
         {placement === 'high_point' ? <GameIcon name="star" size={46} /> : <PackArt art={art} size={56} bob={false} />}
         <View style={{ flex: 1, gap: 3 }}>
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker}>{copy.kicker.toUpperCase()}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.kicker.toUpperCase()}</Text>
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.title} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{copy.title}</Text>
           {'body' in copy ? <Text maxFontSizeMultiplier={MAX_FONT} style={st.body}>{copy.body}</Text>
             : pack ? <Contents grants={pack.grants} size="tight" /> : null}
@@ -217,6 +243,13 @@ const st = StyleSheet.create({
   // Its own small navy pill, so it reads on any host (cream ticket card or blue recap).
   notNow: { alignSelf: 'center', marginTop: 4, backgroundColor: '#123f80', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 3 },
   notNowText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
+  slim: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', backgroundColor: '#123f80', borderRadius: 16,
+    borderWidth: 2, borderColor: BRAND.gold, borderBottomWidth: 4, paddingLeft: 8, paddingRight: 10, paddingVertical: 5 },
+  slimTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  slimTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
+  slimAsk: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 999,
+    borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)', paddingHorizontal: 8, paddingVertical: 4 },
+  slimAskText: { fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
   vipLine: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 8, maxWidth: '100%', backgroundColor: '#123f80', borderRadius: 999,
     borderWidth: 2, borderColor: BRAND.gold, paddingLeft: 10, paddingRight: 8, paddingVertical: 5 },
   vipTap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
