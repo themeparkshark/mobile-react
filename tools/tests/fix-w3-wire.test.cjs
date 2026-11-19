@@ -119,13 +119,13 @@ test('T232: when TRY AGAIN deals the other game, the loss card names it instead 
   assert.equal(lost.lostTryCopy({ ...base, nextGame: 'Whack-a-Shark' }).message, 'Your Ticket came back. New game: Whack-a-Shark!');
   assert.equal(lost.lostTryCopy({ ...base, firstCoinTicketReturned: false, usedRescuePass: true, rescueRetryAvailable: true, nextGame: 'Memory Match' }).message,
     'No Ticket used. One more free go! New game: Memory Match!');
-  // No retry left: nothing to promise.
-  assert.equal(lost.lostTryCopy({ ...base, firstCoinTicketReturned: false, lostTicketCost: 1, nextGame: 'Memory Match' }).message, '1 Ticket used.');
+  // hold-2: the paid loss (TRY AGAIN for 1 Ticket) at the switch names the new game too.
+  assert.equal(lost.lostTryCopy({ ...base, firstCoinTicketReturned: false, lostTicketCost: 1, nextGame: 'Memory Match' }).message, '1 Ticket used. New game: Memory Match!');
   assert.equal(lost.retryingLine('Whack-a-Shark'), 'Checking your Ticket and starting Whack-a-Shark.');
   assert.equal(lost.retryingLine(null), 'Checking your Ticket and starting the same game again.');
   const modal = strip(read('src/components/RedeemRedeemableModal.tsx'));
   assert.match(modal, /export function retryGameNameFor\(attempt[^)]*\): string \| null \{\s*const next = attempt\?\.retry_game;\s*if \(!next \|\| next === attempt\?\.game\) return null;/);
-  assert.match(modal, /const retryGameName = retryGameNameFor\(attemptRef\.current\);/);
+  assert.match(modal, /const retryGameName = flowState === 'retrying' \? retryNextGameRef\.current : retryGameNameFor\(attemptRef\.current\);/);
   assert.match(modal, /message=\{retryingLine\(retryGameName\)\}/);
 });
 

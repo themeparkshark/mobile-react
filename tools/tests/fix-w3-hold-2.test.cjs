@@ -178,3 +178,20 @@ test('T046 hold-2: the loss and try card, the win card and the shared results ca
   assert.match(shell, /const resultsLock = useResultInputLock\(showSharedCard\);/);
   assert.match(shell, /\{!resultsLock\.armed \? <View testID="results-input-lock" style=\{StyleSheet\.absoluteFill\}\n\s+onStartShouldSetResponder=\{\(\) => \{ resultsLock\.lockedTap\(\); return true; \}\} \/> : null\}\n\s+<\/Animated\.View>\n\s+<\/ResultsCard>/);
 });
+
+/* T232 hold-2: the paid loss at the switch says the new game, and so does the Setting Up card after TRY AGAIN. */
+test('T232 hold-2: a paid loss whose TRY AGAIN deals the other game says "New game"; the Setting Up card keeps the name', () => {
+  const lost = loadTs('src/components/rewards/lostTryCard.ts');
+  const paid = { usedRescuePass: false, rescueRetryAvailable: false, firstCoinTicketReturned: false, lostTicketCost: 1, sameGame: true };
+  assert.equal(lost.lostTryCopy(paid).message, '1 Ticket used.');
+  assert.equal(lost.lostTryCopy({ ...paid, nextGame: 'Whack-a-Shark' }).message, '1 Ticket used. New game: Whack-a-Shark!');
+  assert.equal(lost.lostTryCopy({ ...paid, retryOffered: true, nextGame: 'Whack-a-Shark' }).message, '1 Ticket used. New game: Whack-a-Shark!');
+  const fs = require('node:fs');
+  const modal = fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
+  // The name is kept before TRY AGAIN clears the lost attempt, so the Setting Up card says it.
+  const press = modal.indexOf('retryNextGameRef.current = retryGameNameFor(attemptRef.current);');
+  const clear = modal.indexOf('attemptRef.current = null;', press);
+  assert.ok(press > 0 && clear > press, 'kept before the attempt is cleared');
+  assert.match(modal, /const retryGameName = flowState === 'retrying' \? retryNextGameRef\.current : retryGameNameFor\(attemptRef\.current\);/);
+  assert.match(modal, /message=\{retryingLine\(retryGameName\)\}/);
+});
