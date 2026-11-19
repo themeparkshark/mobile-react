@@ -12,32 +12,31 @@
  * that changes while scrolling (no scroll handler at all), so a scroll never renders React.
  */
 import { memo, useContext, useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, View, useWindowDimensions, type ImageSourcePropType } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Image, View, useWindowDimensions, type ImageSourcePropType } from 'react-native';
 import { AuthContext } from '../../../context/AuthProvider';
 import type { TaskType } from '../../../models/task-type';
 import { fetchParkShelf, type ParkShelfData } from '../../../services/collection/parkShelfPrefetch';
 import Card from '../Card';
 import CurrencyChip from '../CurrencyChip';
-import Header, { headerContentTop } from '../Header';
-import Lift from '../Lift';
 import Page from '../Page';
 import ProgressBar from '../ProgressBar';
+import Screen from '../Screen';
 import Spot from '../Spot';
 import StickerButton from '../StickerButton';
-import { StickerGround } from '../StickerContext';
-import StickerText from '../StickerText';
-import Tabs, { type TabItem } from '../Tabs';
+import { FilterChips, type TabItem } from '../Tabs';
+import { Body, Caps, Count, Name } from '../Text';
 import { ART, ART_RATIO } from '../art';
-import { INK, SPACE, TYPE } from '../tokens';
+import { PAGE_GAP, screenFrameWidth } from '../layout';
+import { LINE, SPACE } from '../tokens';
 import { rowsOf, sampleFound, shelfStates, type ProofSpotState } from './proofData';
 
 const PARK = 8;
 const PARK_NAME = 'DISNEYLAND';
 const TOTAL = 35;
 const PER_ROW = 5;
-/** How far the shark rises above the summary page's top edge (it starts below the bar too). */
-const SHARK_HANG = 36;
+/** Alex's shark stands on the summary page's top edge: 100 wide, rising 36 (the page reserves the rise). */
+const SHARK_W = 100;
+const SHARK_RISE = 36;
 const noop = () => undefined;
 
 type Coin = { readonly id: number; readonly name: string; readonly source: ImageSourcePropType; readonly state: ProofSpotState; readonly limited: boolean };
@@ -95,67 +94,57 @@ function useShelfCoins(): { coins: Coin[]; sample: boolean; failed: boolean } {
 }
 
 export default function ProofShelf() {
-  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { coins, sample, failed } = useShelfCoins();
   const [tab, setTab] = useState('all');
-  const pageWidth = width - SPACE.margin * 2;
-  const plankWidth = pageWidth - 6 - 12;
+  const pageWidth = screenFrameWidth(width);
+  const plankWidth = pageWidth - LINE.page * 2 - SPACE.pageFlush * 2;
   const cell = Math.floor(plankWidth / PER_ROW);
   const shown = useMemo(() => (tab === 'tofind' ? coins.filter(c => c.state !== 'yours') : tab === 'found' ? coins.filter(c => c.state === 'yours') : coins), [coins, tab]);
   const rows = useMemo(() => rowsOf(shown, PER_ROW), [shown]);
   const found = coins.filter(c => c.state === 'yours').length;
   const next = coins.find(c => c.state === 'next');
   const toFind = coins.length - found;
-  const tabs: TabItem[] = [
-    { key: 'all', label: `ALL ${found}/${coins.length}`, icon: ART.ride, iconRatio: ART_RATIO.ride },
-    { key: 'found', label: `FOUND ${found}`, icon: ART.star, iconRatio: ART_RATIO.star },
-    { key: 'tofind', label: `TO FIND ${toFind}`, icon: ART.sparkle, iconRatio: ART_RATIO.sparkle },
-  ];
-  const ribbonWidth = Math.round(width * 0.71);
+  const tabs: TabItem[] = useMemo(() => [
+    { key: 'all', label: `ALL ${found}/${coins.length}` },
+    { key: 'found', label: `FOUND ${found}`, icon: ART.coin, iconRatio: ART_RATIO.coin },
+    { key: 'tofind', label: `TO FIND ${toFind}`, leading: <Spot state="empty" size={18} /> },
+  ], [coins.length, found, toFind]);
+  // The words and the bar stay clear of the shark standing on the page's right end.
+  const besideShark = pageWidth - LINE.page * 2 - SPACE.pageSnug * 2 - SHARK_W - SPACE.base;
+  const shark = useMemo(() => ({ source: ART.pinShark, width: SHARK_W, height: Math.round(SHARK_W / ART_RATIO.pinShark), rise: SHARK_RISE }), []);
   return (
-    <View style={{ flex: 1, backgroundColor: INK.blue }}>
-      <Image source={ART.parkBackground} resizeMode="cover" fadeDuration={0} style={{ position: 'absolute', left: 0, top: 0, width, height: '100%' }} />
-      <StickerGround level="world">
-        <ScrollView contentContainerStyle={{ paddingTop: headerContentTop(insets.top, SHARK_HANG), paddingBottom: insets.bottom + 32, paddingHorizontal: SPACE.margin }}
-          accessibilityLabel={sample ? 'Coin shelf, sample found coins' : 'Coin shelf'}>
-          <Page padding={12}>
-            <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 9, paddingLeft: 4 }}>
-              <StickerText size={TYPE.hero} tone="gold" spacing={0.06} lineHeight={40} align="left">{`${found} of ${coins.length || TOTAL}`}</StickerText>
-              <View style={{ paddingBottom: 7 }}><StickerText size={TYPE.body} stroke={0} spacing={0.08} lineHeight={18}>COINS</StickerText></View>
-            </View>
-            <Lift source={ART.pinShark} width={100} height={Math.round(100 / ART_RATIO.pinShark)} style={{ position: 'absolute', right: -18, top: -SHARK_HANG }} />
-            <ProgressBar value={coins.length ? found / coins.length : 0} label={`${found} of ${coins.length} coins`}
-              prize={{ source: ART.bronze, width: 38, height: Math.round(38 / ART_RATIO.bronze) }} style={{ marginTop: 6, marginLeft: 4, width: pageWidth - 140 }} />
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingLeft: 4 }}>
-              <StickerText size={TYPE.bodyMid} font="knockout" stroke={0} lineHeight={17} align="left" fit={false} style={{ flexShrink: 1 }}>{`${Math.max(0, 20 - found)} more for the bronze trophy`}</StickerText>
-              <CurrencyChip art={ART.energy} artRatio={ART_RATIO.energy} artHeight={34} artOver={8} value={1020} label="1020 energy" minWidth={74} />
-            </View>
-            <Tabs items={tabs} picked={tab} onPick={setTab} style={{ marginTop: 10 }} />
-            <Card style={{ marginTop: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 8, gap: 10 }}>
-                <Spot state="next" art={next?.source} size={44} label={next ? `${next.name}, next up` : 'Next coin'} />
-                <View style={{ flex: 1 }}>
-                  <StickerText size={TYPE.caps} font="knockout" fill={INK.goldInk} stroke={0} spacing={0.11} align="left" lineHeight={14} fit={false} role="none">NEXT COIN</StickerText>
-                  <View style={{ paddingTop: 2 }}>
-                    <StickerText size={19} tone="navy" stroke={0} spacing={0.03} align="left" lineHeight={22} fit>{next?.name ?? 'Loading'}</StickerText>
-                  </View>
-                  <StickerText size={TYPE.bodySmall} font="knockout" fill={INK.navySoft} stroke={0} align="left" lineHeight={16} fit={false}>The map shows the way.</StickerText>
-                </View>
-                <StickerButton label="GO" color="gold" primary size="medium" faceHeight={40} fontSize={21} width={78} accessibilityLabel="Go to the next coin" onPress={noop} />
+    <Screen testID="proof-shelf" ground={{ image: ART.parkBackground }} header={{ title: PARK_NAME, onBack: noop, onHelp: noop }}>
+      <View accessibilityLabel={sample ? 'Coin shelf, sample found coins' : 'Coin shelf'}>
+        <Page padding="snug" topArt={shark}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 9, width: besideShark }}>
+            <Count size="hero" gold label={`${found} of ${coins.length || TOTAL} coins`}>{`${found} of ${coins.length || TOTAL}`}</Count>
+            <View style={{ paddingBottom: 7 }}><Name small role="none">COINS</Name></View>
+          </View>
+          <ProgressBar value={coins.length ? found / coins.length : 0} label={`${found} of ${coins.length} coins`} width={besideShark}
+            prize={{ source: ART.bronze, width: 38, height: Math.round(38 / ART_RATIO.bronze) }} style={{ marginTop: SPACE.base }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.cardGapLoose, marginTop: SPACE.base * 2 }}>
+            <Body size="mid" align="left" style={{ flex: 1 }}>{`${Math.max(0, 20 - found)} more for the bronze trophy`}</Body>
+            <CurrencyChip kind="energy" value={1020} />
+          </View>
+          <FilterChips items={tabs} picked={tab} onPick={setTab} style={{ marginTop: SPACE.cardGap }} />
+          <Card style={{ marginTop: SPACE.cardGapLoose }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACE.cardGap, paddingVertical: 8, gap: SPACE.cardGap }}>
+              <Spot state="next" art={next?.source} size={44} label={next ? `${next.name}, next up` : 'Next coin'} />
+              <View style={{ flex: 1 }}>
+                <Caps>Next coin</Caps>
+                <Name fit>{next?.name ?? 'Loading'}</Name>
+                <Body size="small" soft align="left">The map shows the way.</Body>
               </View>
-            </Card>
-          </Page>
-          <View style={{ height: 58 }} />
-          <Page padding={6} ribbon={{ text: tab === 'tofind' ? 'TO FIND' : tab === 'found' ? 'FOUND' : 'ALL COINS', width: ribbonWidth, size: 27 }}>
-            {rows.map((row, i) => <ShelfRow key={i} coins={row} cell={cell} plankWidth={plankWidth} />)}
-            {!coins.length ? (
-              <StickerText size={TYPE.body} font="knockout" stroke={0} lineHeight={20} fit={false} style={{ paddingVertical: 30 }}>{failed ? 'The shelf did not load.' : 'Loading the shelf.'}</StickerText>
-            ) : null}
-          </Page>
-        </ScrollView>
-      </StickerGround>
-      <Header title={PARK_NAME} onBack={noop} onHelp={noop} />
-    </View>
+              <StickerButton label="GO" variant="primary" size="medium" width={78} accessibilityLabel="Go to the next coin" onPress={noop} />
+            </View>
+          </Card>
+        </Page>
+        <Page padding="flush" ribbon={{ text: tab === 'tofind' ? 'TO FIND' : tab === 'found' ? 'FOUND' : 'ALL COINS', kind: 'section', size: 'small' }} style={{ marginTop: PAGE_GAP }}>
+          {rows.map((row, i) => <ShelfRow key={i} coins={row} cell={cell} plankWidth={plankWidth} />)}
+          {!coins.length ? <Body style={{ paddingVertical: 30 }}>{failed ? 'The shelf did not load.' : 'Loading the shelf.'}</Body> : null}
+        </Page>
+      </View>
+    </Screen>
   );
 }

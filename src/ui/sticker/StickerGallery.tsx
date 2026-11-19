@@ -1,93 +1,125 @@
 /**
- * StickerGallery (dev only): every STICKER BOOK part in every state, on the blue world, on a
- * tan map-like ground and inside a page, plus the outlined-title measurements of the spike.
+ * StickerGallery (dev only): every STICKER BOOK part in every state, on the blue world, on a tan
+ * map-like ground and inside a page, plus the outlined-title measurements of the spike and the
+ * proof screens.
  *
  * Route params: { section?: GallerySection } opens one section alone (captures);
  * section 'titles30' also takes { variant?: TitleVariant, t0?: number } and records the time
  * from t0 (performance.now() when the navigation was sent) until the 30 titles have laid out
  * and two frames have passed, into globalThis.__stickerBench.
+ * Proof sections: gate, rewards, shelf, win, map (map also takes { toast: true }).
  */
-import { memo, useCallback, useRef, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { memo, useCallback, useRef, useState, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext, useSafeAreaInsets } from 'react-native-safe-area-context';
 import Badge from './Badge';
 import Card from './Card';
 import CurrencyChip from './CurrencyChip';
+import { DialogCustomBody, DialogModelBody } from './Dialog';
+import Footer from './Footer';
+import GhostButton from './GhostButton';
+import { MapGround as MapPlace, World as WorldPlace } from './Ground';
+import Header from './Header';
 import Lift from './Lift';
+import ListRow from './ListRow';
 import Page from './Page';
 import ProgressBar from './ProgressBar';
 import RoundButton from './RoundButton';
+import { SheetBody } from './Sheet';
 import Spot, { type SpotState } from './Spot';
-import StickerButton from './StickerButton';
-import { StickerGround } from './StickerContext';
+import Stage from './Stage';
+import StatePanel from './StatePanel';
+import StickerButton, { PressedSample } from './StickerButton';
+import { FrameProvider } from './StickerContext';
 import StickerText, { type OutlineTechnique } from './StickerText';
+import Switch from './Switch';
+import Tabs, { FilterChips } from './Tabs';
 import Tag from './Tag';
+import { Body, Caps, Count, Heading, Name, Title } from './Text';
 import TitleLabel from './TitleLabel';
+import { ToastPill } from './Toast';
 import WaveFoot from './WaveFoot';
 import { ART, ART_RATIO } from './art';
+import { layerWidth } from './layout';
 import SvgTitle from './spike/SvgTitle';
 import ProofGate from './proof/ProofGate';
+import ProofMap, { DevMap } from './proof/ProofMap';
 import ProofRewards from './proof/ProofRewards';
 import ProofShelf from './proof/ProofShelf';
-import { FONT, GALLERY, INK, SHADE, STROKE } from './tokens';
+import ProofWin from './proof/ProofWin';
+import { FONT, GALLERY, INK, SHADE, SPACE, STROKE } from './tokens';
 
-/** The three proof screens: full-screen compositions with sample data (spike step 0). */
-export type ProofSection = 'gate' | 'rewards' | 'shelf';
-export type GallerySection = ProofSection | 'level' | 'type' | 'text' | 'textcand' | 'titles30' | 'page' | 'card' | 'button' | 'spot' | 'chips' | 'round' | 'wave' | 'progress';
+/** Full-screen compositions with sample data. */
+export type ProofSection = 'gate' | 'rewards' | 'shelf' | 'win' | 'map';
+export type GallerySection = ProofSection | 'level' | 'type' | 'text' | 'textcand' | 'titles30' | 'page' | 'card' | 'button' | 'spot' | 'chips' | 'round' | 'wave'
+  | 'progress' | 'header' | 'footer' | 'stage' | 'sheet' | 'dialog' | 'tabs' | 'listrow' | 'switch' | 'toast' | 'state';
 export type TitleVariant = 'shadow16' | 'shadow12' | 'shadow8' | 'copies16' | 'copies12' | 'svg' | 'plain';
 
-const SECTIONS: readonly GallerySection[] = ['level', 'type', 'text', 'textcand', 'page', 'card', 'button', 'spot', 'chips', 'round', 'wave', 'progress', 'titles30'];
+const SECTIONS: readonly GallerySection[] = ['level', 'type', 'page', 'card', 'button', 'spot', 'chips', 'round', 'wave', 'progress', 'header', 'footer', 'stage', 'sheet', 'dialog', 'tabs', 'listrow', 'switch', 'toast', 'state', 'text', 'textcand', 'titles30'];
 const noop = () => undefined;
+const NO_INSETS = { top: 0, bottom: 0, left: 0, right: 0 };
 
-/** Knockout caps section label, white on blue (12 pt, no stroke). */
-function Caps({ children, color = INK.white }: { children: string; color?: string }) {
-  return <Text style={{ fontFamily: FONT.knockout, fontSize: 12, lineHeight: 14, letterSpacing: 1.3, color, marginBottom: 6 }}>{children.toUpperCase()}</Text>;
-}
-
+/** Knockout caps section label (the gallery's own notes, not kit copy). */
 function Note({ children, paper = false }: { children: string; paper?: boolean }) {
   return <Text style={{ fontFamily: FONT.knockout, fontSize: 12, lineHeight: 14, color: paper ? INK.navySoft : SHADE.onBlueSoft, marginTop: 4 }}>{children}</Text>;
 }
+function GroundLabel({ children, navy = false }: { children: string; navy?: boolean }) {
+  return <Text style={{ fontFamily: FONT.knockout, fontSize: 12, lineHeight: 14, letterSpacing: 1.3, color: navy ? INK.navy : INK.white, marginBottom: 8 }}>{children.toUpperCase()}</Text>;
+}
 
 /** The blue world: the gallery's own ground. */
-function World({ children, label = 'on the world' }: { children: ReactNode; label?: string }) {
+function World({ children, label = 'on the world', pad = true }: { children: ReactNode; label?: string; pad?: boolean }) {
   return (
-    <View style={styles.ground}>
+    <View style={[styles.ground, pad ? null : { padding: 0, paddingTop: 12 }]}>
       <LinearGradient colors={[INK.blueBright, INK.blue]} style={StyleSheet.absoluteFill} />
-      <Caps>{label}</Caps>
-      <StickerGround level="world">{children}</StickerGround>
+      <View style={pad ? null : { paddingHorizontal: 16 }}><GroundLabel>{label}</GroundLabel></View>
+      <WorldPlace>{children}</WorldPlace>
     </View>
   );
 }
 
-/** A tan map-like ground: streets and a patch of grass (dev colours, GALLERY). */
-function MapGround({ children }: { children: ReactNode }) {
+/** A tan map-like ground (dev colours, GALLERY). */
+function MapGround({ children, pad = true }: { children: ReactNode; pad?: boolean }) {
   return (
-    <View style={[styles.ground, { backgroundColor: GALLERY.mapGround }]}>
+    <View style={[styles.ground, { backgroundColor: GALLERY.mapGround }, pad ? null : { padding: 0, paddingTop: 12 }]}>
       <View style={{ position: 'absolute', left: -20, right: -20, top: 54, height: 18, backgroundColor: GALLERY.mapStreet, transform: [{ rotate: '-8deg' }] }} />
       <View style={{ position: 'absolute', right: -30, top: -10, width: 120, height: 90, borderRadius: 45, backgroundColor: GALLERY.mapGrass }} />
-      <Caps color={INK.navy}>on the map</Caps>
-      <StickerGround level="map">{children}</StickerGround>
+      <View style={pad ? null : { paddingHorizontal: 16 }}><GroundLabel navy>on the map</GroundLabel></View>
+      <MapPlace>{children}</MapPlace>
     </View>
   );
 }
 
 /** Inside a page: level 2. */
-function InPage({ children }: { children: ReactNode }) {
+function InPage({ children, label = 'Inside a page' }: { children: ReactNode; label?: string }) {
   return (
-    <View style={[styles.ground, { paddingTop: 22 }]}>
+    <View style={styles.ground}>
       <LinearGradient colors={[INK.blueBright, INK.blue]} style={StyleSheet.absoluteFill} />
-      <StickerGround level="world">
-        <Page label={{ text: 'Inside a page' }}>{children}</Page>
-      </StickerGround>
+      <WorldPlace><Page label={{ text: label }}>{children}</Page></WorldPlace>
     </View>
   );
+}
+
+/** A scrim over the map, for floating pages drawn still. */
+function Scrim({ children }: { children: ReactNode }) {
+  return (
+    <View style={[styles.ground, { backgroundColor: GALLERY.mapGround, alignItems: 'center' }]}>
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: INK.scrim }]} />
+      <WorldPlace><FrameWidth>{children}</FrameWidth></WorldPlace>
+    </View>
+  );
+}
+function FrameWidth({ children }: { children: ReactNode }) {
+  const { width } = useWindowDimensions();
+  const w = Math.min(layerWidth(width), width - 68);
+  return <FrameProvider width={w}><View style={{ width: w }}>{children}</View></FrameProvider>;
 }
 
 function Section({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
     <View style={{ marginBottom: 18 }} testID={`gallery-${id}`}>
-      <StickerText size={22} stroke={2.4} spacing={0.08} style={{ alignSelf: 'flex-start', marginBottom: 8 }} role="header">{title}</StickerText>
+      <WorldPlace><Heading size="sub" align="left" style={{ marginBottom: 8 }}>{title}</Heading></WorldPlace>
       <View style={{ gap: 10 }}>{children}</View>
     </View>
   );
@@ -99,41 +131,26 @@ const Row = ({ children, gap = 12 }: { children: ReactNode; gap?: number }) => (
 
 const CHEST = { source: ART.chestClosed, width: 58, height: 58 };
 
-function RowCard({ title, line, art = CHEST, children }: { title: string; line: string; art?: typeof CHEST; children?: ReactNode }) {
-  return (
-    <Card art={{ ...art, side: 'left', over: 13, along: 0 }} style={{ height: 62 }}>
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', paddingLeft: 58, paddingRight: 10 }}>
-        <View style={{ flex: 1 }}>
-          <StickerText size={18} tone="navy" stroke={0} align="left" lineHeight={21} style={{ alignSelf: 'flex-start' }}>{title}</StickerText>
-          <Text style={{ fontFamily: FONT.knockout, fontSize: 14, lineHeight: 16, color: INK.navySoft }}>{line}</Text>
-        </View>
-        {children}
-      </View>
-    </Card>
-  );
-}
-
 // ---------- sections ----------
 
 function LevelSection() {
   return (
     <Section id="level" title="The level rule">
       <World>
-        <RowCard title="Card on the world" line="Level 1: white cut edge, 4 pt drop." />
+        <ListRow art={CHEST} title="Card on the world" line="Level 1: white cut edge, 4 pt drop." state="ready" action={{ label: 'OPEN' }} />
       </World>
       <InPage>
-        <RowCard title="Card on a page" line="Level 2: navy line and a lip only." />
+        <ListRow art={CHEST} title="Card on a page" line="Level 2: navy line and a lip only." state="second" action={{ label: 'OPEN' }} />
         <View style={{ height: 12 }} />
-        <Card edge style={{ height: 46 }}>
-          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 14 }}>
-            <Text style={{ fontFamily: FONT.knockout, fontSize: 14, color: INK.navySoft }}>This card asked for a white edge inside a page: refused, dev warning logged.</Text>
-          </View>
-        </Card>
+        <WorldPlace>
+          <Card style={{ height: 46 }}>
+            <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 14 }}>
+              <Body size="small" soft align="left">A world ground asked for inside a page: refused, no white edge.</Body>
+            </View>
+          </Card>
+        </WorldPlace>
         <View style={{ height: 12 }} />
-        <Row>
-          <Tag>Tag</Tag>
-          <CurrencyChip art={ART.coins} artRatio={ART_RATIO.coins} artHeight={34} value={350} label="350 coins" minWidth={70} />
-        </Row>
+        <Row><Tag>Tag</Tag><CurrencyChip kind="coins" value={350} /></Row>
       </InPage>
     </Section>
   );
@@ -141,20 +158,24 @@ function LevelSection() {
 
 function TypeSection() {
   return (
-    <Section id="type" title="Type">
+    <Section id="type" title="Text roles">
       <World>
-        <Row gap={24}>
-          <StickerText size={32} stroke={2.8} drop={2.5} spacing={0.09}>COIN CAUGHT!</StickerText>
-          <StickerText size={32} tone="gold" stroke={2.8} drop={2.5} spacing={0.06}>15 of 35</StickerText>
-        </Row>
-        <Note>Shark, white, navy stroke (3 pt max), hard drop. 17 pt and up only.</Note>
-        <View style={{ height: 8 }} />
-        <StickerText size={17} stroke={0} align="left" style={{ alignSelf: 'flex-start' }}>Start a flame with Daily 3</StickerText>
-        <Note>Small Shark on blue: plain white, 1.5 pt drop.</Note>
-        <View style={{ height: 8 }} />
-        <Caps color={INK.gold}>Next coin</Caps>
-        <StickerText size={16} font="knockout" align="left" spacing={0.015} style={{ alignSelf: 'flex-start' }}>Hand the phone to a grown-up.</StickerText>
+        <Row gap={20}><Title size="large">COIN CAUGHT!</Title><Count size="hero" gold>15 of 35</Count></Row>
+        <Note>Title, Count: Shark, white, navy stroke (3 pt max), hard drop.</Note>
+        <Heading align="left">Heading 24</Heading>
+        <Name>Name 18: Start a flame with Daily 3</Name>
+        <Caps>Next coin</Caps>
+        <Body align="left">Body 16: Hand the phone to a grown-up.</Body>
+        <Body size="small" soft align="left">Body 14 soft: the second line on blue.</Body>
       </World>
+      <InPage>
+        <Card padding={14}>
+          <Title align="left">Title on paper</Title>
+          <Name>Name on paper: plain navy</Name>
+          <Caps>Caps on paper: gold ink</Caps>
+          <Body size="small" soft align="left">Body soft on paper: navy soft, never stroked.</Body>
+        </Card>
+      </InPage>
     </Section>
   );
 }
@@ -165,20 +186,20 @@ const strokeAt = (size: number) => (size >= 24 ? STROKE.title : STROKE.button);
 function TextSection() {
   return (
     <Section id="text" title="Outlined titles">
-      <World label="the pick: 16 copies, shadow drop">
+      <World label="12 copies under 24 pt, 16 from 24 pt">
         {SIZES.map(size => (
           <View key={size} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 6 }}>
             <Text style={styles.sizeTag}>{size}</Text>
             <StickerText size={size} spacing={size >= 30 ? 0.09 : 0.05} align="left" style={{ alignSelf: 'flex-start' }}>{size >= 30 ? 'Jumpy Ça!' : 'Jumpy Élan Ñu gq'}</StickerText>
           </View>
         ))}
-        <Caps>one line, shrinks to fit (160 pt box)</Caps>
+        <GroundLabel>one line, shrinks to fit (160 pt box)</GroundLabel>
         <View style={{ width: 160, borderWidth: 1, borderColor: SHADE.spotBlueLine, borderStyle: 'dashed' }}>
-          <StickerText size={30} spacing={0.09}>Universal Studios</StickerText>
+          <Title fit>Universal Studios</Title>
         </View>
-        <Caps>wraps to two lines (220 pt box)</Caps>
+        <GroundLabel>wraps to two lines (220 pt box)</GroundLabel>
         <View style={{ width: 220, borderWidth: 1, borderColor: SHADE.spotBlueLine, borderStyle: 'dashed' }}>
-          <StickerText size={30} spacing={0.09} lines={2} fit={false}>Welcome to Disneyland Park</StickerText>
+          <Title lines={2}>Welcome to Disneyland Park</Title>
         </View>
       </World>
     </Section>
@@ -204,7 +225,7 @@ function TextCandidatesSection() {
       <World label="same words, same sizes">
         {rows.map(row => (
           <View key={row.name} style={{ marginBottom: 6 }}>
-            <Caps>{row.name}</Caps>
+            <GroundLabel>{row.name}</GroundLabel>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 10 }}>
               {[17, 22, 35].map(size => <Candidate key={size} technique={row.technique} copies={row.copies} size={size} />)}
             </View>
@@ -249,21 +270,13 @@ const BenchList = memo(function BenchList({ variant, t0 }: { variant: TitleVaria
       console.log(`[sticker bench] ${variant} 30 titles settled in ${ms} ms`);
     }));
   }, [t0, variant]);
-  return (
-    <View>
-      {Array.from({ length: 30 }, (_, i) => (
-        <BenchTitle key={i} text={WORDS[i % WORDS.length]} size={SIZES[i % SIZES.length]} variant={variant} onLaid={onLaid} />
-      ))}
-    </View>
-  );
+  return <View>{Array.from({ length: 30 }, (_, i) => <BenchTitle key={i} text={WORDS[i % WORDS.length]} size={SIZES[i % SIZES.length]} variant={variant} onLaid={onLaid} />)}</View>;
 });
 
 function Titles30Section({ variant, t0 }: { variant: TitleVariant; t0: number }) {
   return (
     <Section id="titles30" title={`30 titles: ${variant}`}>
-      <World label="mount cost and one VoiceOver element each">
-        <BenchList variant={variant} t0={t0} />
-      </World>
+      <World label="mount cost and one VoiceOver element each"><BenchList variant={variant} t0={t0} /></World>
     </Section>
   );
 }
@@ -272,33 +285,26 @@ function PageSection() {
   return (
     <Section id="page" title="Page">
       <World>
-        <Page label={{ text: 'Title label', tone: 'gold' }} style={{ marginTop: 16 }}>
-          <RowCard title="Card on a page" line="Navy line and a lip only." />
+        <Page label={{ text: 'Title label', tone: 'gold' }}>
+          <ListRow art={CHEST} title="Card on a page" line="Navy line and a lip only." state="third" action={{ label: 'SEE' }} />
         </Page>
+        <Note>The label rises above the page; the page reserves it as its top margin.</Note>
       </World>
       <MapGround>
-        <Page small padding={10} style={{ width: 240 }}>
+        <Page small padding="snug" width={250}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <Lift source={ART.coin} width={44} height={44 / ART_RATIO.coin} style={{ marginLeft: -22 }} />
-            <View>
-              <Caps color={INK.gold}>Next coin</Caps>
-              <StickerText size={19} stroke={2.2} align="left" style={{ alignSelf: 'flex-start' }}>Tap PLAY!</StickerText>
-            </View>
+            <Spot state="next" art={ART.coin} size={44} />
+            <View><Caps>Next coin</Caps><Name>Tap PLAY!</Name></View>
           </View>
         </Page>
         <Note paper>On the map: white edge 3, drop 5 at 50 percent navy.</Note>
       </MapGround>
-      <View style={[styles.ground, { backgroundColor: GALLERY.mapGround, paddingTop: 30 }]}>
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: INK.scrim }]} />
-        <StickerGround level="world">
-          <Page floating label={{ text: 'Use 1 Ticket?', large: true, left: 60 }} footHeight={58}
-            foot={<WaveFoot height={58}><StickerText size={19} stroke={2.2}>Not now</StickerText></WaveFoot>}>
-            <StickerText size={16} font="knockout" spacing={0.015}>Play for the Walt Statue coin.</StickerText>
-            <View style={{ height: 12 }} />
-            <StickerButton label="PLAY!" color="gold" size="medium" fontSize={22} faceHeight={46} width={160} style={{ alignSelf: 'center' }} onPress={noop} />
-          </Page>
-        </StickerGround>
-      </View>
+      <Scrim>
+        <Page floating label={{ text: 'Use 1 Ticket?', large: true }} foot={{ height: 58, children: <GhostButton label="Not now" /> }}>
+          <Body>Play for the Walt Statue coin.</Body>
+          <StickerButton label="PLAY!" variant="primary" size="medium" width={160} style={{ alignSelf: 'center', marginTop: 12 }} />
+        </Page>
+      </Scrim>
     </Section>
   );
 }
@@ -307,34 +313,22 @@ function CardSection() {
   return (
     <Section id="card" title="Card">
       <World>
-        <RowCard title="Cream on the world" line="Level 1, white edge." />
+        <Card style={{ height: 62 }} art={{ ...CHEST, along: 2 }}>
+          <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 58 }}><Name>Cream on the world</Name><Body size="small" soft align="left">Level 1, white edge.</Body></View>
+        </Card>
         <View style={{ height: 10 }} />
-        <Card paper="white" style={{ height: 62 }}>
-          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 14 }}>
-            <StickerText size={18} tone="navy" stroke={0} align="left" style={{ alignSelf: 'flex-start' }}>White on the world</StickerText>
-          </View>
+        <Card paper="white" style={{ height: 52 }}>
+          <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: 14 }}><Name>White on the world</Name></View>
         </Card>
       </World>
       <MapGround>
-        <RowCard title="Cream on the map" line="3 pt line, 50 percent drop." />
+        <Card style={{ height: 62 }} art={{ ...CHEST, along: 2 }}>
+          <View style={{ flex: 1, justifyContent: 'center', paddingLeft: 58 }}><Name>Cream on the map</Name><Body size="small" soft align="left">3 pt line, 50 percent drop.</Body></View>
+        </Card>
       </MapGround>
       <InPage>
-        <RowCard title="Daily Chest" line="Day 1 of 7 is ready">
-          <StickerButton label="OPEN" color="gold" size="medium" faceHeight={36} fontSize={18} width={86} onPress={noop} />
-        </RowCard>
-        <View style={{ height: 11 }} />
-        <RowCard title="Level 7 Chest" line="New gear inside" art={{ source: ART.levelChest, width: 58, height: 58 }}>
-          <StickerButton label="OPEN" color="blue" size="medium" faceHeight={36} fontSize={18} width={86} onPress={noop} />
-        </RowCard>
-        <View style={{ height: 11 }} />
-        <RowCard title="Daily 3" line="0 of 3 done" art={{ source: ART.brownChest, width: 50, height: 50 }}>
-          <StickerButton label="SEE" color="white" size="medium" faceHeight={36} fontSize={18} width={70} onPress={noop} />
-        </RowCard>
-        <View style={{ height: 22 }} />
-        <Card paper="white" art={{ source: ART.coin, width: 54, height: 54 / ART_RATIO.coin, side: 'top', over: 26, along: 128 }} style={{ height: 70 }}>
-          <View style={{ flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 10 }}>
-            <StickerText size={17} tone="navy" stroke={0}>Art off the top edge</StickerText>
-          </View>
+        <Card paper="white" art={{ source: ART.coin, width: 54, height: 54 / ART_RATIO.coin, side: 'top', over: 26, along: 128 }} style={{ height: 70, marginTop: 20 }}>
+          <View style={{ flex: 1, justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 10 }}><Name align="center">Art off the top edge</Name></View>
         </Card>
       </InPage>
     </Section>
@@ -346,32 +340,31 @@ function ButtonSection() {
     <Section id="button" title="StickerButton">
       <World>
         <Row>
-          <StickerButton label="PLAY!" size="large" primary width={170} onPress={noop} />
-          <StickerButton label="PLAY!" size="large" width={170} showPressed onPress={noop} />
-          <StickerButton label="PLAY!" size="large" width={170} disabled onPress={noop} />
-          <StickerButton label="PLAY!" accessibilityLabel="Play, loading" size="large" width={170} busy onPress={noop} />
+          <StickerButton label="PLAY!" size="large" width={170} />
+          <PressedSample label="PLAY!" size="large" width={170} />
+          <StickerButton label="PLAY!" size="large" width={170} disabled />
+          <StickerButton label="PLAY!" accessibilityLabel="Play, loading" size="large" width={170} busy />
         </Row>
-        <Note>Primary with the glint, pressed by its lip, off, busy.</Note>
+        <Note>Primary: rest with the glint and the white edge, pressed by its lip, off, busy.</Note>
+        <Row><StickerButton label="OPEN" variant="second" width={96} /><StickerButton label="SEE" variant="third" width={80} /></Row>
+        <Note>Second and third on the world: no white edge (only the one primary wears it).</Note>
       </World>
-      <MapGround>
-        <Row>
-          <StickerButton label="PLAY!" size="large" primary width={170} onPress={noop} />
-          <Tag>Shelf</Tag>
-        </Row>
-      </MapGround>
+      <MapGround><Row><StickerButton label="PLAY!" size="large" width={170} /><Tag>Shelf</Tag></Row></MapGround>
       <InPage>
         <Row gap={10}>
-          <StickerButton label="OPEN" color="gold" width={96} onPress={noop} />
-          <StickerButton label="OPEN" color="blue" width={96} onPress={noop} />
-          <StickerButton label="SEE" color="white" width={80} onPress={noop} />
-          <StickerButton label="DELETE" color="red" width={110} onPress={noop} />
-          <StickerButton label="OK" color="blue" size="small" fontSize={18} width={62} onPress={noop} />
-          <StickerButton label="7" color="key" size="key" width={70} onPress={noop} />
-          <StickerButton label="OPEN" color="gold" width={96} showPressed onPress={noop} />
-          <StickerButton label="OPEN" color="gold" width={96} disabled onPress={noop} />
-          <StickerButton label="OPEN" accessibilityLabel="Open, loading" color="blue" width={96} busy onPress={noop} />
+          <StickerButton label="OPEN" width={96} />
+          <StickerButton label="OPEN" variant="second" width={96} />
+          <StickerButton label="SEE" variant="third" width={80} />
+          <StickerButton label="DELETE" variant="danger" width={110} />
+          <StickerButton label="OK" variant="second" size="small" width={62} />
+          <StickerButton label="7" variant="key" size="key" width={70} />
+          <StickerButton label="OPEN" variant="second" size="row" width={86} />
+          <PressedSample label="OPEN" variant="second" width={96} />
+          <StickerButton label="OPEN" variant="second" width={96} disabled />
+          <StickerButton label="OPEN" accessibilityLabel="Open, loading" variant="second" width={96} busy />
+          <GhostButton label="See my shelf" />
         </Row>
-        <Note>Inside a page: line and lip, no white edge.</Note>
+        <Note>Inside a page: line and lip, no white edge. Sizes 58, 44, 36 (small, row), key 42.</Note>
       </InPage>
     </Section>
   );
@@ -385,16 +378,14 @@ function SpotSection() {
       <World>
         <Row gap={18}>{SPOT_STATES.map(s => <View key={s} style={{ alignItems: 'center' }}><Spot state={s} art={ART.coin} label={`coin, ${s}`} /><Note>{s}</Note></View>)}</Row>
       </World>
+      <MapGround><Row gap={18}>{SPOT_STATES.map(s => <Spot key={s} state={s} art={ART.coin} />)}</Row></MapGround>
       <InPage>
         <Card padding={14}>
           <Row gap={18}>{SPOT_STATES.map(s => <Spot key={s} state={s} art={ART.coin} label={`coin, ${s}`} />)}</Row>
           <View style={{ height: 12 }} />
-          <Row gap={6}>
-            <Spot state="yours" art={ART.coin} size={22} />
-            <Spot state="yours" art={ART.coin} size={22} />
-            <Spot state="next" size={22} />
-            {[0, 1, 2, 3].map(i => <Spot key={i} state="empty" size={22} />)}
-            <Text style={{ fontFamily: FONT.knockout, fontSize: 14, color: INK.navySoft }}>Day 3 of 7</Text>
+          <Row gap={4}>
+            {(['yours', 'yours', 'next', 'empty', 'empty', 'empty', 'empty'] as const).map((s, i) => <Spot key={i} state={s} art={s === 'yours' ? ART.coin : undefined} size={24} />)}
+            <Body size="small" soft align="left" lines={1} style={{ marginLeft: 4 }}>Day 3 of 7</Body>
           </Row>
         </Card>
       </InPage>
@@ -407,9 +398,9 @@ function ChipsSection() {
     <Section id="chips" title="Chips, tags, labels">
       <World>
         <Row gap={22}>
-          <CurrencyChip art={ART.coins} artRatio={ART_RATIO.coins} artHeight={40} artOver={16} value={4075} label="4075 coins" />
-          <CurrencyChip art={ART.energy} artRatio={ART_RATIO.energy} artHeight={36} artOver={8} value={3} label="3 energy" minWidth={70} />
-          <CurrencyChip art={ART.ticket} artRatio={ART_RATIO.ticket} artHeight={32} artOver={18} value={12} label="12 tickets" minWidth={74} />
+          <CurrencyChip kind="coins" value={4075} />
+          <CurrencyChip kind="energy" value={3} />
+          <CurrencyChip kind="tickets" value={12} />
         </Row>
         <View style={{ height: 12 }} />
         <Row gap={9}>
@@ -417,6 +408,7 @@ function ChipsSection() {
           <Tag plain>Disneyland Park</Tag>
           <Tag paper="cream" large icon={ART.ticket} iconRatio={ART_RATIO.ticket} label="15 tickets">15</Tag>
           <Badge count={20} label="20 new" />
+          <Badge count={120} label="120 new" />
           <Tag tilt>NEW ROW</Tag>
         </Row>
         <View style={{ height: 14 }} />
@@ -424,15 +416,11 @@ function ChipsSection() {
           <TitleLabel>Ask a grown-up</TitleLabel>
           <TitleLabel tone="gold">STARTER PACK</TitleLabel>
           <TitleLabel tone="blue">FREE TICKETS</TitleLabel>
-          <Lift source={ART.newSticker} width={70} height={70 / ART_RATIO.newSticker} style={{ transform: [{ rotate: '-8deg' }] }} />
+          <Lift source={ART.newSticker} width={70} height={70 / ART_RATIO.newSticker} />
         </Row>
       </World>
-      <MapGround>
-        <Row><Tag>Shelf</Tag><Tag plain>Navy line 3 and a 50 percent navy drop</Tag></Row>
-      </MapGround>
-      <InPage>
-        <Row gap={9}><Tag>Tag in a page</Tag><Tag paper="gold">Gold tag</Tag><Badge count={3} /></Row>
-      </InPage>
+      <MapGround><Row><Tag>Shelf</Tag><Tag plain>Navy line and a 50 percent navy drop</Tag></Row></MapGround>
+      <InPage><Row gap={9}><Tag>Tag in a page</Tag><Tag paper="gold">Gold tag</Tag><Badge count={3} label="3 new" /><TitleLabel tone="gold">LABEL IN A PAGE</TitleLabel></Row></InPage>
     </Section>
   );
 }
@@ -442,20 +430,17 @@ function RoundSection() {
     <Section id="round" title="Round buttons">
       <World>
         <Row gap={14}>
-          <RoundButton kind="back" accessibilityLabel="Back" onPress={noop} />
-          <RoundButton kind="help" accessibilityLabel="Help" size={52} onPress={noop} />
-          <RoundButton kind="close" accessibilityLabel="Close" size={48} onPress={noop} />
-          <RoundButton kind="base" accessibilityLabel="Shark" size={58} art={ART.shark} artMirror onPress={noop} />
-          <RoundButton kind="base" accessibilityLabel="Daily chest, 2 ready" size={56} art={ART.chestClosed} badge={2} onPress={noop} />
+          <RoundButton kind="back" accessibilityLabel="Back" />
+          <RoundButton kind="help" accessibilityLabel="Help, 3 new" size={52} badge={3} />
+          <RoundButton kind="close" accessibilityLabel="Close" size={48} />
+          <RoundButton kind="base" accessibilityLabel="Shark" size={58} art={ART.shark} artMirror />
+          <RoundButton kind="base" accessibilityLabel="Daily chest, off" size={56} art={ART.chestClosed} disabled />
+          <RoundButton kind="base" accessibilityLabel="Daily chest, loading" size={56} art={ART.chestClosed} busy />
         </Row>
-        <Note>Alex's discs: arrow (mirrored), faq, close, base. Hit area 48.</Note>
+        <Note>Alex's discs: arrow (mirrored), faq, close, base. Badge said in the label. Off, busy. Hit 48.</Note>
       </World>
-      <MapGround>
-        <Row gap={14}>
-          <RoundButton kind="base" accessibilityLabel="Daily chest, 2 ready" size={56} art={ART.chestClosed} badge={2} onPress={noop} />
-          <RoundButton kind="help" accessibilityLabel="Help" size={48} onPress={noop} />
-        </Row>
-      </MapGround>
+      <MapGround><Row gap={14}><RoundButton kind="base" accessibilityLabel="Daily chest, 2 ready" size={56} art={ART.chestClosed} badge={2} /><RoundButton kind="help" accessibilityLabel="Help" size={48} /></Row></MapGround>
+      <InPage><Row gap={14}><RoundButton kind="close" accessibilityLabel="Close" size={44} /><RoundButton kind="back" accessibilityLabel="Back" size={44} /></Row></InPage>
     </Section>
   );
 }
@@ -463,23 +448,26 @@ function RoundSection() {
 function WaveSection() {
   return (
     <Section id="wave" title="Wave foot">
-      <View style={[styles.ground, { backgroundColor: GALLERY.mapGround, paddingTop: 34 }]}>
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: INK.scrim }]} />
-        <StickerGround level="world">
-          <Page floating footHeight={60} label={{ text: 'Rewards', tone: 'gold', large: true, left: 110 }}
-            foot={<WaveFoot>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9 }}>
-                <Lift source={ART.arrow} width={26} height={26 / ART_RATIO.arrow} mirror flat />
-                <StickerText size={20} stroke={2.2} spacing={0.06}>BACK TO MAP</StickerText>
-              </View>
-            </WaveFoot>}>
-            <RowCard title="Daily Chest" line="Day 1 of 7 is ready">
-              <StickerButton label="OPEN" color="gold" size="medium" faceHeight={36} fontSize={18} width={80} onPress={noop} />
-            </RowCard>
-          </Page>
-        </StickerGround>
-      </View>
+      <Scrim>
+        <Page floating label={{ text: 'Rewards', tone: 'gold', large: true }} foot={{ height: 62, children: <GhostButton label="BACK TO MAP" size="large" art="back" /> }}>
+          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" action={{ label: 'OPEN' }} />
+        </Page>
+      </Scrim>
+      <World label="a screen's foot band: the one primary wears its edge" pad={false}>
+        <WaveFootSample />
+      </World>
     </Section>
+  );
+}
+function WaveFootSample() {
+  const { width } = useWindowDimensions();
+  return (
+    <WaveFoot width={width - 32} height={130}>
+      <View style={{ alignSelf: 'stretch', paddingHorizontal: 20, alignItems: 'center' }}>
+        <StickerButton label="NEXT COIN" size="large" fullWidth />
+        <GhostButton label="See my shelf" />
+      </View>
+    </WaveFoot>
   );
 }
 
@@ -491,16 +479,185 @@ function ProgressSection() {
         <View style={{ height: 12 }} />
         <ProgressBar value={0.3} second={0.25} label="3 of 10, 2 more today" />
       </World>
-      <InPage>
-        <Card padding={14}>
-          <ProgressBar value={0.6} label="6 of 10 sights" />
-        </Card>
-      </InPage>
+      <MapGround><ProgressBar value={0.6} label="6 of 10" /></MapGround>
+      <InPage><Card padding={14}><ProgressBar value={0.6} label="6 of 10 sights" /></Card></InPage>
     </Section>
   );
 }
 
-type Params = { section?: GallerySection; variant?: TitleVariant; t0?: number };
+function HeaderSection() {
+  return (
+    <Section id="header" title="Header">
+      <SafeAreaInsetsContext.Provider value={NO_INSETS}>
+        <World label="title: back, name, help" pad={false}><Header title="DISNEYLAND" onBack={noop} onHelp={noop} /></World>
+        <World label="chips (the map)" pad={false}>
+          <Header><CurrencyChip kind="coins" value={4075} /><CurrencyChip kind="energy" value={3} /><CurrencyChip kind="tickets" value={12} /></Header>
+        </World>
+        <World label="night (Secret Shop) and purple" pad={false}>
+          <Header title="SECRET SHOP" variant="night" onBack={noop} />
+          <View style={{ height: 8 }} />
+          <Header title="SHARK SHOP" variant="purple" onBack={noop} onHelp={noop} />
+        </World>
+        <MapGround pad={false}><Header title="ON THE MAP" onBack={noop} /></MapGround>
+        <InPage label="Inside a page: refused"><Header title="NOT DRAWN" /><Body size="small">The Header refuses to mount in a page (dev warning).</Body></InPage>
+      </SafeAreaInsetsContext.Provider>
+    </Section>
+  );
+}
+
+const FOOTER_ITEMS = [
+  { key: 'news', label: 'News' }, { key: 'standings', label: 'Standings' }, { key: 'map', label: 'Map' },
+  { key: 'social', label: 'Social' }, { key: 'profile', label: 'Profile', badge: 2, accessibilityLabel: 'Profile, 2 new' },
+] as const;
+
+function FooterSection() {
+  const [picked, setPicked] = useState('map');
+  return (
+    <Section id="footer" title="Footer">
+      <World label="Map picked, on the world" pad={false}><Footer items={FOOTER_ITEMS} picked={picked} onPick={setPicked} /></World>
+      <MapGround pad={false}><Footer items={FOOTER_ITEMS} picked="news" onPick={noop} /></MapGround>
+      <View style={[styles.ground, { padding: 0, height: 150 }]}>
+        <DevMap />
+        <View style={{ flex: 1 }} />
+        <WorldPlace><Footer items={FOOTER_ITEMS} picked="profile" onPick={noop} /></WorldPlace>
+      </View>
+      <InPage label="Inside a page: refused"><Footer items={FOOTER_ITEMS} /><Body size="small">The Footer refuses to mount in a page.</Body></InPage>
+    </Section>
+  );
+}
+
+function StageSection() {
+  return (
+    <Section id="stage" title="Stage">
+      <InPage label="The one hero thing">
+        <Stage width={250} height={150} label="Walt Statue coin" style={{ alignSelf: 'center' }}>
+          <Lift source={ART.coin} width={Math.round(128 * ART_RATIO.coin)} height={128} />
+        </Stage>
+        <View style={{ height: 14 }} />
+        <Stage width={250} height={120} label="Offer chest" style={{ alignSelf: 'center' }}>
+          <Lift source={ART.levelChest} width={110} height={110} />
+        </Stage>
+      </InPage>
+      <World><Stage width={200} height={110}><Lift source={ART.chestClosed} width={92} height={92} /></Stage></World>
+    </Section>
+  );
+}
+
+function SheetSection() {
+  return (
+    <Section id="sheet" title="Sheet">
+      <Scrim>
+        <SheetBody title="REWARDS" wayOut={{ label: 'BACK TO MAP', art: 'back', onPress: noop }}>
+          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" action={{ label: 'OPEN' }} />
+        </SheetBody>
+      </Scrim>
+      <Scrim>
+        <SheetBody title="SHARK PASS" wayOut={{ label: 'Not now', onPress: noop }} foot={<StickerButton label="$4.99" variant="primary" size="medium" width={160} />}>
+          <Body>The wave foot can hold the price instead; the way out still answers the scrim, escape and back.</Body>
+        </SheetBody>
+      </Scrim>
+    </Section>
+  );
+}
+
+function DialogSection() {
+  return (
+    <Section id="dialog" title="Dialog">
+      <Scrim>
+        <DialogModelBody request={{ title: 'Use 1 Ticket?', message: 'Play for the Walt Statue coin.', buttons: [{ text: 'Not now', style: 'cancel' }, { text: 'PLAY!' }] }} onAnswer={noop} />
+      </Scrim>
+      <Scrim>
+        <DialogModelBody request={{ title: 'Leave the line?', message: 'Your progress is saved.', buttons: [{ text: 'Stay', style: 'cancel' }, { text: 'Leave', style: 'destructive' }] }} onAnswer={noop} />
+      </Scrim>
+      <Scrim>
+        <DialogModelBody request={{ title: 'Saved!', message: 'Your shark is ready.' }} onAnswer={noop} />
+      </Scrim>
+      <Scrim>
+        <DialogCustomBody label={{ text: 'Ask a grown-up', large: true, art: 'lock' }} wayOut={{ label: 'Not now', onPress: noop }}>
+          <Body>A custom body: the grown-up gate.</Body>
+        </DialogCustomBody>
+      </Scrim>
+    </Section>
+  );
+}
+
+function TabsSection() {
+  const [tab, setTab] = useState('supplies');
+  const [chip, setChip] = useState('rides');
+  const tabs = [{ key: 'gear', label: 'GEAR' }, { key: 'supplies', label: 'SUPPLIES' }];
+  const chips = [
+    { key: 'rides', label: 'RIDES 9/25', icon: ART.ride, iconRatio: ART_RATIO.ride },
+    { key: 'sights', label: 'SIGHTS 6/10', icon: ART.star, iconRatio: ART_RATIO.star },
+    { key: 'limited', label: 'LIMITED', icon: ART.sparkle, iconRatio: ART_RATIO.sparkle },
+  ];
+  return (
+    <Section id="tabs" title="Tabs and filter chips">
+      <World>
+        <Tabs items={tabs} picked={tab} onPick={setTab} />
+        <View style={{ height: 12 }} />
+        <FilterChips items={chips} picked={chip} onPick={setChip} />
+        <Note>The pick is a white lifted sticker. Never gold.</Note>
+      </World>
+      <MapGround><FilterChips items={chips} picked="sights" /></MapGround>
+      <InPage><Tabs items={tabs} picked="gear" /><View style={{ height: 10 }} /><FilterChips items={chips} picked="limited" /></InPage>
+    </Section>
+  );
+}
+
+function ListRowSection() {
+  return (
+    <Section id="listrow" title="List row">
+      <InPage label="Four states">
+        <View style={{ gap: SPACE.cardGap }}>
+          <ListRow art={CHEST} title="Daily Chest" line="Day 1 of 7 is ready" state="ready" action={{ label: 'OPEN' }} />
+          <ListRow art={{ source: ART.levelChest, width: 60, height: 60 }} title="Level 7 Chest" line="New gear inside" state="second" action={{ label: 'OPEN' }} />
+          <ListRow art={{ source: ART.chestOpen, width: 60, height: 60 }} title="Daily Chest" line="Back tomorrow" state="done" doneLabel="Opened" />
+          <ListRow art={{ source: ART.brownChest, width: 50, height: Math.round(50 / ART_RATIO.brownChest) }} title="Daily 3" state="notyet" action={{ label: 'SEE' }}
+            strip={<View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>{[0, 1, 2].map(i => <Spot key={i} state="empty" size={20} />)}<Body size="small" soft align="left" lines={1} style={{ marginLeft: 4 }}>0 of 3 done</Body></View>} />
+        </View>
+      </InPage>
+      <World><ListRow art={CHEST} title="Row on the world" line="Level 1: the card wears the edge." state="third" action={{ label: 'SEE' }} /></World>
+      <MapGround><ListRow art={CHEST} title="Row on the map" line="3 pt line, 50 percent drop." state="third" action={{ label: 'SEE' }} /></MapGround>
+    </Section>
+  );
+}
+
+function SwitchSection() {
+  const [on, setOn] = useState(true);
+  return (
+    <Section id="switch" title="Switch">
+      <World><Row gap={16}><Switch value={on} onChange={setOn} accessibilityLabel="Music" /><Switch value={false} accessibilityLabel="Sound effects" /><Switch value accessibilityLabel="Off" disabled /></Row><Note>On (gold), off (blue), off and disabled.</Note></World>
+      <MapGround><Row gap={16}><Switch value accessibilityLabel="On" /><Switch value={false} accessibilityLabel="Off" /></Row></MapGround>
+      <InPage><Card padding={14}><Row gap={16}><Name>Music</Name><Switch value accessibilityLabel="Music" /></Row></Card></InPage>
+    </Section>
+  );
+}
+
+function ToastSection() {
+  return (
+    <Section id="toast" title="Toast">
+      <MapGround><ToastPill title="+1 Ticket" line="Treats found" art={ART.ticket} artRatio={ART_RATIO.ticket} /><Tag plain style={{ marginTop: 10 }}>Slaps on under the header, peels off</Tag></MapGround>
+      <World><ToastPill title="Saved" art={ART.coin} artRatio={ART_RATIO.coin} /></World>
+      <InPage><ToastPill title="In a page" line="Level 2: no edge" /></InPage>
+    </Section>
+  );
+}
+
+function StateSection() {
+  return (
+    <Section id="state" title="Empty, error, loading">
+      <World>
+        <View style={{ gap: 14 }}>
+          <StatePanel kind="empty" line="No coins here yet" action={{ label: 'GO PLAY', onPress: noop }} />
+          <StatePanel kind="error" line="That did not work" action={{ label: 'TRY AGAIN', onPress: noop }} />
+          <StatePanel kind="loading" />
+        </View>
+      </World>
+    </Section>
+  );
+}
+
+type Params = { section?: GallerySection; variant?: TitleVariant; t0?: number; toast?: boolean };
 
 export default function StickerGallery({ route }: { route?: { params?: Params } }) {
   const insets = useSafeAreaInsets();
@@ -513,6 +670,8 @@ export default function StickerGallery({ route }: { route?: { params?: Params } 
   if (only === 'gate') return <ProofGate />;
   if (only === 'rewards') return <ProofRewards />;
   if (only === 'shelf') return <ProofShelf />;
+  if (only === 'win') return <ProofWin />;
+  if (only === 'map') return <ProofMap toastOnOpen={!!params.toast} />;
   return (
     <View style={{ flex: 1, backgroundColor: INK.blue }}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 40, paddingHorizontal: 16 }}>
@@ -531,6 +690,16 @@ export default function StickerGallery({ route }: { route?: { params?: Params } 
             case 'round': return <RoundSection key={section} />;
             case 'wave': return <WaveSection key={section} />;
             case 'progress': return <ProgressSection key={section} />;
+            case 'header': return <HeaderSection key={section} />;
+            case 'footer': return <FooterSection key={section} />;
+            case 'stage': return <StageSection key={section} />;
+            case 'sheet': return <SheetSection key={section} />;
+            case 'dialog': return <DialogSection key={section} />;
+            case 'tabs': return <TabsSection key={section} />;
+            case 'listrow': return <ListRowSection key={section} />;
+            case 'switch': return <SwitchSection key={section} />;
+            case 'toast': return <ToastSection key={section} />;
+            case 'state': return <StateSection key={section} />;
             default: return null;
           }
         })}

@@ -54,6 +54,14 @@ export function scallop(radius: number, count: number): number {
  */
 export const RING_COPIES = 16;
 
+/** Fewer copies at small sizes: 12 copies on the 2.2 pt button ring fall 0.075 pt short of round (under the 0.1 pt nothing shows). */
+export const RING_COPIES_SMALL = 12;
+
+/** Copies for a size: 12 under 24 pt, 16 from 24 pt (titles). */
+export function copiesFor(fontSize: number): number {
+  return fontSize >= 24 ? RING_COPIES : RING_COPIES_SMALL;
+}
+
 /** Copies per title for each candidate the spike measured (ring + drop + fill). */
 export function nodeCount(technique: 'shadow' | 'copies', count: number): number {
   return technique === 'shadow' ? count + 1 : count + Math.ceil(count / 2) + 1;

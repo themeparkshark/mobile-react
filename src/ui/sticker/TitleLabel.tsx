@@ -1,14 +1,17 @@
 /**
- * TitleLabel: a fixed-size cut label that sits on a page's top edge and shares its white edge.
- * White (calm), gold (offer), blue (info). Page mounts it outside its own level 2, so it wears
- * the edge; dropped loose inside a page it follows the rule and goes without.
+ * TitleLabel: a fixed-height cut label that sits on a page's top edge and shares its white edge.
+ * White (calm), gold (offer), blue (info). Page mounts it in its own place (level 1), so it wears
+ * the edge; dropped loose inside a page it follows the rule and goes without. It hugs its words;
+ * text scales to 1.15x at most and a one-line label shrinks to fit rather than clip.
  */
 import { memo } from 'react';
 import { View } from 'react-native';
 import Shell from './Shell';
-import { useEdge } from './StickerContext';
+import { useStickerPlace } from './StickerContext';
 import StickerText from './StickerText';
-import { DROP, EDGE, INK, LABEL, LINE, RADIUS, SHADE } from './tokens';
+import { edgeFor } from './level';
+import { TEXT } from './textRoles';
+import { DROP, INK, LABEL, LINE, RADIUS, SHADE } from './tokens';
 
 export type TitleLabelTone = 'white' | 'gold' | 'blue';
 
@@ -18,27 +21,24 @@ const FACES = {
   blue: { colors: [SHADE.blueFaceTop, INK.blueBright] as const },
 };
 
-function TitleLabelImpl({ children, tone = 'white', large = false, edge: asked, width, padLeft }: {
+function TitleLabelImpl({ children, tone = 'white', large = false, padLeft }: {
   readonly children: string;
   readonly tone?: TitleLabelTone;
   readonly large?: boolean;
-  readonly edge?: boolean;
-  /** A fixed width (the gate's label); otherwise it hugs its words. */
-  readonly width?: number;
-  /** Room on the left for art that hangs off the label's end (the lock). */
+  /** Internal (Page): room on the left for art that hangs off the label's end (the lock). */
   readonly padLeft?: number;
 }) {
-  const { edge } = useEdge('TitleLabel', asked);
+  const place = useStickerPlace();
+  const edge = edgeFor('label', place);
   const height = large ? LABEL.heightLarge : LABEL.height;
   const size = large ? LABEL.fontLarge : LABEL.font;
+  const spec = { ...TEXT.name, size, spacing: 0.04, maxScale: LABEL.maxScale };
   return (
-    <Shell radius={RADIUS.label} line={LINE.card} face={FACES[tone]} edge={edge ? EDGE.label : 0}
+    <Shell radius={RADIUS.label} line={LINE.card} face={FACES[tone]} edge={edge}
       drop={DROP.label} dropColor={edge ? DROP.color : DROP.inPage}
-      style={{ height, width, paddingHorizontal: LABEL.padX, paddingLeft: padLeft ?? LABEL.padX, justifyContent: 'center', alignSelf: 'flex-start' }}>
+      style={{ height, paddingHorizontal: LABEL.padX, paddingLeft: padLeft ?? LABEL.padX, justifyContent: 'center', alignSelf: 'flex-start', maxWidth: '100%' }}>
       <View style={{ paddingTop: 2 }}>
-        {tone === 'blue'
-          ? <StickerText size={size} stroke={2.1} drop={2} spacing={0.04} lineHeight={size + 4} role="header">{children}</StickerText>
-          : <StickerText size={size} tone="navy" stroke={0} spacing={0.04} lineHeight={size + 4} role="header">{children}</StickerText>}
+        <StickerText spec={spec} tone={tone === 'blue' ? 'white' : 'navy'} lineHeight={size + 4} role="header" fit>{children}</StickerText>
       </View>
     </Shell>
   );

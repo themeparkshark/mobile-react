@@ -1,66 +1,103 @@
 /**
  * ListRow: a card with Alex's art hanging off its left edge, a title, one line and one action
- * (DIRECTION.md kit: List row). States: ready (gold, the one on the screen), second (blue),
- * done (the green check) and not yet (spots under the title, passed as `extra`).
- * The row is a Card, so it reads its level from where it is mounted: inside a sheet it has a
- * navy line and a lip, never a white edge.
+ * (DIRECTION.md kit: List row; kit.png "List row"). The row owns its layout: the art's room, the
+ * action's width (one per list, `actionWidth`), the gap of at least 8 pt between words and action,
+ * and an optional `strip` (spots, a week row) on its own line under the words.
+ *
+ * States: ready (the gold primary: the one on the screen), second (blue), third (white: also the
+ * right pick for a secondary action in a long list), done (the green check and the caller's done
+ * word) and notyet (the white action, spots in the strip). The row is a Card, so it reads its level
+ * from where it is mounted: inside a sheet it has a navy line and a lip, never a white edge.
+ *
+ * VoiceOver: the row is one stop with one combined label (title, line, the action or the done word)
+ * and its action is the row's button; double tap runs it. All spoken copy comes from the caller.
  */
-import { memo, type ReactNode } from 'react';
-import { View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { memo, useCallback, type ReactNode } from 'react';
+import { View, type AccessibilityActionEvent, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
 import Badge from './Badge';
 import Card from './Card';
 import Glyph from './Glyph';
-import StickerButton, { type StickerButtonColor } from './StickerButton';
+import StickerButton, { type StickerVariant } from './StickerButton';
 import StickerText from './StickerText';
-import { INK, TYPE } from './tokens';
+import { TEXT } from './textRoles';
+import { ROW, SPACE } from './tokens';
 
-export type ListRowAction = {
-  readonly label: string;
-  readonly color?: StickerButtonColor;
-  readonly width: number;
-  readonly primary?: boolean;
-  readonly accessibilityLabel?: string;
-  readonly onPress?: () => void;
-};
+export type ListRowState = 'ready' | 'second' | 'third' | 'done' | 'notyet';
 
 export type ListRowProps = {
-  readonly art: { readonly source: ImageSourcePropType; readonly width: number; readonly height: number; readonly over?: number; readonly along?: number };
+  readonly art: { readonly source: ImageSourcePropType; readonly width: number; readonly height: number };
   readonly title: string;
   readonly line?: string;
-  /** Lines the sentence may wrap to (default 1). */
-  readonly lineLines?: number;
-  /** Under the title instead of (or after) the line: spots, a small bar. */
-  readonly extra?: ReactNode;
-  readonly action?: ListRowAction;
-  readonly done?: boolean;
-  readonly badge?: number;
+  /** Spots or a small bar on its own line under the words (the week row, Daily 3). */
+  readonly strip?: ReactNode;
+  readonly state: ListRowState;
+  /** The action's words and what it does (every state but done). */
+  readonly action?: { readonly label: string; readonly onPress?: () => void };
+  /** The done word beside the check ("Opened"). */
+  readonly doneLabel?: string;
+  /** One width for every action in the list. */
+  readonly actionWidth?: number;
+  readonly badge?: { readonly count: number };
+  /** What VoiceOver says for the whole row (default: title, line, then the action or the done word). */
+  readonly accessibilityLabel?: string;
   readonly arrive?: boolean;
+  readonly delay?: number;
   readonly style?: StyleProp<ViewStyle>;
 };
 
-const ROW_MIN = 62;
-const ART_ROOM = 58;
+/** The variant each state's action wears. Pure, so it is tested. */
+export function rowVariant(state: ListRowState): StickerVariant | null {
+  switch (state) {
+    case 'ready': return 'primary';
+    case 'second': return 'second';
+    case 'third':
+    case 'notyet': return 'third';
+    default: return null;
+  }
+}
 
-function ListRowImpl({ art, title, line, lineLines = 1, extra, action, done = false, badge, arrive, style }: ListRowProps) {
+/** Room the words get on a row of a given card width (the art's room, the action, the gaps). */
+export function rowBodyWidth(cardWidth: number, actionWidth: number = ROW.actionWidth, hasAction: boolean = true): number {
+  return Math.max(0, cardWidth - 5 - ROW.artRoom - ROW.padRight - (hasAction ? actionWidth + ROW.gap : 0));
+}
+
+const TITLE = { ...TEXT.name, maxScale: 1.2 };
+const LINE_SPEC = TEXT.bodySmall;
+const DONE = { ...TEXT.nameSmall, size: 16, maxScale: 1.2 };
+const ACTIVATE = [{ name: 'activate' as const }];
+
+function ListRowImpl({ art, title, line, strip, state, action, doneLabel, actionWidth = ROW.actionWidth, badge, accessibilityLabel, arrive, delay, style }: ListRowProps) {
+  const variant = rowVariant(state);
+  const done = state === 'done';
+  const said = accessibilityLabel ?? [title, line, done ? doneLabel : action?.label].filter(Boolean).join(', ');
+  const onAction = useCallback((e: AccessibilityActionEvent) => { if (e.nativeEvent.actionName === 'activate') action?.onPress?.(); }, [action]);
+  const artTop = Math.max(0, (ROW.min - art.height) / 2);
   return (
-    <Card arrive={arrive} art={{ ...art, side: 'left', over: art.over ?? 14, along: art.along ?? Math.max(0, (ROW_MIN - art.height) / 2) }} style={style}>
-      <View style={{ minHeight: ROW_MIN, flexDirection: 'row', alignItems: 'center', paddingLeft: ART_ROOM, paddingRight: 10, paddingVertical: 6, gap: 8 }}>
-        <View style={{ flex: 1, justifyContent: 'center' }}>
-          <View style={{ paddingTop: 2 }}>
-            <StickerText size={TYPE.row} tone="navy" stroke={0} spacing={0.03} align="left" lineHeight={21} fit>{title}</StickerText>
+    <View accessible accessibilityRole={done || !action ? 'text' : 'button'} accessibilityLabel={said}
+      accessibilityActions={done || !action ? undefined : ACTIVATE} onAccessibilityAction={done || !action ? undefined : onAction} style={style}>
+      <Card arrive={arrive} delay={delay} art={{ ...art, side: 'left', over: 14, along: artTop }}>
+        <View style={{ minHeight: ROW.min, paddingLeft: ROW.artRoom, paddingRight: ROW.padRight, paddingVertical: 6, justifyContent: 'center' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: ROW.gap }}>
+            <View style={{ flex: 1 }}>
+              <View style={{ paddingTop: 2 }}>
+                <StickerText spec={TITLE} align="left" role="none" fit>{title}</StickerText>
+              </View>
+              {line ? <StickerText spec={LINE_SPEC} tone="soft" align="left" lines={2} role="none">{line}</StickerText> : null}
+            </View>
+            {done ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingRight: 4 }}>
+                <Glyph kind="check" size={20} />
+                {doneLabel ? <StickerText spec={DONE} tone="soft" role="none">{doneLabel}</StickerText> : null}
+              </View>
+            ) : action && variant ? (
+              <StickerButton label={action.label} variant={variant} size="row" width={actionWidth} onPress={action.onPress} fit />
+            ) : null}
           </View>
-          {line ? (
-            <StickerText size={TYPE.bodySmall} font="knockout" fill={INK.navySoft} stroke={0} spacing={0.015} align="left" lineHeight={16} lines={lineLines} fit={false}>{line}</StickerText>
-          ) : null}
-          {extra}
+          {strip ? <View style={{ marginTop: SPACE.base, marginBottom: 2 }}>{strip}</View> : null}
         </View>
-        {done ? <Glyph kind="check" size={30} /> : action ? (
-          <StickerButton label={action.label} color={action.color ?? 'blue'} size="medium" faceHeight={36} fontSize={action.label.length > 6 ? 17 : 18}
-            width={action.width} primary={action.primary} accessibilityLabel={action.accessibilityLabel ?? `${action.label} ${title}`} onPress={action.onPress} />
-        ) : null}
-      </View>
-      {badge ? <Badge count={badge} label={`${badge} to claim`} style={{ position: 'absolute', left: 24, top: -8 }} /> : null}
-    </Card>
+        {badge ? <Badge count={badge.count} label="" hidden style={{ position: 'absolute', left: 26, top: -9 }} /> : null}
+      </Card>
+    </View>
   );
 }
 

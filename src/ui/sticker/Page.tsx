@@ -1,58 +1,65 @@
 /**
- * Page: the blue backing sheet, level 1. On the world (navy line 3, white edge 4, drop 5), on
- * the map (white edge 3, drop 5 at 50 percent navy) or floating (adds the one soft shadow).
- * Everything inside a page is level 2: Page tells its children so through the context, so a
- * card, button or tag inside can never wear the white edge.
+ * Page: the blue backing sheet, level 1. On the world (navy line 3, white edge 4, drop 5), on the
+ * map (white edge 3, drop 5 at 50 percent navy) or floating (adds the one soft shadow). Everything
+ * inside a page is level 2: Page tells its children so, so a card, button or tag inside can never
+ * wear the white edge.
  *
- * A title label sits on the top edge (`label`), the wave foot holds the way out (`foot`).
+ * Pieces that rise above the top edge are presets, never raw geometry: a title `label` (with
+ * Alex's lock as `art: 'lock'`), Alex's `ribbon` across the page or a section, and `topArt` (art
+ * standing on the top edge, the shelf's shark). The page reserves their rise as its own top margin
+ * (`pageRise`), so whatever sits above it (a bar, another page) is never covered and a screen
+ * never adds an overhang by hand. Stacked pages need only PAGE_GAP between them.
+ *
+ * `foot` is the wave foot band, laid out in flow under the body: it can never cover the body.
+ * `scroll` puts the body in a scroll view that shrinks to the room it gets (sheets, dialogs), with
+ * the foot fixed outside it, so a tall sheet scrolls instead of pushing its way out off screen.
  */
 import { memo, type ReactNode } from 'react';
-import { View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
-import Animated from 'react-native-reanimated';
+import { ScrollView, View, useWindowDimensions, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import type { AnimatedStyle } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
+import Arrive from './Arrive';
 import CutEdge from './CutEdge';
+import Lift from './Lift';
 import Shell from './Shell';
 import StickerText from './StickerText';
-import { ART } from './art';
-import { PlaceProvider, useStickerPlace } from './StickerContext';
 import TitleLabel, { type TitleLabelTone } from './TitleLabel';
-import { insidePage } from './level';
-import { useStickOn } from './motion';
-import { DROP, EDGE, FLOAT_SHADOW, INK, LINE, RADIUS, RIBBON, SHADE, SPACE, STROKE, TYPE } from './tokens';
+import WaveFoot from './WaveFoot';
+import { ART, ART_RATIO } from './art';
+import { PlaceProvider, useFrameWidth, useStickerPlace } from './StickerContext';
+import { LOCK_ART, labelReach, pageRise, ribbonGeometry, ribbonWidth, type RibbonKind } from './layout';
+import { edgeFor, insidePage } from './level';
+import { TEXT } from './textRoles';
+import { DROP, FLOAT_SHADOW, INK, LINE, RADIUS, RIBBON, SHADE, SPACE, TYPE, WAVE } from './tokens';
 
-/** Art that hangs off the left end of the title label (the gate's lock, with its cut edge). */
-export type PageLabelArt = { readonly source: ImageSourcePropType; readonly width: number; readonly height: number; readonly left: number; readonly top: number; readonly rotate?: number };
-
-/** Alex's ribbon across the page's top edge, for big moments (Rewards, a shelf's section). */
-export type PageRibbon = { readonly text: string; readonly width: number; readonly size?: number };
-
-/** How far a ribbon of this width reaches into the page (its lower part overlaps the top edge). */
-export function ribbonOverlap(width: number): number {
-  return Math.round((width / RIBBON.ratio) * 0.47);
-}
+export type PageLabel = { readonly text: string; readonly tone?: TitleLabelTone; readonly large?: boolean; readonly art?: 'lock' };
+export type PageRibbon = { readonly text: string; readonly kind?: RibbonKind; readonly size?: 'title' | 'small' };
+export type PageTopArt = { readonly source: ImageSourcePropType; readonly width: number; readonly height: number; readonly rise: number };
+export type PageFoot = { readonly height?: number; readonly children: ReactNode };
 
 export type PageProps = {
   /** Floating sheet or dialog: the one soft shadow under it. */
   readonly floating?: boolean;
   readonly small?: boolean;
-  /** A title label on the page's top edge. */
-  readonly label?: { readonly text: string; readonly tone?: TitleLabelTone; readonly large?: boolean; readonly left?: number; readonly width?: number; readonly art?: PageLabelArt };
-  /** Alex's ribbon on the top edge (with its white cut edge made from his file). */
+  readonly label?: PageLabel;
   readonly ribbon?: PageRibbon;
-  /** The bottom band (a WaveFoot). */
-  readonly foot?: ReactNode;
-  readonly footHeight?: number;
+  readonly topArt?: PageTopArt;
+  readonly foot?: PageFoot;
+  /** The body scrolls inside the room the page gets (sheets and dialogs). */
+  readonly scroll?: boolean;
   /** Stuck on when it mounts. */
   readonly arrive?: boolean;
-  readonly padding?: number;
+  /** Room inside: the page's 16, a snug 12, or a flush 6 (a shelf of planks). */
+  readonly padding?: 'page' | 'snug' | 'flush';
+  /** Width when the page is narrower than its frame (default: the frame's). */
+  readonly width?: number;
   readonly style?: StyleProp<ViewStyle>;
   readonly children?: ReactNode;
 };
 
 const FACE = { colors: [INK.blueBright, INK.blue] as const };
-/** Grow to a given height, but never collapse to nothing when the page hugs its content. */
-const PAGE_FILL = { flexGrow: 1 } as const;
 const INSET = { width: 2.5, color: SHADE.shine30 };
+const PADS = { page: SPACE.pagePad, snug: SPACE.pageSnug, flush: SPACE.pageFlush } as const;
 
 /** The printed dots: a 9 pt grid of soft white dots (kit.css radial-gradient). Fixed tile, no measuring. */
 const Dots = memo(function Dots() {
@@ -67,52 +74,76 @@ const Dots = memo(function Dots() {
     </Svg>
   );
 });
+const DOTS = <Dots />;
 
-function PageImpl({ floating = false, small = false, label, ribbon, foot, footHeight, arrive = false, padding = SPACE.pagePad, style, children }: PageProps) {
+function PageImpl({ floating = false, small = false, label, ribbon, topArt, foot, scroll = false, arrive = false, padding = 'page', width: widthProp, style, children }: PageProps) {
   const place = useStickerPlace();
+  const frame = useFrameWidth();
+  const { width: windowWidth } = useWindowDimensions();
+  const width = widthProp ?? frame;
   const onMap = place.level === 'map';
-  const stick = useStickOn(arrive);
+  const edge = edgeFor('page', place);
   const radius = small ? RADIUS.pageSmall : RADIUS.page;
-  const edge = onMap ? EDGE.card : EDGE.page;
-  return (
-    <Animated.View style={[style, stick.body]}>
-      <Shell radius={radius} line={LINE.page} face={FACE} edge={edge} drop={DROP.page} dropColor={onMap ? DROP.map : DROP.color}
-        insetTop={INSET} float={floating ? FLOAT_SHADOW : undefined} dropStyle={stick.drop}
-        inside={<Dots />}
-        style={PAGE_FILL}>
-        <PlaceProvider value={insidePage()}>
-          <View style={{ padding, paddingTop: ribbon ? ribbonOverlap(ribbon.width) + 8 : label ? padding + 14 : padding, paddingBottom: foot ? (footHeight ?? 0) + padding : padding }}>{children}</View>
-          {foot ? (
-            // The foot is cut by the page's own bottom corners, inside the navy line.
-            <View style={{ position: 'absolute', left: LINE.page, right: LINE.page, bottom: LINE.page, height: footHeight, overflow: 'hidden',
-              borderBottomLeftRadius: radius - LINE.page, borderBottomRightRadius: radius - LINE.page }}>{foot}</View>
-          ) : null}
-        </PlaceProvider>
-        {label ? (
-          <View style={{ position: 'absolute', top: -(label.large ? 19 : 17), left: label.left ?? 18 }} pointerEvents="box-none">
-            <TitleLabel tone={label.tone} large={label.large} width={label.width} padLeft={label.art ? label.art.left + label.art.width + 6 : undefined}>{label.text}</TitleLabel>
-            {label.art ? (
-              <CutEdge source={label.art.source} width={label.art.width} height={label.art.height}
-                style={{ position: 'absolute', left: label.art.left, top: label.art.top, transform: label.art.rotate ? [{ rotate: `${label.art.rotate}deg` }] : undefined }} />
-            ) : null}
+  const pad = PADS[padding];
+  const rise = pageRise({ ribbon, label, topArt, edge }, width, windowWidth);
+  const ribbonW = ribbon ? ribbonWidth(ribbon.kind ?? 'page', width, windowWidth) : 0;
+  const ribbonG = ribbon ? ribbonGeometry(ribbonW) : null;
+  const padTop = ribbonG ? ribbonG.overlap + 8 : label ? labelReach(!!label.large) + 12 : pad;
+  const footH = foot ? foot.height ?? WAVE.height : 0;
+  const bodyStyle = { paddingHorizontal: pad, paddingTop: padTop, paddingBottom: foot ? SPACE.base * 2 : pad };
+  const outer: StyleProp<ViewStyle> = [{ marginTop: rise, width: widthProp }, scroll ? { flexShrink: 1 } : null, style];
+  const body = (dropStyle?: AnimatedStyle<ViewStyle>) => (
+    <Shell radius={radius} line={LINE.page} face={FACE} edge={edge} drop={DROP.page} dropColor={onMap ? DROP.map : DROP.color}
+      insetTop={INSET} float={floating ? FLOAT_SHADOW : undefined} dropStyle={dropStyle} inside={DOTS}
+      style={scroll ? { flexShrink: 1 } : { flexGrow: 1 }}>
+      <PlaceProvider value={insidePage()}>
+        {scroll ? (
+          <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={bodyStyle} bounces={false} showsVerticalScrollIndicator={false}>{children}</ScrollView>
+        ) : (
+          <View style={bodyStyle}>{children}</View>
+        )}
+        {foot ? (
+          // The foot is laid out under the body, cut by the page's own bottom corners inside the navy line.
+          <View style={{ height: footH, marginHorizontal: LINE.page, marginBottom: LINE.page, overflow: 'hidden',
+            borderBottomLeftRadius: radius - LINE.page, borderBottomRightRadius: radius - LINE.page }}>
+            <WaveFoot width={width - LINE.page * 2} height={footH}>{foot.children}</WaveFoot>
           </View>
         ) : null}
-        {ribbon ? <RibbonTitle ribbon={ribbon} /> : null}
-      </Shell>
-    </Animated.View>
+      </PlaceProvider>
+      {label ? <Label label={label} /> : null}
+      {ribbon && ribbonG ? <RibbonTitle text={ribbon.text} width={ribbonW} height={ribbonG.height} overlap={ribbonG.overlap} small={ribbon.size === 'small'} /> : null}
+      {topArt ? <Lift source={topArt.source} width={topArt.width} height={topArt.height} style={{ position: 'absolute', right: SPACE.artClear, top: -topArt.rise }} /> : null}
+    </Shell>
+  );
+  if (arrive) return <Arrive style={outer}>{body}</Arrive>;
+  return <View style={outer}>{body()}</View>;
+}
+
+const LOCK = { height: LOCK_ART.height, width: Math.round(LOCK_ART.height * ART_RATIO.locked) };
+
+/** The title label on the page's top edge (and Alex's lock hanging off its left end), in the page's own place. */
+function Label({ label }: { readonly label: PageLabel }) {
+  const lock = label.art === 'lock';
+  const top = label.large ? 19 : 17;
+  return (
+    <View style={{ position: 'absolute', top: -top, left: lock ? 18 - LOCK_ART.left : 18, right: 18 }} pointerEvents="box-none">
+      <TitleLabel tone={label.tone} large={label.large} padLeft={lock ? LOCK.width + LOCK_ART.left + 8 : undefined}>{label.text}</TitleLabel>
+      {lock ? <CutEdge source={ART.locked} width={LOCK.width} height={LOCK.height} style={{ position: 'absolute', left: LOCK_ART.left, top: LOCK_ART.top }} /> : null}
+    </View>
   );
 }
 
+const RIBBON_TEXT = { ...TEXT.titleLarge, spacing: TYPE.titleSpacing };
+
 /** The ribbon and its words, centred on the page's top edge. */
-function RibbonTitle({ ribbon }: { readonly ribbon: PageRibbon }) {
-  const h = Math.round(ribbon.width / RIBBON.ratio);
-  const size = ribbon.size ?? TYPE.titleLarge;
-  const line = Math.round(size * 1.2);
+function RibbonTitle({ text, width, height, overlap, small }: { text: string; width: number; height: number; overlap: number; small: boolean }) {
+  const spec = small ? { ...RIBBON_TEXT, size: 27 } : RIBBON_TEXT;
+  const line = Math.round(spec.size * 1.2);
   return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: -40, right: -40, top: -(h - ribbonOverlap(ribbon.width)), height: h, alignItems: 'center' }}>
-      <CutEdge source={ART.ribbon} width={ribbon.width} height={h} />
-      <View style={{ position: 'absolute', left: 0, right: 0, top: Math.round(h * RIBBON.textAt - line / 2) + 2, paddingHorizontal: 40 + ribbon.width * 0.16 }}>
-        <StickerText size={size} stroke={STROKE.titleMax} drop={STROKE.dropTitle} spacing={TYPE.titleSpacing} lineHeight={line} role="header">{ribbon.text}</StickerText>
+    <View pointerEvents="none" style={{ position: 'absolute', left: -40, right: -40, top: -(height - overlap), height, alignItems: 'center' }}>
+      <CutEdge source={ART.ribbon} width={width} height={height} />
+      <View style={{ position: 'absolute', left: 0, right: 0, top: Math.round(height * RIBBON.textAt - line / 2) + 2, paddingHorizontal: 40 + width * 0.16 }}>
+        <StickerText spec={spec} lineHeight={line} role="header" fit>{text}</StickerText>
       </View>
     </View>
   );

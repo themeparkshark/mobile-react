@@ -19,15 +19,19 @@ export function gateSpots(typed: string, length: number): { state: ProofSpotStat
     : { state: i === typed.length ? 'next' as const : 'empty' as const }));
 }
 
-/** The week row: days before today are yours, today is next, tomorrow is a ghost, the rest empty. */
+/** The week row (kit.png): days before today are yours (Alex's coin), today is next (the one gold ring), the rest are empty spots. */
 export function weekSpots(today: number, days = 7): ProofSpotState[] {
   return Array.from({ length: days }, (_, i) => {
     const day = i + 1;
     if (day < today) return 'yours';
     if (day === today) return 'next';
-    if (day === today + 1) return 'ghost';
     return 'empty';
   });
+}
+
+/** Wins counted toward a prize: the line under the win card's bar. */
+export function winsLeft(found: number, goal: number): number {
+  return Math.max(0, goal - found);
 }
 
 /**

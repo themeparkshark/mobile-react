@@ -29,6 +29,19 @@ export const ART = {
   sparkle: require('../../../assets/icons/game/sparkle.png'),
   streak: require('../../../assets/icons/game/streak.png'),
   stampBook: require('../../../assets/images/screens/profile/shortcut_stamp_book.png'),
+  purpleTopBar: require('../../../assets/images/screens/store/purple_topbar.png'),
+  toolbarNews: require('../../../assets/images/toolbar/news.png'),
+  toolbarStandings: require('../../../assets/images/toolbar/leaderboard.png'),
+  toolbarMap: require('../../../assets/images/toolbar/explore.png'),
+  toolbarSocial: require('../../../assets/images/toolbar/social.png'),
+  toolbarProfile: require('../../../assets/images/toolbar/profile.png'),
+  stageWater: require('../../../assets/images/help/stage-water.webp'),
+  rays: require('../../../assets/images/reveal/rays.webp'),
+  raysTint: require('../../../assets/images/reveal/rays-tint.webp'),
+  sharkHappy: require('../../../assets/images/howto/shark-happy.webp'),
+  sharkSoClose: require('../../../assets/images/screens/redeem/so-close-shark.png'),
+  rideParts: require('../../../assets/images/ride-parts.png'),
+  xp: require('../../../assets/images/screens/explore/xp.png'),
 } as const;
 
 /** width / height of each file. */
@@ -55,6 +68,17 @@ export const ART_RATIO = {
   stampBook: 363 / 386,
   levelChest: 512 / 511,
   brownChest: 1526 / 1347,
+  toolbarNews: 133 / 160,
+  toolbarStandings: 445 / 534,
+  toolbarMap: 323 / 342,
+  toolbarSocial: 133 / 160,
+  toolbarProfile: 133 / 160,
+  stageWater: 840 / 386,
+  sharkHappy: 594 / 660,
+  sharkSoClose: 330 / 384,
+  shark: 348 / 384,
+  rideParts: 1,
+  xp: 299 / 324,
 } as const;
 
 export type ArtName = keyof typeof ART;
