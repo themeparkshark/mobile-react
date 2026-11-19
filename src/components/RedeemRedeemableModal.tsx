@@ -33,7 +33,7 @@ import * as RootNavigation from '../RootNavigation';
 import TicketPunch from './TicketPunch';
 import { serverPerkChips, type PerkChipData } from './coin/progressionModel';
 import ChallengeStatusCard from './rewards/ChallengeStatusCard';
-import { VIP_RETRY_ACTION, VIP_TRY_TOMORROW, lostTryCopy, vipTriesLeft } from './rewards/lostTryCard';
+import { VIP_RETRY_ACTION, VIP_TRY_TOMORROW, lostTryCopy, retryingLine, vipTriesLeft } from './rewards/lostTryCard';
 import { getAdSummary } from '../api/endpoints/me/ad-rewards';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import {
@@ -109,6 +109,13 @@ export const CHALLENGE_GAMES = [
   { id: 'memory' as const, name: 'Memory Match', color: CHALLENGE_GAME_COLORS.memory },
   { id: 'trivia' as const, name: 'Beat the Buzzer', color: CHALLENGE_GAME_COLORS.trivia },
 ];
+
+/** The game TRY AGAIN deals when the server says it differs from the one just lost (retry_game, T232), else null. */
+export function retryGameNameFor(attempt: { game?: string | null; retry_game?: string | null } | null | undefined): string | null {
+  const next = attempt?.retry_game;
+  if (!next || next === attempt?.game) return null;
+  return CHALLENGE_GAMES.find(entry => entry.id === next)?.name ?? null;
+}
 
 /** A game this build can play (the Game Ready card is only for one it cannot, T044). */
 export function knownChallengeGame(game: string | null | undefined): boolean {
@@ -813,9 +820,11 @@ export default function RedeemRedeemableModal({
   // "Same game" only once the server deals it (its retry_same_game switch, or picture games, which ship
   // retry_of in be-core-loop): on a server without it, TRY AGAIN may deal another game, so the line just
   // says try again.
+  // T232: when the server says TRY AGAIN deals another game (retry_game), the card names it.
+  const retryGameName = retryGameNameFor(attemptRef.current);
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,
     retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().retrySameGame,
-    rescueSource: redeemable?.rescue_pass_source });
+    rescueSource: redeemable?.rescue_pass_source, nextGame: retryGameName });
   const handleVipRetry = useCallback(async () => {
     const attemptId = attemptRef.current?.id;
     if (adBusy || !attemptId) return;
@@ -1369,7 +1378,7 @@ export default function RedeemRedeemableModal({
               ['lost', 'expired'].includes(attemptRef.current?.status ?? '') ? handleProtectedRetry : handleStartWheel }}
             quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
           {flowState === 'retrying' && <ChallengeStatusCard title="Setting Up" art="loading"
-            message="Checking your Ticket and starting the same game again." />}
+            message={retryingLine(retryGameName)} />}
           {flowState === 'expired' && <ChallengeStatusCard title="Time Ran Out"
             message={usedRescuePass
               ? rescueRetryAvailable

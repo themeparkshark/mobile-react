@@ -965,5 +965,5 @@ test('the returned-Ticket line promises "same game" only on a server that deals 
   assert.equal(lost.lostTryCopy({ ...base, sameGame: true }).message, 'Your Ticket came back. Same game, try again!');
   assert.equal(lost.lostTryCopy(base).message, 'Your Ticket came back. Same game, try again!', 'callers that do not say keep the line');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame,\n\s+rescueSource: redeemable\?\.rescue_pass_source \}\);/);
+  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame,\n\s+rescueSource: redeemable\?\.rescue_pass_source, nextGame: retryGameName \}\);/);
 });

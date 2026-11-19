@@ -32,6 +32,11 @@ export interface LostTryInput {
    * An extra try is never called free (fix W1 item 6). Omitted: today's free try.
    */
   readonly rescueSource?: string | null;
+  /**
+   * TRY AGAIN deals a different game this time (the server's retry_game, fix round w3 T232: the other
+   * picture game after two misses on one): its name, so the card never promises the same game.
+   */
+  readonly nextGame?: string | null;
 }
 
 export interface LostTryCopy {
@@ -51,6 +56,23 @@ export const TICKET_BACK_LINE = 'Your Ticket came back. Same game, try again!';
 export const TICKET_BACK_LINE_ANY_GAME = 'Your Ticket came back. Try again!';
 
 export function lostTryCopy(input: LostTryInput): LostTryCopy {
+  const copy = lostTryBase(input);
+  const next = input.nextGame?.trim();
+  if (!next || !lostTryHasRetry(input)) return copy;
+  // A different game is next: say which, in place of "same game".
+  if (copy.message === TICKET_BACK_LINE || copy.message === TICKET_BACK_LINE_ANY_GAME) {
+    return { ...copy, message: `Your Ticket came back. New game: ${next}!` };
+  }
+  return { ...copy, message: `${copy.message} New game: ${next}!` };
+}
+
+/** "Starting the same game again" while TRY AGAIN sets up, or the new game's name (T232). */
+export function retryingLine(nextGame?: string | null): string {
+  const next = nextGame?.trim();
+  return next ? `Checking your Ticket and starting ${next}.` : 'Checking your Ticket and starting the same game again.';
+}
+
+function lostTryBase(input: LostTryInput): LostTryCopy {
   const title = input.near ? NEAR_TRY_TITLE : lostTryHasFreeRetry(input) ? RETRY_TRY_TITLE : LOST_TRY_TITLE;
   if (input.usedRescuePass) {
     if (input.rescueSource === 'held' || input.rescueSource === 'held_retry') {
