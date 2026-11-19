@@ -236,6 +236,7 @@ export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(M
  */
 export function askGrownUpOutcome(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<GateOutcome> {
   if (!showGate) return Promise.resolve('unshown');
+  pressTrace('gate.asked', () => `reason=${reason?.kind ?? 'none'} open=${!!open}`);
   open ??= restLoaded()
     .then(() => new Promise<GateOutcome>(resolve => {
       if (!showGate) { resolve('unshown'); return; }
