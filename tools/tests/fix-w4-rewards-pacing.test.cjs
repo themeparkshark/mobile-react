@@ -201,3 +201,26 @@ test('T115 N12 a fresh player sees the chest first, then the stamps as one claim
   const retry = { ...dayOne, stamps: { claimable: 2, retry: true } };
   assert.deepEqual(plain(model.rewardsRows(retry)).map(r => r.key), ['daily_chest', 'stamps'], 'a stamp owed after a failed claim never hides');
 });
+
+/* T114: a Trail Box finished while walking has a moment. */
+test('T114 a Trail Box that finishes walking pulses Rewards once with a Box ready! label', () => {
+  const src = read('src/components/map/RewardsButton.tsx');
+  const pure = loadTs('src/components/map/RewardsButton.tsx', {
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
+    'expo-image': { Image: () => null }, react: { useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
+    'react-native': { Pressable: () => null, StyleSheet: { create: x => x }, Text: () => null, View: () => null },
+    'react-native-reanimated': { __esModule: true, default: { View: () => null }, useAnimatedStyle: f => f, useSharedValue: v => ({ value: v }), withSequence: () => 0, withSpring: () => 0 },
+    'react-native-svg': { __esModule: true, default: () => null, Circle: () => null },
+    '../../ui/motion': { SPRING: { pop: {}, settle: {} } }, '../../ui/useUiReducedMotion': { __esModule: true, default: () => false },
+    '../../gamekit/Haptics': { haptic() {} }, '../../ui': { BRAND: {}, GameIcon: () => null, SHADOW: { card: {} } },
+    './NewTag': { __esModule: true, default: () => null }, '../guide/flyAnchors': { useFlyAnchor: () => ({}) },
+  });
+  assert.equal(pure.trailBoxJustReady(null, 1, true), false, 'the first read of the map is not a new box');
+  assert.equal(pure.trailBoxJustReady(0, 1, true), true);
+  assert.equal(pure.trailBoxJustReady(1, 1, true), false);
+  assert.equal(pure.trailBoxJustReady(1, 0, true), false, 'opening a box is not a pulse');
+  assert.equal(pure.trailBoxJustReady(0, 1, false), false, 'before Trail Boxes unlock, nothing');
+  assert.match(src, /withSequence\(withSpring\(1\.18, SPRING\.pop\), withSpring\(1, SPRING\.settle\)\)/, 'a spring on the UI thread');
+  assert.match(src, /if \(!reduced\) pulse\.value =/, 'Reduce Motion keeps only the label');
+  assert.match(read('src/screens/ExploreScreen.tsx'), /pulseKey=\{trailPulse\}/);
+});

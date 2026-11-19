@@ -92,7 +92,7 @@ import { BOSS_ART } from '../components/boss/bossArt';
 import { BOSS_NAMES } from '../api/endpoints/parks/raid';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
-import RewardsButton, { rewardsNewRungs, rewardsButtonModel, withRewardsSummary } from '../components/map/RewardsButton';
+import RewardsButton, { rewardsNewRungs, rewardsButtonModel, trailBoxJustReady, withRewardsSummary } from '../components/map/RewardsButton';
 import useRetention from '../components/retention/useRetention';
 import { chestDismissed, chestShouldShow, markChestDismissed } from './ExploreScreen/dailyChestPresence';
 import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
@@ -1372,6 +1372,15 @@ export function ExploreScreenBody() {
   const trailBox = headlineBox(trail.state ? { ready: trail.state.ready, walking: trail.state.walking } : null);
   const dailyOpen = dailyRung.open && (guideFlags.daily_three === true || guideFlags.level_chests === true);
   const trailOpen = trailRung.open && trail.enabled && !!trail.state;
+  // Fix w4 T114: a Trail Box that finishes walking pulses the Rewards button once, with a short "Box ready!" label.
+  const trailReadyNow = trail.state?.ready.length ?? 0;
+  const trailReadySeen = useRef<number | null>(null);
+  const [trailPulse, setTrailPulse] = useState(0);
+  useEffect(() => {
+    if (!trail.state) return;
+    if (trailBoxJustReady(trailReadySeen.current, trailReadyNow, trailRung.open)) setTrailPulse(n => n + 1);
+    trailReadySeen.current = trailReadyNow;
+  }, [trail.state, trailReadyNow, trailRung.open]);
   const rewardsModel = withRewardsSummary(rewardsButtonModel({
     chestUnclaimed: chestUnclaimed && !chestShowing, trailReady: trail.state?.ready.length ?? 0,
     dailyOpen, flame: player?.daily3_streak ?? 0, trailOpen,
@@ -1422,7 +1431,8 @@ export function ExploreScreenBody() {
     if (rewardsNewKey.includes('trail')) trailRung.markSeen();
     openRewards();
   }, [rewardsNewKey, dailyRung, trailRung, openRewards]);
-  const mapControls = mapControlsCount > 0 ? <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} /> : null;
+  const mapControls = mapControlsCount > 0 ? <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew}
+    pulseKey={trailPulse} /> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
