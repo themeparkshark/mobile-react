@@ -75,3 +75,18 @@ test('T036: the game mounts under the punch once the tear starts, so its mount n
   assert.match(punch, /at\(PUNCH_T\.done - PUNCH_T\.punch \+ 400, finish\); \/\/ safety net\n[^\n]*\n\s+onCardShown\?\.\(\);/);
 });
 
+
+test('N04: TRY AGAIN starts the ticket punch on the press, never a Setting Up loading card first', () => {
+  const modal = fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
+  const start = modal.indexOf('const handleProtectedRetry = useCallback(async () => {');
+  assert.ok(start > 0);
+  const body = modal.slice(start, modal.indexOf('}, [handleStartWheel, location, clearAttemptCheckpoint]);', start));
+  // Before any await: the lost try is cleared and the punch scene is up (it bobs until the server deals).
+  const firstAwait = body.indexOf('await ');
+  const punch = body.indexOf("setFlowState('spinning');");
+  assert.ok(punch > 0 && punch < firstAwait, 'the punch starts before the checkpoint work');
+  assert.ok(body.indexOf('setSelectedGame(null);') < punch, 'the lost game is cleared before the punch, so it never pops the old card');
+  assert.doesNotMatch(body, /setFlowState\('retrying'\)/);
+  // A start that could not begin goes back to the loss card.
+  assert.match(body, /if \(flowStateRef\.current === 'spinning' && !attemptRef\.current && !spendingRef\.current\) setFlowState\('lost'\);/);
+});

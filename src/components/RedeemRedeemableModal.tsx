@@ -825,23 +825,28 @@ export default function RedeemRedeemableModal({
   const handleProtectedRetry = useCallback(async () => {
     if (!location || protectedRetryRef.current) return;
     protectedRetryRef.current = true;
-    setFlowState('retrying');
     // A resolved loss is final. The next try needs a fresh request ID and
     // a new server-owned attempt; a returned Ticket or a free-try retry funds it.
     // It names the lost attempt, so TRY AGAIN deals the same game.
-    // hold-2 T232: keep the game TRY AGAIN deals for the Setting Up card (the lost attempt is cleared next).
+    // hold-2 T232: keep the game TRY AGAIN deals (the lost attempt is cleared next); the punch card names it.
     retryNextGameRef.current = retryGameNameFor(attemptRef.current);
     retryOfRef.current = attemptRef.current?.id ?? retryOfRef.current;
+    // Fix round w4 N04: TRY AGAIN starts the ticket punch on the press, like PLAY (T036). It used to sit on a
+    // "Setting Up" loading card through the checkpoint reads and writes (0.5 to 1.2 s on device) before the
+    // punch even began. The lost try is cleared first, so the punch bobs until the server deals the new one.
+    attemptRef.current = null;
+    savedAttemptIdRef.current = null;
+    requestIdRef.current = null;
+    outcomeRef.current = null;
+    proofRef.current = null;
+    setSelectedGame(null);
+    setSelectedGameData(null);
+    setFlowState('spinning');
     try {
       await clearAttemptCheckpoint();
-      attemptRef.current = null;
-      savedAttemptIdRef.current = null;
-      requestIdRef.current = null;
-      outcomeRef.current = null;
-      proofRef.current = null;
-      setSelectedGame(null);
-      setSelectedGameData(null);
       await handleStartWheel();
+      // A start that could not begin (no saved place to play from) goes back to the loss card, never a punch that bobs on.
+      if (flowStateRef.current === 'spinning' && !attemptRef.current && !spendingRef.current) setFlowState('lost');
     } catch (error) {
       console.warn('Could not prepare protected ride retry:', error);
       setFlowState('save-error');
