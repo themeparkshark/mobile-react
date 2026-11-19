@@ -366,6 +366,17 @@ export function chapterFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: rea
 }
 
 /**
+ * The fact a solved story puzzle shows (T077, T075). The story line tells fact 1, clue 1 the next and clue 2
+ * the one after, so a ride with three or more facts never repeats one on its page. A ride with fewer never
+ * shows clue 1's fact again on clue 2: that page just says Solved.
+ */
+export function puzzleFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: readonly string[], clue: 0 | 1): string | null {
+  const fact = chapterFact(chapter, rideFacts, clue + 1);
+  if (clue === 1 && fact != null && fact === chapterFact(chapter, rideFacts, 1)) return null;
+  return fact;
+}
+
+/**
  * The story line a chapter page reads (T077). Adaptive stories name the ride and its land, then tell this
  * ride's own fact; a ride with no checked fact gets a true line about its land instead. Authored chapters
  * keep their own story.

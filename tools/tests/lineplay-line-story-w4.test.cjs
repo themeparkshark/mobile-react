@@ -83,6 +83,15 @@ test('T077: returning players meet a new fact each story, and only facts passed 
   assert.notEqual(chapters.chapterFact({ id: 'queue-8-autopia-8-episode-0' }, facts, 1), chapters.chapterFact({ id: 'queue-8-autopia-8-episode-0' }, facts));
   // Long rows step aside while a short one exists.
   assert.equal(chapters.chapterFact({ id: 'queue-8-x-episode-1' }, ['x'.repeat(240), 'Short and true.']), 'Short and true.');
+  // The story, clue 1 and clue 2 each tell a different fact when the ride has three (Autopia on device
+  // showed the story's brake pedal fact again under clue 1).
+  const page = { id: 'queue-8-autopia-8-episode-0' };
+  const told = [chapters.chapterFact(page, facts), chapters.puzzleFact(page, facts, 0), chapters.puzzleFact(page, facts, 1)];
+  assert.equal(new Set(told).size, 3);
+  // One fact: clue 1 tells it, clue 2 never repeats it.
+  assert.equal(chapters.puzzleFact(page, ['Only one.'], 0), 'Only one.');
+  assert.equal(chapters.puzzleFact(page, ['Only one.'], 1), null);
+  assert.equal(chapters.puzzleFact(page, [], 0), null);
 });
 
 test('T077: lands are per park (Haunted Mansion is Liberty Square at Magic Kingdom) and themes follow them', () => {
