@@ -172,7 +172,7 @@ test('w5 N04: the kept board is live while the deal travels; only GO waits for i
 test('w5 N04: Memory re-deals a kept board of the same shape in place (no card remount), every card reset', () => {
   const card = fs.readFileSync('src/games/memory/MemoryCard.tsx', 'utf8');
   // The in-place path runs only for a TRY AGAIN re-deal before GO, with every card mounted and the same shape.
-  assert.match(memory, /if \(retryDealRef\.current && g && r && mounted && was\.cols === cols && was\.rows === rows && was\.pairs === pairs\) \{/);
+  assert.match(memory, /const quietRedeal = retryDealRef\.current \|\| stageHeldRef\.current;\n\s+if \(quietRedeal && g && r && mounted && was\.cols === cols && was\.rows === rows && was\.pairs === pairs\) \{/);
   assert.match(memory, /c\?\.reset\(\);\n\s+const p = slotXY\(g, slot\);\n\s+c\?\.place\(p\.x, p\.y\);/);
   // It never bumps the board key (the remount that blocked the JS thread for 0.5 to 0.9 s).
   const inPlace = memory.slice(memory.indexOf('const mounted = cards.current.length'), memory.indexOf("pressTrace('memory.inplace');"));

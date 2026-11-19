@@ -832,7 +832,8 @@ export default function MemoryGame({
   }, [baseSeed, deck.symbols.length, mode]);
 
   const newBoardView = useCallback((cols: number, rows: number, pairs: number) => {
-    // w5 N04: a TRY AGAIN on the kept board (before its GO) with the same shape resets the mounted cards in place.
+    // w5 N04: a TRY AGAIN on the kept board (before its GO), or a board still held off stage, with the same shape
+    // resets the mounted cards in place.
     // Remounting the cards (a new board key) blocked the JS thread 0.5 to 0.9 s on device, once at TRY AGAIN and
     // again when the server's seed landed, so the count and the first tap waited. Face-down cards all look alike,
     // so the new seed's layout is only new slot positions and cleared faces.
@@ -841,7 +842,10 @@ export default function MemoryGame({
     const g = geoRef.current;
     const r = runRef.current;
     const mounted = cards.current.length >= n && cards.current.slice(0, n).every(Boolean);
-    if (retryDealRef.current && g && r && mounted && was.cols === cols && was.rows === rows && was.pairs === pairs) {
+    // T036 (w5): the same holds under PLAY's punch: the game mounts there before the server's seed is known, and the
+    // seed's arrival re-dealt (remounted) the hidden board, about 1 s of JS right before the hand-over.
+    const quietRedeal = retryDealRef.current || stageHeldRef.current;
+    if (quietRedeal && g && r && mounted && was.cols === cols && was.rows === rows && was.pairs === pairs) {
       for (let slot = 0; slot < n; slot++) {
         const c = cards.current[r.eng.ids[slot]];
         c?.reset();
