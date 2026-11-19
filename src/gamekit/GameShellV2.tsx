@@ -826,6 +826,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const [rareGo, setRareGo] = useState(false);
     useEffect(() => {
       if (phase !== 'countdown' || !visible || !stageOn || stageHeld) return;
+      pressTrace('shell.live', () => gameIdRef.current);
       clearCountdown();
       if (countdownStyle === 'none') {
         beginPlayRef.current();

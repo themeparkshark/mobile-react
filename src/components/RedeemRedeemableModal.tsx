@@ -94,7 +94,7 @@ import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
 import TicketClaimFlight from './rewards/TicketClaimFlight';
 import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
 import { warmRideGameArt } from '../games/warmRideGames';
-import { KEEP_BOARD_MS, KEPT_BOARD_STATES, canRetryInPlace, flowAfterDeal } from './rewards/retryInPlace';
+import { KEEP_BOARD_MS, KEPT_BOARD_STATES, canRetryInPlace, earlyGameFor, flowAfterDeal } from './rewards/retryInPlace';
 import { coinFaceNote } from '../services/collection/rideFacts';
 import { noteNewestCoin } from '../services/collection/newestCoin';
 
@@ -309,6 +309,8 @@ export default function RedeemRedeemableModal({
   const retryOfRef = useRef<number | null>(null);
   /** The game TRY AGAIN deals when the server switched it (T232), kept for the Setting Up card. */
   const retryNextGameRef = useRef<string | null>(null);
+  /** Its id, for the early mount under the punch (w5 T036). */
+  const retryNextIdRef = useRef<string | null>(null);
   // First coin ever (team step after the win card): the player's coin count when the card opened.
   const rideCoinsBeforeRef = useRef<number | null>(null);
   const clearing = useRef<Promise<unknown> | null>(null);
@@ -327,7 +329,10 @@ export default function RedeemRedeemableModal({
    * on device), and the card's second on screen is time enough to draw its board.
    */
   const [punchCard, setPunchCard] = useState(false);
+  /** T036 (w5): the game mounted under the punch from the press (the coin card's deal), or null. */
+  const earlyGameRef = useRef<string | null>(null);
   useEffect(() => { if (flowState !== 'spinning') setPunchCard(false); }, [flowState]);
+  useEffect(() => { if (flowState !== 'spinning') earlyGameRef.current = null; }, [flowState]);
   /** w4 N04: the game mounted under the punch has drawn its board; the punch hands over onto it. */
   const [boardDrawn, setBoardDrawn] = useState(false);
   const markBoardDrawn = useCallback(() => setBoardDrawn(true), []);
@@ -636,6 +641,9 @@ export default function RedeemRedeemableModal({
     setStartError(null);
     spendingRef.current = true;
     let saved: TaskAttemptCheckpoint | null;
+    // w5 N04: who is playing is read alongside the checkpoint (used only for a new try), not one after the other.
+    const pictureAsk = pictureOnlyFor(player.id).catch(() => false);
+    const crewAsk = loadLastCrew(Number(player.id)).then(group => triviaCrewFor(group, hasKids(group))).catch(() => null);
     try {
       await clearing.current;
       saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
@@ -656,11 +664,10 @@ export default function RedeemRedeemableModal({
     }
     startLocationRef.current = startLocation;
     // Picture games only (a child who cannot read yet): the server deals Whack or Memory, never trivia.
-    const pictureOnly = saved ? saved.pictureOnly === true : await pictureOnlyFor(player.id).catch(() => false);
+    const pictureOnly = saved ? saved.pictureOnly === true : await pictureAsk;
     pictureOnlyRef.current = pictureOnly;
     // Who is playing (T199): Family with kids gets the kids trivia deck from the server.
-    const crew = saved ? saved.crew ?? null : pictureOnly ? null
-      : await loadLastCrew(Number(player.id)).then(group => triviaCrewFor(group, hasKids(group))).catch(() => null);
+    const crew = saved ? saved.crew ?? null : pictureOnly ? null : await crewAsk;
     const requestId = saved?.requestId ?? requestIdRef.current ??
       `tps-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
     requestIdRef.current = requestId;
@@ -696,7 +703,13 @@ export default function RedeemRedeemableModal({
     const optimistic = !saved;
     // A kept board waiting for its deal stays on screen (w5 N04); every other fresh spend starts the punch.
     if (optimistic && !replayRef.current) {
-      setSelectedGame(null);
+      // T036 (w5): this ride's game for the day (the coin card's deal) mounts held under the punch now, so its
+      // board draws while the Ticket is on its way; the server's own deal decides at the tear.
+      // TRY AGAIN that the server switched (T232) mounts the game it named; PLAY mounts the day's game.
+      const early = earlyGameFor(retryNextIdRef.current ? { game: retryNextIdRef.current } : redeemable?.deal);
+      retryNextIdRef.current = null;
+      earlyGameRef.current = early;
+      setSelectedGame(early);
       setSelectedGameData(null);
       setFlowState('spinning');
     }
@@ -894,6 +907,7 @@ export default function RedeemRedeemableModal({
     // It names the lost attempt, so TRY AGAIN deals the same game.
     // hold-2 T232: keep the game TRY AGAIN deals (the lost attempt is cleared next); the punch card names it.
     retryNextGameRef.current = retryGameNameFor(attemptRef.current);
+    retryNextIdRef.current = retryNextGameRef.current ? attemptRef.current?.retry_game ?? null : null;
     retryOfRef.current = attemptRef.current?.id ?? retryOfRef.current;
     // Fix round w4 N04: TRY AGAIN starts the ticket punch on the press, like PLAY (T036). It used to sit on a
     // "Setting Up" loading card through the checkpoint reads and writes (0.5 to 1.2 s on device) before the
@@ -1583,7 +1597,7 @@ export default function RedeemRedeemableModal({
           {/* The game stays under the win card until the card covers it, so a win never shows a dim map. */}
           {/* T036: the game mounts under the punch (hidden, not started) so its board art is drawn by the time
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
-          {selectedGame && ((flowState === 'spinning' && punchCard) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered) || boardKept) && (
+          {selectedGame && ((flowState === 'spinning' && (punchCard || earlyGameRef.current === selectedGame)) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered) || boardKept) && (
             <View style={[styles.minigameContainer, boardOutset, boardHidden && styles.prewarm]}
               pointerEvents={boardHeld ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>

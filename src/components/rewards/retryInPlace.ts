@@ -39,3 +39,13 @@ export function flowAfterDeal(i: { readonly replay: boolean; readonly keptGame: 
   if (i.replay && !!i.keptGame && i.dealtGame === i.keptGame) return 'minigame';
   return 'spinning';
 }
+
+/**
+ * T036 (w5): the game PLAY mounts under the punch from the press, before the server answers: the coin card's deal
+ * names this ride's game for the day. Its board draws while the Ticket is on its way; a different dealt game is
+ * mounted at the tear as before. Null (nothing early) without a deal or for a game that cannot be held.
+ */
+export function earlyGameFor(deal: { readonly game?: string | null } | null | undefined): 'tap' | 'memory' | 'trivia' | null {
+  const g = deal?.game;
+  return g === 'tap' || g === 'memory' || g === 'trivia' ? g : null;
+}

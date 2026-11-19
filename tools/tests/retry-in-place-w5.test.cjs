@@ -87,3 +87,21 @@ test('T036: the ride card warms the Whack board art while the coin card is up', 
   assert.match(board, /export async function warmBoardImages\(theme: WhackTheme\): Promise<void> \{/);
   assert.match(board, /await loadCachedImage\(src as number\);/);
 });
+
+test('T036: the day\'s dealt game mounts held under the punch from the press', () => {
+  assert.equal(R.earlyGameFor({ game: 'tap' }), 'tap');
+  assert.equal(R.earlyGameFor({ game: 'memory' }), 'memory');
+  assert.equal(R.earlyGameFor({ game: 'trivia' }), 'trivia');
+  assert.equal(R.earlyGameFor({ game: 'photo' }), null);
+  assert.equal(R.earlyGameFor(null), null);
+  assert.match(modal, /\(flowState === 'spinning' && \(punchCard \|\| earlyGameRef\.current === selectedGame\)\)/);
+});
+
+test('T036/N04: the fx stage never reads its state on the JS thread (a sync UI trip that froze the hand-over)', () => {
+  const fx = fs.readFileSync('src/gamekit/fx/FxStage.tsx', 'utf8');
+  const derived = fx.match(/useDerivedValue\(\(\) => \{\n[^\n]*/g) ?? [];
+  assert.ok(derived.length >= 11, `found ${derived.length}`);
+  for (const d of derived) assert.match(d, /if \(!onUi\(\)\) return /, d);
+  assert.match(fx, /return \(globalThis as \{ _WORKLET\?: boolean \}\)\._WORKLET === true;/);
+});
+
