@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getDailyThree } from '../../api/endpoints/retention';
-import { loadRetentionFlags, retentionFlagsNow, streakOwner } from './flags';
+import { loadRetentionFlags, onRetentionFlags, retentionFlagsNow, streakOwner } from './flags';
 import { ownStreakOf } from './useOwnStreak';
 import { useRung } from '../reveal/revealLadder';
 
@@ -28,6 +28,12 @@ export default function useFlameStreak(chest: number | null | undefined, active:
   const [owner, setOwner] = useState(() => streakOwner(retentionFlagsNow()));
   const [daily3, setDaily3] = useState<number | null>(null);
   const warmed = useRef(false);
+  // T095: switches that arrive late (a retry after a slow first read) light the flame in place.
+  useEffect(() => onRetentionFlags?.(flags => {
+    const next = streakOwner(flags);
+    setOwner(next);
+    if (next === 'daily3') void getDailyThree().then(p => setDaily3(ownStreakOf(p)?.days ?? null)).catch(() => undefined);
+  }), []);
   useEffect(() => {
     if (!active && warmed.current) return undefined;
     warmed.current = true;

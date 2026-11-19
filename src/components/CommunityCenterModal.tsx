@@ -14,6 +14,7 @@ import YellowButton from './YellowButton';
 import { GameButton, GameIcon, GameRichText, SharkLoader, confirmGame } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { formatCooldown, ticketsEarnedFrom } from '../screens/CommunityCenter/communityCenterRewards';
+import { tryAgainLine } from '../services/connectionCopy';
 
 interface CenterData {
   id: number;
@@ -86,7 +87,7 @@ export default function CommunityCenterModal({
       setResult({
         type: 'give',
         success: false,
-        message: error.response?.data?.error || 'Could not leave your gift. Check your internet and try again.',
+        message: error.response?.data?.error || `Could not leave your gift. ${tryAgainLine()}`,
       });
     } finally {
       setLoading(false);
@@ -117,7 +118,7 @@ export default function CommunityCenterModal({
       setResult({
         type: 'claim',
         success: false,
-        message: error.response?.data?.error || 'Could not open this gift. Check your internet and try again.',
+        message: error.response?.data?.error || `Could not open this gift. ${tryAgainLine()}`,
       });
     } finally {
       setLoading(false);

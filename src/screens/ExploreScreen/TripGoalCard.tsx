@@ -14,6 +14,7 @@ import HapticPatterns from '../../helpers/hapticPatterns';
 import * as RootNavigation from '../../RootNavigation';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { GameIcon, GameRichText } from '../../ui';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 interface Props {
   readonly refreshVersion: number;
@@ -94,7 +95,7 @@ export default function TripGoalCard({ refreshVersion, loadGoal = getTripGoal,
     } catch {
       if (!mounted.current || version !== requestVersion.current) return;
       setStale(true);
-      setError('Could not refresh your park goal. Check your internet and try again.');
+      setError(`Could not refresh your park goal. ${tryAgainLine()}`);
       retryAction.current = () => void load();
     } finally {
       if (mounted.current && version === requestVersion.current) setLoading(false);

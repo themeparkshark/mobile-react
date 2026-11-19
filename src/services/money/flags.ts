@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
+import getFeatureFlags, { onFeatureFlags } from '../../api/endpoints/platform/feature-flags';
 
 /**
  * The server switches the money screens read (GET /api/feature-flags), cached
@@ -10,6 +10,12 @@ import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
 const TTL = 5 * 60_000;
 let cached: { flags: Record<string, boolean>; at: number } | null = null;
 let pending: Promise<Record<string, boolean>> | null = null;
+const listeners = new Set<(flags: Record<string, boolean>) => void>();
+// T095: a later answer (a retry after a slow read) updates the money screens in place.
+onFeatureFlags?.(payload => {
+  cached = { flags: payload.flags as Record<string, boolean>, at: Date.now() };
+  listeners.forEach(listener => listener(cached?.flags ?? {}));
+});
 
 export function loadMoneyFlags(): Promise<Record<string, boolean>> {
   if (cached && Date.now() - cached.at < TTL) return Promise.resolve(cached.flags);
@@ -25,7 +31,9 @@ export function useMoneyFlag(name: string): boolean {
   useEffect(() => {
     let live = true;
     void loadMoneyFlags().then(flags => { if (live) setOn(flags[name] === true); });
-    return () => { live = false; };
+    const listener = (flags: Record<string, boolean>) => { if (live) setOn(flags[name] === true); };
+    listeners.add(listener);
+    return () => { live = false; listeners.delete(listener); };
   }, [name]);
   return on;
 }

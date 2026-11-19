@@ -14,7 +14,7 @@
  */
 import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import getFeatureFlags from '../api/endpoints/platform/feature-flags';
+import getFeatureFlags, { onFeatureFlags } from '../api/endpoints/platform/feature-flags';
 
 const KEY = 'tps.playPrefs.v1';
 
@@ -86,16 +86,23 @@ const listeners = new Set<() => void>();
 let version = 0;
 const emit = () => { version += 1; listeners.forEach(listener => { try { listener(); } catch { /* keep going */ } }); };
 
-/** The server switches, read once per app run (a failed read tries again next time). */
+function playFlagsFrom(raw: Record<string, unknown>): PlayFlags {
+  return {
+    pictureGames: raw.picture_games === true,
+    pushWorks: raw.retention_push === true,
+    queueTickets: raw.queue_tickets === true,
+    retrySameGame: retrySameGameFlag(raw),
+  };
+}
+
+// T095: a later answer of the shared read (a retry after a slow one) reaches every reader.
+onFeatureFlags?.(payload => { flags = playFlagsFrom((payload.flags ?? {}) as Record<string, unknown>); emit(); });
+
+/** The server switches, read once and shared (a failed read is retried by the shared store). */
 export function loadPlayFlags(read: typeof getFeatureFlags = getFeatureFlags): Promise<PlayFlags> {
   if (flags) return Promise.resolve(flags);
   flagsPending ??= read().then(payload => {
-    flags = {
-      pictureGames: payload.flags.picture_games === true,
-      pushWorks: payload.flags.retention_push === true,
-      queueTickets: payload.flags.queue_tickets === true,
-      retrySameGame: retrySameGameFlag(payload.flags as Record<string, unknown>),
-    };
+    flags = playFlagsFrom((payload.flags ?? {}) as Record<string, unknown>);
     emit();
     return flags;
   }).catch(() => { flagsPending = null; return PLAY_FLAGS_OFF; });

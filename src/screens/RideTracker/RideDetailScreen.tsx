@@ -24,6 +24,7 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { scoreText, ratingCount, riderSharksCaption, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
 import { plainRideName } from '../../helpers/plainRideName';
 import { CLOSE_WORD } from '../../share/closeWord';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 export { scoreText, COMPACT_COMMUNITY_LOGS, RIDE_DETAIL_HEADER } from './rideDetailModel';
 
@@ -277,7 +278,7 @@ export default function RideDetailScreen() {
       // The star's pop and burst say it on screen; VoiceOver hears it in words.
       AccessibilityInfo.announceForAccessibility(result.wishlisted ? 'Saved to favorites' : 'Taken off favorites');
     } catch (e) {
-      gameAlert("Couldn't update your wishlist", 'Check your connection and try again.');
+      gameAlert("Couldn't update your wishlist", `${tryAgainLine()}`);
     }
   }, [rideId]);
 

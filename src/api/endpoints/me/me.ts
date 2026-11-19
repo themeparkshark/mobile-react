@@ -4,10 +4,13 @@ import client from '../../client';
 export default async function me({
   token,
   throwOnError = false,
-}: { token?: string; throwOnError?: boolean } = {}): Promise<PlayerType | null> {
+  fresh = false,
+}: { token?: string; throwOnError?: boolean; fresh?: boolean } = {}): Promise<PlayerType | null> {
   try {
     const response = await client.get('/me', {
       timeout: 15000,
+      // A refresh after a grant must not join a /me that left before the grant (dedupeGet.ts).
+      ...(fresh ? { tpsNoDedupe: true } : {}),
       ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
     });
     let data = response.data;
@@ -18,7 +21,7 @@ export default async function me({
     if (throwOnError && (!player || typeof player !== 'object' || !player.id)) {
       throw new Error('Sign-in did not return a player profile.');
     }
-    // DEV: V2 fields — DB has these, production Forge backend just needs PlayerResource updated
+    // DEV: V2 fields: DB has these, production Forge backend just needs PlayerResource updated
     if (__DEV__ && player) {
       if (player.tickets == null) player.tickets = 10;
       if (player.energy == null) player.energy = 0; // Unlimited currency, starts at 0

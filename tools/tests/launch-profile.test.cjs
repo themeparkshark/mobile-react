@@ -118,6 +118,7 @@ function provider({ me, cached }) {
     '../RootNavigation': { navigate: route => events.push(['navigate', route]) },
     '../services/lineplay/backgroundQueueHeartbeat': { async clearQueueBackgroundHeartbeat() {} },
     '../utils/apiCache': { async clearCache() {} },
+    '../services/walletSync': { setWalletSink() {} },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
     '../screens/LeaderboardsScreen/standingsCache': { endStandingsSession: () => undefined },
     '../screens/SetCollection/dexCache': { clearBook() {} },

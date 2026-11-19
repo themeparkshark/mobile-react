@@ -42,6 +42,7 @@ import { badgeFontSize, compareQueueWaits, postedStandbyWait, searchKey } from '
 import { UpperText } from '../ui/upper';
 import EdgeScrollHint, { useEdgeScrollHint } from '../components/EdgeScrollHint';
 import SearchField from './social/SearchField';
+import { HIT_SLOP } from '../ui/tokens';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -187,7 +188,7 @@ const RideCard = ({
               </View>
             ) : (
               <Pressable onPress={() => onMakeNextCoin(coinTaskId, entry.name)} accessibilityRole="button"
-                accessibilityLabel={`Make ${entry.name} my next coin`} hitSlop={6}
+                accessibilityLabel={`Make ${entry.name} my next coin`} hitSlop={HIT_SLOP}
                 style={({ pressed }) => [styles.nextCoinBtn, pressed && styles.sessionBtnPressed]}>
                 <GameIcon name="coin" size={16} />
                 <Text style={styles.nextCoinBtnText}>Make this my next coin</Text>

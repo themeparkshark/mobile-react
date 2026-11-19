@@ -16,11 +16,22 @@ import { initialWindowMetrics } from 'react-native-safe-area-context';
 import client from '../api/client';
 import { navigationRef } from '../RootNavigation';
 import * as Haptics from '../helpers/haptics';
-import { isOffline, onConnectivityChange, isOfflineMarkOwned, onOfflineMarkOwner } from '../services/connectivity';
+import { connectionState, onConnectionState, isOfflineMarkOwned, onOfflineMarkOwner, type ConnectionState } from '../services/connectivity';
+import { SHARK_LOADER_ART } from '../ui/SharkLoader';
 import { BRAND, FONT, GameButton, HIT_SLOP, OUTLINE, Z } from '../ui';
 import { useOfflineChipDock } from './map/offlineDock';
 
 export const OFFLINE_SHOW_DELAY_MS = 1200;
+/** A slow server shows only once it has stayed slow a little while (one slow screen is not news). */
+export const SLOW_SHOW_DELAY_MS = 5000;
+/** On the map a tap on the chip opens the full card this long, so the retry is seen. */
+export const CHIP_EXPAND_MS = 6000;
+/** What each state says (T172, T176): slow is never "check your internet". */
+export const BANNER_COPY = {
+  offline: { title: 'RECONNECTING', body: 'Some things may not load', chip: 'Offline', label: 'Offline. Your game is safe. Tap to try again.' },
+  slow: { title: 'GAME IS SLOW', body: 'Your game is safe. Try again', chip: 'Slow', label: 'The game is slow right now. Your game is safe. Tap to try again.' },
+  back: { title: 'BACK ONLINE', body: 'Your park is live again', chip: 'Back', label: 'Back online' },
+} as const;
 export const OFFLINE_PROBE_INTERVAL_MS = 15000;
 const BACK_ONLINE_HOLD_MS = 1400;
 // After this long the card shrinks to his illustrated offline icon, so a long
@@ -34,7 +45,10 @@ const MAP_CHIP_TOP = 0.43;
 // card would cover them, so the banner is only the small chip, docked on the
 // right edge of the map under the recenter button like the other map controls.
 // Sign-in too: the full card would sit over the title art.
-export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore', 'Login']);
+export const CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['Explore', 'Login', 'TeamSelection']);
+// T180: full-screen pages with their title right under the status bar (the team pick): the chip waits in the top-left
+// corner, its own slot clear of the title, the X and the primary button.
+export const TOP_LEFT_DOCK_ROUTES: ReadonlySet<string> = new Set(['TeamSelection']);
 // The map declutter preview mirrors Explore, so its captures show the real docked chip, in internal
 // Release builds too (the route only exists when the preview is registered; store builds never have it).
 const DEV_CHIP_ONLY_ROUTES: ReadonlySet<string> = new Set(['MapDeclutterPreview']);
@@ -47,7 +61,7 @@ function currentRouteName(): string | undefined {
   }
 }
 
-type Phase = 'hidden' | 'offline' | 'back';
+type Phase = 'hidden' | 'offline' | 'slow' | 'back';
 
 // Drawn with the art pipeline (GPT Image 2.5 with Alex's original gift,
 // compass, foam finger and sunglasses art as references) and checked beside
@@ -62,8 +76,8 @@ export const HEADER_CLEARANCE = 70 + 8;
 export const ROUTE_EXTRA_TOP: Readonly<Record<string, number>> = { Leaderboard: 66 };
 
 function probe(): Promise<unknown> {
-  // Any HTTP response marks the app reachable (client.ts interceptor).
-  return client.get('/crumbs', { timeout: 6000, tpsNoRetry: true } as never).catch(() => undefined);
+  // Any quick HTTP response marks the app reachable (client.ts interceptor); a late one keeps it slow.
+  return client.get('/crumbs', { timeout: 10000, tpsNoRetry: true, tpsNoDedupe: true } as never).catch(() => undefined);
 }
 
 /**
@@ -99,12 +113,35 @@ export default function OfflineBanner() {
     sync();
     return navigationRef.addListener('state', sync);
   }, []);
+  // On the map a tap on the chip opens the full card for a moment, so the player sees the retry (T172).
+  const [expanded, setExpanded] = useState(false);
+  const expandTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (expandTimer.current) clearTimeout(expandTimer.current); }, []);
   const chipOnly = routeName !== undefined && (CHIP_ONLY_ROUTES.has(routeName) || DEV_CHIP_ONLY_ROUTES.has(routeName));
-  const compact = timedCompact;
+  // Off the map, a tap on the small chip opens the full card again for a moment.
+  const compact = timedCompact && !expanded;
+  // The tapped chip's card: its own spring in and out, mounted only while it shows.
+  const expand = useSharedValue(0);
+  const [cardShown, setCardShown] = useState(false);
+  useEffect(() => {
+    if (expanded) setCardShown(true);
+    const done = (finished?: boolean) => {
+      'worklet';
+      if (finished && !expanded) runOnJS(setCardShown)(false);
+    };
+    expand.value = reduceMotion
+      ? withTiming(expanded ? 1 : 0, { duration: 160 }, done)
+      : expanded ? withSpring(1, { damping: 15, stiffness: 180, mass: 0.8 }, done)
+        : withTiming(0, { duration: 200, easing: Easing.in(Easing.quad) }, done);
+  }, [expanded, expand, reduceMotion]);
+  const expandStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, expand.value * 1.4),
+    transform: reduceMotion ? [] : [{ translateY: (1 - expand.value) * -20 }, { scale: 0.94 + 0.06 * expand.value }],
+  }));
 
   // Full card first so the player learns what happened, then the small chip.
   useEffect(() => {
-    if (phase !== 'offline') {
+    if (phase !== 'offline' && phase !== 'slow') {
       setCompact(false);
       return undefined;
     }
@@ -119,19 +156,24 @@ export default function OfflineBanner() {
   }, [compact, reduceMotion, shrink]);
 
   useEffect(() => {
-    const apply = (offline: boolean) => {
+    const apply = (state: ConnectionState) => {
       if (showTimer.current) clearTimeout(showTimer.current);
-      if (offline) {
+      if (state !== 'online') {
         if (hideTimer.current) clearTimeout(hideTimer.current);
-        showTimer.current = setTimeout(() => setPhase('offline'), OFFLINE_SHOW_DELAY_MS);
+        // Offline to slow (an answer came back, late) changes the words at once; anything new waits a beat.
+        const showing = phaseRef.current === 'offline' || phaseRef.current === 'slow';
+        showTimer.current = setTimeout(() => setPhase(state), showing ? 0 : state === 'offline' ? OFFLINE_SHOW_DELAY_MS : SLOW_SHOW_DELAY_MS);
       } else if (phaseRef.current === 'offline') {
         setPhase('back');
         Haptics.notificationAsync('success');
         hideTimer.current = setTimeout(() => setPhase('hidden'), BACK_ONLINE_HOLD_MS);
+      } else if (phaseRef.current === 'slow') {
+        // The game caught up: the slow note just slides away (nothing was lost, nothing to celebrate).
+        setPhase('hidden');
       }
     };
-    if (isOffline()) apply(true);
-    const unsubscribe = onConnectivityChange(apply);
+    if (connectionState() !== 'online') apply(connectionState());
+    const unsubscribe = onConnectionState(apply);
     return () => {
       unsubscribe();
       if (showTimer.current) clearTimeout(showTimer.current);
@@ -170,7 +212,7 @@ export default function OfflineBanner() {
   }, []);
 
   useEffect(() => {
-    if (phase !== 'offline') return undefined;
+    if (phase !== 'offline' && phase !== 'slow') return undefined;
     const interval = setInterval(() => {
       if (AppState.currentState === 'active') runProbe();
     }, OFFLINE_PROBE_INTERVAL_MS);
@@ -182,7 +224,11 @@ export default function OfflineBanner() {
   const onChip = useCallback(() => {
     Haptics.selectionAsync();
     runProbe();
+    if (expandTimer.current) clearTimeout(expandTimer.current);
+    setExpanded(true);
+    expandTimer.current = setTimeout(() => { expandTimer.current = null; setExpanded(false); }, CHIP_EXPAND_MS);
   }, [runProbe]);
+  useEffect(() => { if (phase === 'hidden') setExpanded(false); }, [phase]);
 
   const cardStyle = useAnimatedStyle(() => {
     const progress = enter.value;
@@ -206,69 +252,96 @@ export default function OfflineBanner() {
   // A catch moment owns the screen, and the offline screen shows its own mark: the banner waits (its probe keeps running).
   if (!mounted || catchOpen || markOwned) return null;
   const back = phase === 'back';
+  const slow = phase === 'slow';
+  const copy = back ? BANNER_COPY.back : slow ? BANNER_COPY.slow : BANNER_COPY.offline;
+  // Slow: his shark says "still here, your game is safe"; only a real outage shows the no-signal art.
+  const stateIcon = back ? BACK_ONLINE_ICON : slow ? SHARK_LOADER_ART : OFFLINE_ICON;
   // Below his header bar (Topbar is 70pt under the status bar) so the logo,
   // currency counters and header buttons stay visible and tappable offline.
   const top = (initialWindowMetrics?.insets.top ?? 47) + HEADER_CLEARANCE + (routeName ? ROUTE_EXTRA_TOP[routeName] ?? 0 : 0);
   // On sign-in the chip tucks under the status bar, clear of the title art and the sign-in card.
   const onMap = routeName !== 'Login' && !!mapDock;
-  const dockTop = routeName === 'Login' ? (initialWindowMetrics?.insets.top ?? 47) + 8
+  const topLeft = routeName !== undefined && TOP_LEFT_DOCK_ROUTES.has(routeName);
+  const dockTop = routeName === 'Login' || topLeft ? (initialWindowMetrics?.insets.top ?? 47) + 8
     : onMap ? mapDock.top : Math.round(windowHeight * MAP_CHIP_TOP);
 
-  return (
-    <View
-      pointerEvents="box-none"
-      style={chipOnly ? [styles.hostDocked, { top: dockTop }, onMap && { right: mapDock.right }] : [styles.host, { top }]}
+  const card = (
+    <View style={[styles.card, back && styles.cardBack]}>
+      <Animated.View style={iconStyle}>
+        <Image source={stateIcon} style={styles.icon} accessibilityElementsHidden importantForAccessibility="no" />
+      </Animated.View>
+      <View style={styles.copy}>
+        <Text style={styles.title} maxFontSizeMultiplier={1.3}>{copy.title}</Text>
+        <Text style={styles.body} numberOfLines={1} maxFontSizeMultiplier={1.3}>
+          {copy.body}
+        </Text>
+      </View>
+      {!back && (
+        <GameButton
+          label="Retry"
+          size="compact"
+          fullWidth={false}
+          loading={probing}
+          onPress={onRetry}
+          accessibilityLabel={slow ? 'Try again' : 'Try to reconnect'}
+          style={styles.retry}
+        />
+      )}
+    </View>
+  );
+  const chip = (
+    <Pressable
+      onPress={onChip}
+      hitSlop={HIT_SLOP}
+      accessibilityRole="button"
+      accessibilityLabel={copy.label}
+      disabled={back}
+      style={styles.chipStack}
     >
+      <View style={styles.chip}>
+        <Animated.View style={iconStyle}>
+          <Image source={stateIcon} style={styles.chipIcon} accessibilityElementsHidden importantForAccessibility="no" />
+        </Animated.View>
+      </View>
+      {/* T176: the picture always says what it means, like every other map button. */}
+      <View style={styles.chipTag} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+        <Text style={styles.chipTagText} numberOfLines={1} maxFontSizeMultiplier={1.2}>{copy.chip}</Text>
+      </View>
+    </Pressable>
+  );
+
+  if (chipOnly) {
+    // On a HUD screen the chip is the whole banner, docked by the map's button rail. A tap on it opens
+    // the full card under the header for a moment (its own layer), so the retry is seen; the chip stays put.
+    return (
+      <>
+        <View pointerEvents="box-none" style={[styles.hostDocked, { top: dockTop }, onMap && !topLeft && { right: mapDock.right },
+          topLeft && styles.hostTopLeft]}>
+          <Animated.View style={[styles.chipAlone, cardStyle]}>{chip}</Animated.View>
+        </View>
+        {cardShown && (
+          <View pointerEvents="box-none" style={[styles.host, { top }]}>
+            <Animated.View style={[styles.lip, expandStyle]} accessibilityLiveRegion="polite">{card}</Animated.View>
+          </View>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <View pointerEvents="box-none" style={[styles.host, { top }]}>
       <Animated.View
         style={cardStyle}
         accessibilityLiveRegion="polite"
         accessibilityRole="alert"
-        accessibilityLabel={back ? 'Back online' : 'Connection lost. Reconnecting. Some things may not load.'}
+        accessibilityLabel={copy.label}
       >
-        {!chipOnly && (
         <Animated.View style={[styles.lip, fullStyle]} pointerEvents={compact ? 'none' : 'auto'}>
-        <View style={[styles.card, back && styles.cardBack]}>
-          <Animated.View style={iconStyle}>
-            <Image source={back ? BACK_ONLINE_ICON : OFFLINE_ICON} style={styles.icon} accessibilityElementsHidden importantForAccessibility="no" />
-          </Animated.View>
-          <View style={styles.copy}>
-            <Text style={styles.title} maxFontSizeMultiplier={1.3}>{back ? 'BACK ONLINE' : 'RECONNECTING'}</Text>
-            <Text style={styles.body} numberOfLines={1} maxFontSizeMultiplier={1.3}>
-              {back ? 'Your park is live again' : 'Some things may not load'}
-            </Text>
-          </View>
-          {!back && (
-            <GameButton
-              label="Retry"
-              size="compact"
-              fullWidth={false}
-              loading={probing}
-              onPress={onRetry}
-              accessibilityLabel="Try to reconnect"
-              style={styles.retry}
-            />
-          )}
-        </View>
+          {card}
         </Animated.View>
-        )}
-        {/* On a HUD screen the chip is the whole banner: it enters with the
-            card animation and never sits on a hidden card. */}
-        <Animated.View
-          style={chipOnly ? styles.chipAlone : [styles.chipHost, chipStyle]}
-          pointerEvents={chipOnly || compact ? 'box-none' : 'none'}
-        >
-          <Pressable
-            onPress={onChip}
-            hitSlop={HIT_SLOP}
-            accessibilityRole="button"
-            accessibilityLabel={back ? 'Back online' : 'Offline. Try to reconnect'}
-            disabled={back}
-            style={styles.chip}
-          >
-            <Animated.View style={iconStyle}>
-              <Image source={back ? BACK_ONLINE_ICON : OFFLINE_ICON} style={styles.chipIcon} accessibilityElementsHidden importantForAccessibility="no" />
-            </Animated.View>
-          </Pressable>
+        {/* A long outage shrinks the card to the small chip where it was. */}
+        <Animated.View style={[styles.chipHost, chipStyle]} pointerEvents={compact ? 'box-none' : 'none'}>
+          {chip}
         </Animated.View>
       </Animated.View>
     </View>
@@ -281,6 +354,7 @@ const BANNER_Z = Z.dialog - 1;
 const styles = StyleSheet.create({
   host: { position: 'absolute', left: 0, right: 0, alignItems: 'center', zIndex: BANNER_Z, elevation: BANNER_Z },
   hostDocked: { position: 'absolute', right: 16, zIndex: BANNER_Z, elevation: BANNER_Z },
+  hostTopLeft: { right: undefined, left: 16 },
   lip: { borderRadius: 24, backgroundColor: BRAND.navy, paddingBottom: 4, maxWidth: 360, marginHorizontal: 16 },
   card: {
     flexDirection: 'row',
@@ -317,4 +391,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   chipIcon: { width: 30, height: 30, resizeMode: 'contain' },
+  chipStack: { alignItems: 'center' },
+  // The same small navy name tag the map's Shelf button wears.
+  chipTag: {
+    marginTop: -6,
+    paddingHorizontal: 8,
+    paddingVertical: 1,
+    borderRadius: 9,
+    backgroundColor: BRAND.cream,
+    borderColor: BRAND.navy,
+    borderWidth: OUTLINE.thin,
+  },
+  chipTagText: { fontFamily: FONT.display, fontSize: 12, color: BRAND.navy, letterSpacing: 0.3 },
 });

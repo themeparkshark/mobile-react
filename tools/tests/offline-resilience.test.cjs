@@ -170,11 +170,13 @@ function realStack(transport) {
     '../config': { apiUrl: 'http://api.test/api' },
     '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: (_m, url) => (url === '/core' ? 'queue_play.complete' : null) },
     '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => captured.push(extra.status) },
-    '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
+    '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable'), reportTimeout: () => events.push('timeout'), reportSlowAnswer: () => events.push('slow'), FAILURES_BEFORE_OFFLINE: 2, SLOW_ANSWER_MS: 6000 },
     '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': loadTs('src/api/getRetry.ts', {}, { setTimeout: fn => { fn(); return 0; } }),
     './dedupeGet': loadTs('src/api/dedupeGet.ts'),
     './jsonGuard': loadTs('src/api/jsonGuard.ts'),
+    '../dev/laneDelay': loadTs('src/dev/laneDelay.ts'),
+    '../services/walletSync': loadTs('src/services/walletSync.ts'),
   }).default;
   const broadcasts = [];
   const toasts = [];
@@ -236,11 +238,14 @@ test('real axios: a dropped POST is never retried and marks offline once', async
   });
   await assert.rejects(stack.client.post('/core', { a: 1 }));
   assert.equal(attempts, 1);
-  assert.deepEqual(stack.events, ['unreachable']);
-  assert.deepEqual(stack.captured, ['network']);
+  assert.deepEqual(stack.events, [], 'T172: one dropped call is not an outage');
+  await assert.rejects(stack.client.post('/core', { a: 1 }));
+  assert.equal(attempts, 2);
+  assert.deepEqual(stack.events, ['unreachable'], 'two in a row with no answer: offline');
+  assert.deepEqual(stack.captured, ['network', 'network']);
 });
 
-test('real axios: one timeout does not mark the app offline; two in a row do', async () => {
+test('real axios: T172 timeouts mean slow, never offline; a quick answer is online again', async () => {
   let stack;
   let mode = 'timeout';
   stack = realStack(async config => {
@@ -248,14 +253,25 @@ test('real axios: one timeout does not mark the app offline; two in a row do', a
     throw new stack.AxiosError('timeout of 12000ms exceeded', 'ECONNABORTED', config, {});
   });
   await assert.rejects(stack.client.get('/slow'));
-  assert.deepEqual(stack.events, [], 'a single slow endpoint is not an outage');
+  assert.deepEqual(stack.events, ['timeout'], 'a timeout is reported as slow, not unreachable');
   mode = 'ok';
   await stack.client.get('/fast');
   mode = 'timeout';
   await assert.rejects(stack.client.get('/slow'));
-  assert.deepEqual(stack.events, ['reachable'], 'a response in between resets the count');
   await assert.rejects(stack.client.get('/slow'));
-  assert.deepEqual(stack.events, ['reachable', 'unreachable']);
+  assert.deepEqual(stack.events, ['timeout', 'reachable', 'timeout', 'timeout'], 'never unreachable from timeouts');
+  const C = loadTs('src/services/connectivity.ts');
+  const seen = [];
+  C.onConnectionState(state => seen.push(state));
+  C.reportTimeout(); C.reportTimeout();
+  assert.equal(C.connectionState(), 'online', 'two slow calls show nothing (a busy launch)');
+  C.reportTimeout();
+  assert.equal(C.connectionState(), 'slow');
+  assert.equal(C.isOffline(), false, 'slow is not offline');
+  C.reportReachable();
+  C.reportSlowAnswer(); C.reportSlowAnswer(); C.reportSlowAnswer();
+  assert.deepEqual(seen, ['slow', 'online', 'slow'], 'late answers count as slow too');
+  assert.match(read('src/api/client.ts'), /Date\.now\(\) - started >= SLOW_ANSWER_MS\) \{[\s\S]{0,160}reportSlowAnswer\?\.\(\);/);
 });
 
 test('React Native network errors (response with status 0) count as no response', async () => {
@@ -280,15 +296,18 @@ test('React Native network errors (response with status 0) count as no response'
     '../config': { apiUrl: 'http://api.test/api' },
     '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: () => 'queue_play.complete' },
     '../services/telemetry': { addBreadcrumb() {}, captureMessage: (_m, _l, extra) => statuses.push(extra.status) },
-    '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable') },
+    '../services/connectivity': { reportReachable: () => events.push('reachable'), reportUnreachable: () => events.push('unreachable'), reportTimeout: () => events.push('timeout'), reportSlowAnswer: () => events.push('slow'), FAILURES_BEFORE_OFFLINE: 2, SLOW_ANSWER_MS: 6000 },
     '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     './getRetry': loadTs('src/api/getRetry.ts'),
     './dedupeGet': loadTs('src/api/dedupeGet.ts'),
     './jsonGuard': loadTs('src/api/jsonGuard.ts'),
+    '../dev/laneDelay': loadTs('src/dev/laneDelay.ts'),
+    '../services/walletSync': loadTs('src/services/walletSync.ts'),
   }, { setTimeout: (fn) => { fn(); return 0; } });
   await assert.rejects(handlers.bad({ ...rnDropped, config: { method: 'post', url: '/me/line-sessions/1/complete' } }));
-  assert.deepEqual(events, ['unreachable'], 'status 0 shows the offline banner instead of marking the API reachable');
-  assert.deepEqual(statuses, ['network']);
+  await assert.rejects(handlers.bad({ ...rnDropped, config: { method: 'post', url: '/me/line-sessions/1/complete' } }));
+  assert.deepEqual(events, ['unreachable'], 'status 0 twice shows the offline banner instead of marking the API reachable');
+  assert.deepEqual(statuses, ['network', 'network']);
 });
 
 test('the offline banner is built from the WS0 kit: brand tokens and his yellow button', () => {
@@ -303,12 +322,13 @@ test('the offline banner is built from the WS0 kit: brand tokens and his yellow 
 
 test('on Explore the banner goes straight to the chip so it never covers the HUD cards', () => {
   const source = read('src/components/OfflineBanner.tsx');
-  assert.match(source, /CHIP_ONLY_ROUTES[^=]*= new Set\(\['Explore', 'Login'\]\)/);
+  assert.match(source, /CHIP_ONLY_ROUTES[^=]*= new Set\(\['Explore', 'Login', 'TeamSelection'\]\)/);
   assert.match(source, /navigationRef\.addListener\('state'/, 'follows the current route');
-  assert.match(source, /\{!chipOnly && \(/, 'no full card on a HUD screen');
-  assert.match(source, /chipOnly \? styles\.chipAlone/, 'the chip is the whole banner there');
-  assert.match(source, /chipOnly \? \[styles\.hostDocked/, 'docked on the right edge of the map, not over the HUD row');
-  assert.match(source, /back \? BACK_ONLINE_ICON : OFFLINE_ICON\} style=\{styles\.chipIcon\}/, 'the chip also says back online');
+  assert.match(source, /if \(chipOnly\) \{[\s\S]*?\{cardShown && \(/, 'no full card on a HUD screen until the chip is tapped');
+  assert.match(source, /<Animated\.View style=\{\[styles\.chipAlone, cardStyle\]\}>\{chip\}<\/Animated\.View>/, 'the chip is the whole banner there');
+  assert.match(source, /style=\{\[styles\.hostDocked, \{ top: dockTop \}/, 'docked on the right edge of the map, not over the HUD row');
+  assert.match(source, /const stateIcon = back \? BACK_ONLINE_ICON : slow \? SHARK_LOADER_ART : OFFLINE_ICON;/, 'the chip also says back online');
+  assert.match(source, /<Image source=\{stateIcon\} style=\{styles\.chipIcon\}/);
 });
 
 test('offline icon provenance points at the saved raw outputs and review sheet', () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
+import getFeatureFlags, { onFeatureFlags } from '../../api/endpoints/platform/feature-flags';
 
 /**
  * LinePlay's one switch read: queue_tickets ("your first wait at a ride earns
@@ -10,6 +10,12 @@ import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
  */
 let cached: boolean | null = null;
 let pending: Promise<boolean> | null = null;
+const listeners = new Set<(on: boolean) => void>();
+// T095: a later answer (a retry after a slow read) updates LinePlay in place.
+onFeatureFlags?.(payload => {
+  cached = payload.flags?.queue_tickets === true;
+  listeners.forEach(listener => listener(cached as boolean));
+});
 
 export function loadQueueTicketsOn(read: typeof getFeatureFlags = getFeatureFlags): Promise<boolean> {
   if (cached != null) return Promise.resolve(cached);
@@ -31,7 +37,9 @@ export function useQueueTicketsOn(): boolean {
   useEffect(() => {
     let live = true;
     void loadQueueTicketsOn().then(value => { if (live) setOn(value); });
-    return () => { live = false; };
+    const listener = (value: boolean) => { if (live) setOn(value); };
+    listeners.add(listener);
+    return () => { live = false; listeners.delete(listener); };
   }, []);
   return on;
 }

@@ -25,8 +25,10 @@ const strokeOffsets = [
 ];
 
 export default function TopbarText({ children }: { readonly children: ReactNode }) {
+  // T177: one header for VoiceOver, never the eight outline copies under it.
+  const label = typeof children === 'string' || typeof children === 'number' ? String(children) : undefined;
   return (
-    <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }}>
+    <View style={{ position: 'relative', alignItems: 'center', justifyContent: 'center' }} accessible accessibilityRole="header" accessibilityLabel={label}>
       {/* Dark stroke layers */}
       {strokeOffsets.map((offset, i) => (
         <Text

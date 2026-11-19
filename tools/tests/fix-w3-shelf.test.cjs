@@ -163,7 +163,8 @@ test('T128: the shelf opens on the tab holding your coins, fades in once, and Fi
   assert.equal(openingTab(split, [], new Set(), ['rides', 'sights']), 'rides');
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /entering=\{seed \|\| reducedMotion \? undefined : FadeIn\.duration\(240\)\}/, 'one fade under 300 ms');
-  assert.match(park, /!loading && !!currentPark && !progressStale && !tutorialActive/, 'no lesson over a failed or blank shelf');
+  // Merge w3: lane platform T180 pins the same rule in its own order.
+  assert.match(park, /!loading && !progressStale && !!currentPark && !tutorialActive/, 'no lesson over a failed or blank shelf');
   assert.match(park, /const first = openingTab\(split, limitedShelf, owned, tabs\);/);
 });
 

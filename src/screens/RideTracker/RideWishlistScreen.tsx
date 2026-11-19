@@ -12,6 +12,7 @@ import { colors } from '../../design-system';
 import { GameIcon, gameAlert, SharkLoader } from '../../ui';
 
 import RideTrackerEmpty from './RideTrackerEmpty';
+import { tryAgainLine } from '../../services/connectionCopy';
 // ─── Wishlist Item ───
 interface WishlistItemProps {
   ride: WishlistRide;
@@ -75,7 +76,7 @@ export default function RideWishlistScreen() {
       setRides(prev => prev.filter(r => r.id !== rideId));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (e) {
-      gameAlert("Couldn't remove it", 'Check your connection and try again.');
+      gameAlert("Couldn't remove it", `${tryAgainLine()}`);
     }
   }, []);
 

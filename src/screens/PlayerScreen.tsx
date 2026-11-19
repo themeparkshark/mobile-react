@@ -42,6 +42,7 @@ import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
 import StreakFlame from '../components/retention/StreakFlame';
 import { UpperText } from '../ui/upper';
+import { tryAgainLine } from '../services/connectionCopy';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 const STAGE_H = Math.round(Math.max(270, Math.min(315, Dimensions.get('window').height * 0.33)));
@@ -118,7 +119,7 @@ export default function PlayerScreen({ route, navigation }: NativeStackScreenPro
     try {
       await reportPlayer(currentPlayer.id, reasons[choice]);
     } catch {
-      gameAlert("Couldn't send the report", 'Check your connection and try again.');
+      gameAlert("Couldn't send the report", `${tryAgainLine()}`);
       return;
     }
     if (status !== 'blocked' && await confirmGame({ title: 'Thanks for telling us!', message: `Block ${currentPlayer.screen_name} too?`, confirmLabel: 'Block', cancelLabel: 'Not now', icon: 'check' })) {

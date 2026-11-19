@@ -24,7 +24,7 @@ import * as RootNavigation from '../../RootNavigation';
 import { enablePush } from '../../services/push';
 import { markRungSeen, useRung } from '../../services/reveal/revealLadder';
 import { rowRung } from '../../services/retention/newTag';
-import { flagOn, loadRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
+import { flagOn, loadRetentionFlags, onRetentionFlags, type RetentionFlags } from '../../services/retention/flags';
 import { buttonState, doneCount, newlyDone, nextLevelChest, sameJson, tomorrowLine } from '../../services/retention/logic';
 import { askPacingAllows, mayAskForPush, noteParkDaySeen, notePushAsked, parkDaySeen } from '../../services/retention/pushAsk';
 import { localRemindersOn, mayAskForLocalReminders, refreshLocalReminders, turnOffLocalReminders, turnOnLocalReminders } from '../../services/retention/localReminders';
@@ -52,6 +52,7 @@ import RewardReveal from './RewardReveal';
 import RewardsSheet from './RewardsSheet';
 import CalmModal, { calmFace } from './CalmModal';
 import DailyGiftModal from '../DailyGiftModal';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 const LEVEL_CHEST = require('../../../assets/images/retention/level-chest-closed.png');
 const LEVEL_CHEST_OPEN = require('../../../assets/images/retention/level-chest-open.png');
@@ -183,7 +184,9 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
-  // Read the switches; a failed read (offline, slow server) is retried on the next map focus.
+  // Read the switches; a failed read (offline, slow server) is retried by the shared store and on the next map
+  // focus, and every later answer lands here at once (T095: one slow read never hides Daily 3 for the session).
+  useEffect(() => onRetentionFlags(f => { if (mounted.current) setFlags(f); }), []);
   useEffect(() => {
     if (!o.enabled || flags) return;
     void loadRetentionFlags().then(f => { if (mounted.current && f) setFlags(f); });
@@ -464,7 +467,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       if (paid) { setView({ ...current, opening: false, rewards: paid }); return; }
       setView(null);
       void refresh(true);
-      gameAlert('Your chest is still closed', 'Nothing was lost. Open it again from Rewards.');
+      gameAlert('Your chest is still closed', `Your reward is safe. ${tryAgainLine()}`);
     } finally {
       opening.current = false;
     }
@@ -672,7 +675,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       if (on && flagOn(flags, 'retention_push')) void enablePush().catch(() => undefined);
       if (localRemindersOn(flags)) void (on ? turnOnLocalReminders() : turnOffLocalReminders());
     } catch {
-      gameAlert('Could not change reminders', 'Check your internet and try again.');
+      gameAlert('Could not change reminders', `${tryAgainLine()}`);
     }
   };
 

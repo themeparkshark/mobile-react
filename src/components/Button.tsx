@@ -6,6 +6,9 @@ import {
   SoundEffectContextType,
 } from '../context/SoundEffectProvider';
 
+/** At least 44 pt of touch for every icon button (a 35 pt bell plus 5 on each side, more where there is room). */
+export const BUTTON_HIT_SLOP = { top: 8, bottom: 8, left: 8, right: 8 } as const;
+
 export default function Button({
   children,
   hasPermission = true,
@@ -43,6 +46,8 @@ export default function Button({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
+      // T179: his 35 to 50 pt icon buttons (bell, gear, footer) reach at least 44 pt to the finger.
+      hitSlop={BUTTON_HIT_SLOP}
       onPress={async () => {
         if (hasPressed) {
           return;

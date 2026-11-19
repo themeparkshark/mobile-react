@@ -58,6 +58,7 @@ import {
 } from '../../components/money/moneyUi';
 import type { GlossaryKey } from '../../services/help/glossary';
 import countText from '../../helpers/countText';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 export { grantsText, gateReasonFor } from '../../services/money/supplies';
 
@@ -72,7 +73,7 @@ export function replayMessage(outcome: ShopReplayOutcome): { title: string; body
     case 'nothing': return { title: 'Nothing missing', body: 'Everything bought with this Apple ID is already in your Supplies.' };
     case 'other_account': return { title: 'Bought on another account', body: 'This was bought on a different Theme Park Shark account. Sign in to that account to get it.' };
     case 'unavailable': return { title: 'Update the game', body: 'Update Theme Park Shark in the App Store to check your buys.' };
-    default: return { title: 'That didn\u2019t work', body: 'Check your internet and try again.' };
+    default: return { title: 'That didn\u2019t work', body: tryAgainLine() };
   }
 }
 
@@ -226,7 +227,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
     } else if (outcome.status === 'capped' || outcome.status === 'claimed') {
       gameAlert('Done for today', 'Your free ticket comes back tomorrow.');
     } else if (outcome.status === 'failed') {
-      gameAlert('That didn’t work', 'Check your internet and try again.');
+      gameAlert('That didn’t work', `${tryAgainLine()}`);
     }
     await reloadAds();
   };

@@ -64,6 +64,10 @@ export function BackButton({ onPress }: { readonly onPress?: () => void }) {
       onPress={handlePress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      // T179: the 35 pt back art reaches 51 pt of touch.
+      hitSlop={8}
     >
       <Animated.View
         style={{

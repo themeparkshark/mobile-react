@@ -151,7 +151,8 @@ function LanyardBase({ pins, width, max = 6, height = 150, showEmpty = false, on
             onLongPress={pin && onLongPressSlot ? () => onLongPressSlot(i, pin) : undefined}
             accessibilityRole={onPressSlot ? 'button' : 'image'}
             accessibilityLabel={pin ? `${pin.name}${pin.is_chaser ? ', chaser' : ''}${pin.golden ? ', from a Golden Box' : ''}` : 'Empty spot. Add a pin'}
-            hitSlop={6}
+            // T179: a spot is at least 48 pt to the finger, whatever the pin size.
+            hitSlop={Math.max(6, Math.ceil((48 - pinSize) / 2))}
             style={{ position: 'absolute', left: p.x - pinSize / 2, top: p.y - pinSize * 0.42, width: pinSize, height: pinSize }}>
             {pin ? (
               <PinTile uri={pin.icon_url} size={pinSize} owned kind={pin.kind} tradable={pin.tradable}

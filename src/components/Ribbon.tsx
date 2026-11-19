@@ -39,6 +39,7 @@ export default function Ribbon({ text }: { readonly text: string }) {
           strokeColor="#0d2b5e"
           adjustsFontSizeToFit
           numberOfLines={1}
+          accessibilityRole="header"
         >
           {text}
         </StrokedText>

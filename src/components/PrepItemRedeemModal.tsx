@@ -39,6 +39,7 @@ import {
   CelebrationLevel,
 } from './CelebrationEffects';
 import { UpperText } from '../ui/upper';
+import { tryAgainWith } from '../services/connectionCopy';
 
 // Map rarity number to celebration level
 const RARITY_TO_CELEBRATION: Record<number, CelebrationLevel> = {
@@ -221,7 +222,7 @@ export default function PrepItemRedeemModal({
       }
       setCollectError(typeof serverError === 'string'
         ? serverError
-        : 'Could not finish this pickup. Check your internet and tap Retry.');
+        : `Could not finish this pickup. ${tryAgainWith('tap Retry', error)}`);
     } finally {
       setIsCollecting(false);
     }
@@ -673,7 +674,7 @@ export default function PrepItemRedeemModal({
                       </View>
                     )}
 
-                    {/* Rewards Received — actual amounts from API */}
+                    {/* Rewards Received: actual amounts from API */}
                     {!pickupOutcome?.replayed && <View
                       style={{
                         marginLeft: -4,

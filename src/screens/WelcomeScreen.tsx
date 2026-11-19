@@ -19,6 +19,7 @@ import useCrumbs from '../hooks/useCrumbs';
 import { RECOVERY_COPY } from '../services/accountRecovery/model';
 import { BRAND, GameButton, GameIcon, textPreset } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
+import { NAME_MAX, nameSaved, welcomeSaveLine } from './welcomeCopy';
 
 // Theme-park-flavored names, all letters/numbers and never over 12 characters.
 const FIRST = ['Churro', 'Fin', 'Coaster', 'Splash', 'Chomp', 'Snack', 'Turkey', 'Castle', 'Rocket', 'Pirate',
@@ -38,12 +39,22 @@ function pickName(): string {
   return `Shark${Math.floor(Math.random() * 9000) + 1000}`;
 }
 
+/** The shark's size for the room it has: never taller than the stage minus its bob, 260 at most. */
+export function welcomeSharkSize(stageHeight: number): number {
+  if (!stageHeight) return 260;
+  return Math.max(110, Math.min(260, stageHeight - 2 * SHARK_BOB_ROOM));
+}
+// The bob lifts him 14 pt and the sway turns him 4 degrees (about 9 pt at his fin): this much room above and below.
+const SHARK_BOB_ROOM = 26;
+
 type Check = { ok: boolean; hint: string };
 function check(name: string): Check {
   if (!name) return { ok: false, hint: '4 to 12 letters or numbers' };
   if (/[^a-z0-9]/i.test(name)) return { ok: false, hint: 'Letters and numbers only, no spaces' };
   if (!/[a-z]/i.test(name)) return { ok: false, hint: 'Add at least one letter' };
   if (name.length < 4) return { ok: false, hint: `${4 - name.length} more to go` };
+  // T185: the most a name can be, said out loud (never a silent cut).
+  if (name.length >= NAME_MAX) return { ok: true, hint: `Looks great! ${NAME_MAX} letters is the most` };
   return { ok: true, hint: 'Looks great!' };
 }
 
@@ -53,6 +64,17 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const [submitting, setSubmitting] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  // T185: a name typed past 12 letters was cut: the hint says so instead of cutting it silently.
+  const [cut, setCut] = useState(false);
+  const [stageH, setStageH] = useState(0);
+  // T174: a save that runs long says so (the button keeps its pulse; the words say the game is just slow).
+  const [slowSave, setSlowSave] = useState(false);
+  useEffect(() => {
+    if (!submitting) { setSlowSave(false); return undefined; }
+    const timer = setTimeout(() => setSlowSave(true), 3000);
+    return () => clearTimeout(timer);
+  }, [submitting]);
+  const sharkSize = welcomeSharkSize(stageH);
   const [findingOriginal, setFindingOriginal] = useState(false);
   const { refreshPlayer } = useContext(AuthContext);
   const { labels } = useCrumbs();
@@ -77,7 +99,8 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   }, [bob, spin, focused, reduced]);
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: -bob.value * 14 - cheer.value * 60 },
+      // The cheer hop stays inside his own room (it used to jump 60 pt, over the tagline).
+      { translateY: -bob.value * 14 - cheer.value * 12 },
       { rotate: `${-4 + bob.value * 8 + cheer.value * 360}deg` },
       { scale: 1 + cheer.value * 0.08 },
     ],
@@ -89,7 +112,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
 
   const status = check(username);
-  const hint = serverError ?? status.hint;
+  const hint = serverError ?? (slowSave ? 'The game is slow. Saving your name…' : cut ? `${NAME_MAX} letters is the most. We kept ${username}` : status.hint);
   const hintOk = !serverError && status.ok;
 
   const newName = () => {
@@ -99,7 +122,18 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
       swirl.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.cubic) });
     }
     setServerError(null);
+    setCut(false);
     setUsername(pickName());
+  };
+
+  const celebrate = () => {
+    setDone(true);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    cheer.value = withSequence(withTiming(1, { duration: 520, easing: Easing.out(Easing.quad) }),
+      withSpring(0, { damping: 9 }));
+    // Straight to play after the little celebration. Team choice waits
+    // until it matters (first Ride Control moment).
+    setTimeout(() => navigation.navigate('Explore'), 1300);
   };
 
   const submit = async () => {
@@ -115,18 +149,14 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
     setServerError(null);
     try {
       await updatePlayer({ username: name });
-      await refreshPlayer();
-      setDone(true);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      cheer.value = withSequence(withTiming(1, { duration: 520, easing: Easing.out(Easing.quad) }),
-        withSpring(0, { damping: 9 }));
-      // Straight to play after the little celebration. Team choice waits
-      // until it matters (first Ride Control moment).
-      setTimeout(() => navigation.navigate('Explore'), 1300);
-    } catch (error: any) {
-      const message = error?.response?.data?.errors?.username?.[0]
-        ?? error?.response?.data?.message ?? 'Your name didn’t save. Check your internet and tap Let’s Go again.';
-      setServerError(/taken/i.test(message) ? 'That name is taken. Try another, or tap the sparkle for a new one!' : message);
+      await refreshPlayer().catch(() => undefined); // the name saved; the header catches up by itself
+      celebrate();
+    } catch (error: unknown) {
+      // T174: a late answer can mean the name saved anyway (then a retry would say "taken" for the
+      // player's own name). Ask the server who this player is before saying anything.
+      const saved = await refreshPlayer().then(p => p?.username, () => null);
+      if (nameSaved(saved, name)) { celebrate(); return; }
+      setServerError(welcomeSaveLine(error));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       shake.value = withSequence(withTiming(-10, { duration: 50 }), withTiming(10, { duration: 50 }),
         withTiming(-6, { duration: 50 }), withTiming(0, { duration: 50 }));
@@ -148,11 +178,12 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
               {done ? `You're in, ${username}!` : 'Every ride has a coin.\nWin it and fill your park shelf.'}
             </Animated.Text>
 
-            <View style={styles.stage}>
+            {/* T182: the shark fits the room between the tagline and the card (its bob included), so it never covers the words. */}
+            <View style={styles.stage} onLayout={e => setStageH(Math.round(e.nativeEvent.layout.height))}>
               <Animated.Image source={require('../../assets/images/screens/explore/starburst.png')}
                 style={[styles.burst, burstStyle]} resizeMode="contain" />
               <Animated.View entering={FadeInUp.delay(450).springify().damping(11)} style={sharkStyle}>
-                <Image source={require('../../assets/images/screens/welcome/shark.png')} style={styles.shark} contentFit="contain" />
+                <Image source={require('../../assets/images/screens/welcome/shark.png')} style={[styles.shark, { width: sharkSize, height: sharkSize }]} contentFit="contain" />
               </Animated.View>
             </View>
 
@@ -166,16 +197,24 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
                       style={styles.input}
                       value={username}
                       selectTextOnFocus
-                      onChangeText={t => { setServerError(null); setUsername(t.replace(/\s/g, '')); }}
+                      onChangeText={t => {
+                        setServerError(null);
+                        const clean = t.replace(/\s/g, '');
+                        setCut(clean.length > NAME_MAX);
+                        setUsername(clean.slice(0, NAME_MAX));
+                      }}
                       placeholder="SharkName"
                       placeholderTextColor="#9bb4cf"
                       autoCapitalize="none"
                       autoCorrect={false}
-                      maxLength={12}
                       returnKeyType="go"
                       onSubmitEditing={() => void submit()}
                       accessibilityLabel="Shark name"
                     />
+                    {/* T185: how many letters, out of the most a name can have. */}
+                    <Text style={[styles.count, username.length >= NAME_MAX && styles.countFull]} accessibilityLabel={`${username.length} of ${NAME_MAX} letters`}>
+                      {`${username.length}/${NAME_MAX}`}
+                    </Text>
                   </Pressable>
                   <Pressable onPress={newName} style={styles.newName} accessibilityRole="button" accessibilityLabel="Get a new name">
                     <Animated.View style={swirlStyle}><GameIcon name="sparkle" size={36} /></Animated.View>
@@ -220,7 +259,7 @@ const styles = StyleSheet.create({
   logo: { width: 250, height: 110, marginTop: 8 },
   hook: { fontFamily: 'Knockout', fontSize: 18, color: '#fff', textAlign: 'center', marginTop: 4, lineHeight: 22,
     textShadowColor: 'rgba(5,52,110,0.6)', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 3 },
-  stage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', minHeight: 170 },
+  stage: { flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center', minHeight: 140 },
   burst: { position: 'absolute', width: 420, height: 420, opacity: 0.1 },
   shark: { width: 260, height: 260 },
   card: { width: '100%', backgroundColor: '#fff', borderRadius: 26, borderWidth: 4, borderColor: '#0b4f96', padding: 16,
@@ -228,7 +267,9 @@ const styles = StyleSheet.create({
   cardTitle: { fontFamily: 'Shark', fontSize: 24, color: '#09268f', textAlign: 'center' },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10 },
   inputWrap: { flex: 1, backgroundColor: '#eef6ff', borderRadius: 16, borderWidth: 3, borderColor: '#bcd9f5' },
-  input: { fontFamily: 'Shark', fontSize: 26, color: '#09268f', textAlign: 'center', paddingVertical: 10 },
+  input: { fontFamily: 'Shark', fontSize: 26, color: '#09268f', textAlign: 'center', paddingVertical: 10, paddingHorizontal: 40 },
+  count: { position: 'absolute', right: 10, bottom: 6, fontFamily: 'Knockout', fontSize: 13, color: '#5b7a9c' },
+  countFull: { color: BRAND.goldLip },
   newName: { width: 56, height: 56, borderRadius: 16, backgroundColor: '#ffcf3b', alignItems: 'center', justifyContent: 'center',
     borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   hintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8 },

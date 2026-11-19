@@ -32,6 +32,7 @@ import TapHint from './TapHint';
 import CalmModal from './retention/CalmModal';
 import { rewardWord } from '../services/words/playerWords';
 import { LOST_CLAIM_WAITS_MS, reconcileClaim, serverAnswered } from '../services/retention/claimReconcile';
+import { tryAgainLine } from '../services/connectionCopy';
 
 const CHEST_CLOSED = require('../../assets/images/daily/chest-closed.png');
 const CHEST_OPEN = require('../../assets/images/daily/chest-open.png');
@@ -88,6 +89,14 @@ export function countStart(amount: number): number {
 export function prizeBlockHeight(extraLines: number, hasMilestone: boolean, ticketDay: boolean): number {
   return (ticketDay ? 0 : 60) + 38 + extraLines * 24 + (hasMilestone ? 24 : 0);
 }
+/** The claim's answer came late or the server was busy: it may have landed. A refusal or no answer at all did not. */
+export function claimAnswerWasLate(error: unknown): boolean {
+  const e = error as { code?: string; response?: { status?: number } } | null | undefined;
+  if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT') return true;
+  const status = e?.response?.status;
+  return typeof status === 'number' && (status >= 500 || status === 429);
+}
+
 export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClosed, autoOpen = ws7Preview() === 'chest', claim = update, simple = false,
   requested, inline = false, onDone, onArtReady }: {
   readonly dailyGift: DailyGiftType;
@@ -154,6 +163,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   // Before coin levels unlock (rung 3), Energy is "saved for growing coins": the number alone means nothing yet.
   const energyExplained = !useRung('coin_levels').open;
   const [phase, setPhase] = useState<'closed' | 'opening' | 'open'>('closed');
+  // T172: the chest's own words while the server is slow (still opening, or safe and ready for another tap).
+  const [slowNote, setSlowNote] = useState<'retry' | null>(null);
   const [confirmedGift, setConfirmedGift] = useState<DailyGiftType | null>(null);
   const [shown, setShown] = useState(0);
   /** The claim's answer was lost and the chest is reading back what the server paid (T093). */
@@ -397,6 +408,7 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     claiming.current = true;
     walletBefore.current = player?.coins ?? null;
     setPhase('opening');
+    setSlowNote(null);
     const startedAt = Date.now();
     if (!reducedMotion) {
       shake.value = withSequence(
@@ -411,17 +423,21 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
     // T093: when the answer is lost (the app stops waiting at 12 s, a busy server pays up to 30 s), the chest keeps
     // opening while it reads back what the server paid, and then shows exactly that. Only a chest the server says is
     // still closed after its whole window is a failure.
+    // T172: a busy server's late answer (a 5xx or 429) may also have landed, so it is read back the same way.
     let confirmed: DailyGiftType | null = null;
     let answered = true;
+    let late = false;
     try {
       const c = await claim(dailyGift.id);
       if (!c.redeemed_at) throw new Error('Chest was not confirmed');
       confirmed = c;
     } catch (error) {
       answered = serverAnswered(error);
-      if (!answered) {
+      late = claimAnswerWasLate(error);
+      if (!answered || late) {
         if (mounted.current) setStillOpening(true);
-        confirmed = await reconcileClaim(error, async () => {
+        // A busy server's answer is passed as no answer, so the read-back runs over the whole window too.
+        confirmed = await reconcileClaim(answered ? undefined : error, async () => {
           const g = await getDailyGift();
           return g.id === dailyGift.id && g.redeemed_at ? g : null;
         }, { waits: LOST_CLAIM_WAITS_MS, alive: () => mounted.current });
@@ -444,13 +460,14 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
       }, reducedMotion ? 0 : Math.max(0, 440 - (Date.now() - startedAt)));
     } catch {
       // The server answered (for example: already opened on another phone), or the whole window passed with the
-      // chest still closed. One read decides which; a lost answer was already read back above.
+      // chest still closed. One read decides which; a lost or late answer was already read back above.
       let current: DailyGiftType | null = null;
-      if (answered) { try { current = await getDailyGift(); } catch { /* Leave an ordinary retry available. */ } }
+      if (answered && !late) { try { current = await getDailyGift(); } catch { /* Leave an ordinary retry available. */ } }
       if (!mounted.current) return;
       claiming.current = false;
       cancelAnimation(shake); shake.value = 0;
       cancelAnimation(pop); pop.value = 1; cancelAnimation(gold); gold.value = 0;
+      setSlowNote(late && !current ? 'retry' : null);
       if (current?.id === dailyGift.id && current.redeemed_at) {
         setDailyGift(current);
         void refreshPlayer?.();
@@ -458,7 +475,8 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
         gameAlert('Today’s chest is collected', 'You already got today’s prizes. Come back tomorrow for the next chest.');
       } else {
         setPhase('closed');
-        gameAlert('Your chest is still closed', 'Nothing was lost. Tap the chest to try again.');
+        // Inside the Rewards sheet the note on the card says it (a dialog would sit under the sheet, T172).
+        if (!(inline && late)) gameAlert('Your chest is still closed', `Nothing was lost. ${tryAgainLine()}`);
       }
     }
   };
@@ -584,7 +602,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
               {milestone && <Text style={styles.milestone}>{`${milestone.label} bonus!`}</Text>}
             </Animated.View>
           ) : (
-            <Text style={styles.hint}>{phase === 'opening' ? (stillOpening ? 'Still opening…' : 'Opening your chest…') : 'Tap the chest to open it!'}</Text>
+            <Text style={styles.hint}>{phase === 'opening'
+              ? (stillOpening ? 'The game is slow. Still opening your chest…' : 'Opening your chest…')
+              : slowNote === 'retry' ? 'The game is slow right now. Your chest is safe. Tap it again.' : 'Tap the chest to open it!'}</Text>
           )}
           </View>
 

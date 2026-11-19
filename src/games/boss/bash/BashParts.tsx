@@ -317,7 +317,7 @@ export const DamageNumber = memo(function DamageNumber({ text, x, y, big, badge 
     {big && badge && <Image source={BASH_ART.impactGold} style={styles.dmgBadge} contentFit="contain" />}
     {/* Hand-drawn look: a thick navy outline (8 offset copies on big hits, 4 on small ones) under the number. */}
     {(big ? OUTLINE : OUTLINE.slice(0, 4)).map(([dx, dy], i) => <Text key={i} style={[styles.dmg, styles.dmgOutline, { transform: [{ translateX: dx }, { translateY: dy }] }]}
-      maxFontSizeMultiplier={1}>{text}</Text>)}
+      maxFontSizeMultiplier={1} accessibilityElementsHidden importantForAccessibility="no">{text}</Text>)}
     <Text style={[styles.dmg, big && styles.dmgBig]} maxFontSizeMultiplier={1}>{text}</Text>
   </Animated.View>;
 });

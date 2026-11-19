@@ -33,6 +33,7 @@ import MatchLinkBanner from '../match/MatchLinkBanner';
 import { LINK_COPY, type LinkPhase } from '../../services/match/matchLink';
 import { idlePollInterval } from '../../hooks/useUserIdle';
 import countText from '../../helpers/countText';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 /** The stored "this raid's result was collected" key. */
 export function celebratedKey(playerId: number, raidId: number): string {
@@ -339,7 +340,7 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
       if (result.error === 'too_far') {
         setAwayFor({ raidId: raid.id, reason: result.reason ?? 'far' });
         setNote(PRESENCE[result.reason ?? 'far']);
-      } else setNote(result.error === 'network' ? 'Could not reach the fight. Check your internet and try again.' : ERRORS[result.error]);
+      } else setNote(result.error === 'network' ? `Could not reach the fight. ${tryAgainLine()}` : ERRORS[result.error]);
       return;
     }
     // Lock GPS, the explicit join choice and the server round at the action the player approved.

@@ -144,6 +144,7 @@ function coinUpgrade({ success = false, reduced = true } = {}) {
     '../context/AuthProvider': { AuthContext: { value: { refreshPlayer: async () => {} } } },
     '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound() {} } } },
     '../hooks/useReducedGameMotion': { default: () => reduced },
+    '../services/connectionCopy': { tryAgainLine: () => 'The game is slow right now. Try again.' },
     '../helpers/haptics': { impactAsync() {}, notificationAsync() {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} },
     '../constants/coinTiers': coinTiers,
     ...progressionStubs,

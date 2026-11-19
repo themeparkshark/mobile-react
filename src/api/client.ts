@@ -1,13 +1,15 @@
-import axios, { type AxiosAdapter, type AxiosError, type AxiosResponse } from 'axios';
+import axios, { AxiosError as AxiosErrorClass, type AxiosAdapter, type AxiosError, type AxiosResponse, type AxiosRequestConfig } from 'axios';
 import * as Device from 'expo-device';
 import config from '../config';
 import { classifyCoreLoopRequest } from '../services/telemetry/coreLoopEvents';
 import { addBreadcrumb, captureMessage } from '../services/telemetry';
-import { reportReachable, reportUnreachable } from '../services/connectivity';
+import { FAILURES_BEFORE_OFFLINE, reportReachable, reportSlowAnswer, reportTimeout, reportUnreachable, SLOW_ANSWER_MS } from '../services/connectivity';
 import { httpStatus, isNetworkFailure, isTimeout, withGetRetry } from './getRetry';
 import { withInflightDedupe } from './dedupeGet';
 import { withOwnStack } from '../utils/hermesSafeError';
 import { isNonJsonBody, NON_JSON_BEFORE_OFFLINE, nonJsonError, withNonJsonRetry } from './jsonGuard';
+import { withLaneDelay } from '../dev/laneDelay';
+import { noteApiAnswer } from '../services/walletSync';
 
 const client = axios.create({
   baseURL: config.apiUrl,
@@ -47,16 +49,34 @@ export function recordCoreLoopResponse(
 // interceptor (here and in useAxiosSetup) runs once per logical request.
 // Identical GETs already in flight share one request (dedupeGet.ts).
 if (client.defaults.adapter) {
-  client.defaults.adapter = withInflightDedupe(withGetRetry(withNonJsonRetry(client.defaults.adapter as AxiosAdapter))) as AxiosAdapter;
+  // Lane simulators only (EXPO_PUBLIC_STUDIO_MUTE bundles): an optional slow server for device proofs; elsewhere a no-op.
+  const transport = withLaneDelay(client.defaults.adapter as AxiosAdapter,
+    (config: AxiosRequestConfig) => new AxiosErrorClass(`timeout of ${config.timeout}ms exceeded`, 'ECONNABORTED', config));
+  client.defaults.adapter = withInflightDedupe(withGetRetry(withNonJsonRetry(transport))) as AxiosAdapter;
 }
 
 /**
- * Timeouts only count as offline when two land in a row with no response in
- * between: one slow endpoint on a working connection is not an outage.
+ * T172: slow is not offline. A timeout or a late answer means the server is
+ * busy (the game says it is slow right now and keeps working); only calls
+ * that get no answer at all, twice in a row, mean offline.
  */
-const TIMEOUTS_BEFORE_OFFLINE = 2;
-let consecutiveTimeouts = 0;
+let consecutiveNoAnswer = 0;
 let consecutiveNonJson = 0;
+type Timed = { tpsStartedAt?: number };
+
+/** A quick answer is online; a late one (a loaded server, a 30 s PHP limit) is slow, never offline. */
+function reportAnswer(config: Timed | undefined): void {
+  const started = config?.tpsStartedAt;
+  if (typeof started === 'number' && Date.now() - started >= SLOW_ANSWER_MS) {
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[net] slow answer ${Date.now() - started} ms`);
+    reportSlowAnswer?.();
+  } else reportReachable();
+}
+
+client.interceptors.request?.use(config => {
+  (config as Timed).tpsStartedAt = Date.now();
+  return config;
+});
 
 client.interceptors.response.use(
   (response: AxiosResponse) => {
@@ -73,9 +93,11 @@ client.interceptors.response.use(
       return Promise.reject(withOwnStack(nonJsonError(response)));
     }
     consecutiveNonJson = 0;
-    consecutiveTimeouts = 0;
-    reportReachable();
+    consecutiveNoAnswer = 0;
+    reportAnswer(response.config as Timed);
     recordCoreLoopResponse(response.config?.method, response.config?.url, response.status);
+    // T139: a grant or spend keeps the header true (walletSync.ts); never lets a bad body fail the call.
+    try { noteApiAnswer(response.config?.method, response.config?.url, response.data); } catch { /* header sync is best effort */ }
     return response;
   },
   (error: AxiosError) => {
@@ -86,14 +108,14 @@ client.interceptors.response.use(
     // A status of 0 is React Native's "no response" (refused, dropped, offline).
     const status = httpStatus(error);
     if (status !== undefined) {
-      consecutiveTimeouts = 0;
+      consecutiveNoAnswer = 0;
       consecutiveNonJson = 0;
-      reportReachable();
+      reportAnswer(error.config as Timed);
     } else if (isNetworkFailure(error)) {
-      reportUnreachable();
+      consecutiveNoAnswer += 1;
+      if (consecutiveNoAnswer >= FAILURES_BEFORE_OFFLINE) reportUnreachable();
     } else if (isTimeout(error)) {
-      consecutiveTimeouts += 1;
-      if (consecutiveTimeouts >= TIMEOUTS_BEFORE_OFFLINE) reportUnreachable();
+      reportTimeout?.();
     }
     const config = error.config;
     recordCoreLoopResponse(config?.method, config?.url, status);

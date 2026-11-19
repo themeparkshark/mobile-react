@@ -18,7 +18,7 @@ import { replayHomeIntro } from '../../screens/ExploreScreen/HomeIntro';
 import {
   LOCAL_GLOSSARY, glossaryForSwitches, mergeServerGlossary, type GlossaryKey, type GlossaryTerm, type HelpTopicId,
 } from '../../services/help/glossary';
-import getFeatureFlags from '../../api/endpoints/platform/feature-flags';
+import getFeatureFlags, { onFeatureFlags } from '../../api/endpoints/platform/feature-flags';
 import {
   createSeenTipStore, initialSeenFor, isExistingPlayer, shouldShowTip, type TipId,
 } from '../../services/help/seenTips';
@@ -95,10 +95,13 @@ export default function HelpProvider({ children }: { readonly children: React.Re
     setSwitches({ queueTickets: false, rideBoss: false });
     if (playerId == null) return undefined;
     let live = true;
-    void getFeatureFlags().then(payload => {
+    const apply = (payload: { flags: Record<string, boolean> }) => {
       if (live) setSwitches({ queueTickets: payload.flags.queue_tickets === true, rideBoss: payload.flags.ride_boss === true });
-    }).catch(() => undefined);
-    return () => { live = false; };
+    };
+    void getFeatureFlags().then(apply).catch(() => undefined);
+    // T095: a retry after a slow first read updates the glossary lines in place.
+    const off = onFeatureFlags(apply);
+    return () => { live = false; off(); };
   }, [playerId]);
   const { queueTickets, rideBoss } = switches;
   const glossary = useMemo(() => glossaryForSwitches(serverGlossary, { queueTickets, rideBoss }), [serverGlossary, queueTickets, rideBoss]);

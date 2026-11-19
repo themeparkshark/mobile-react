@@ -31,6 +31,19 @@ export const NOT_NOW_COPY = {
  */
 export const PRIMER_BUTTON = { ask: 'Continue', settings: 'Open Settings', busy: 'One sec…' } as const;
 
+/**
+ * T181: the primer is right at a park gate and at home (it cannot know which before location is on), and
+ * after "Don't Allow" it says what happened, not only a new button word.
+ */
+export const PRIMER_COPY = {
+  title: 'Let’s find rides and treats!',
+  park: 'Win ride coins at the park.',
+  home: 'Treats pop up near you, even at home!',
+  offTitle: 'Location is off',
+  off: 'Turn it on in Settings to see the rides near you.',
+  small: 'Your location only puts treats and rides near you.',
+} as const;
+
 /** One Finn and one underwater scene in the first minute (no castle or globe shapes behind him). */
 const FINN = require('../../../assets/images/tutorial/teacher-shark.png');
 const BACKDROP = require('../../../assets/images/screens/park/background-new.png');
@@ -118,13 +131,16 @@ export default function PermissionsNotGranted() {
       <FullBackdrop />
       <Animated.View entering={reduced ? undefined : FadeInUp.duration(450).springify().damping(14)} style={styles.card}>
         <Image source={FINN} style={[styles.shark, compact && styles.sharkCompact]} contentFit="contain" accessibilityLabel="Finn the shark" />
-        <Text style={[styles.title, compact && styles.titleCompact]}>Let’s find your first treats!</Text>
+        <Text style={[styles.title, compact && styles.titleCompact]} accessibilityRole="header">{canAsk ? PRIMER_COPY.title : PRIMER_COPY.offTitle}</Text>
         <View style={[styles.finds, compact && styles.findsCompact]}>
           {FINDS.map((source, i) => <Find key={i} source={source} i={i} reduced={reduced} />)}
         </View>
         {/* Two short lines a 7-year-old can read; the pictures above carry the rest. */}
-        <Text style={styles.body}>Treats pop up near you, even at home!</Text>
-        <Text style={styles.small}>Your location only puts treats and rides near you.</Text>
+        {canAsk ? <>
+          <Text style={styles.body}>{PRIMER_COPY.park}</Text>
+          <Text style={styles.body}>{PRIMER_COPY.home}</Text>
+        </> : <Text style={styles.body}>{PRIMER_COPY.off}</Text>}
+        <Text style={styles.small}>{PRIMER_COPY.small}</Text>
         <View style={{ width: '82%', marginTop: 16 }}>
           <YellowButton text={buttonText} onPress={turnOn} />
         </View>

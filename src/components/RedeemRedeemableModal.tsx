@@ -86,6 +86,7 @@ import { NeedTicketOfferSlot } from './rewards/offerSlots';
 import { taskHasLine } from '../services/lineplay/rideLines';
 import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
 import TicketClaimFlight from './rewards/TicketClaimFlight';
+import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
 
 
 // Ticket cost by ride importance tier
@@ -658,7 +659,7 @@ export default function RedeemRedeemableModal({
     try {
       await refreshPlayer?.();
     } catch {
-      setStartError('Could not refresh your Tickets. Check your internet and try again.');
+      setStartError(`Could not refresh your Tickets. ${tryAgainLine()}`);
     }
   }, [refreshPlayer]);
 
@@ -859,7 +860,7 @@ export default function RedeemRedeemableModal({
       triggerFly?.({ imageSource: require('../../assets/images/ticket-icon.png'), amount: Math.min(5, got),
         startX: width / 2, startY: height * 0.62, targetPosition: 'tickets' });
     }
-    if (failed) setStartError('Some Tickets did not claim. Check your internet and try again.');
+    if (failed) setStartError(`Some Tickets did not claim. ${tryAgainLine()}`);
   }, [claiming, claimable, refreshPlayer, player?.tickets, triggerFly]);
 
   // T055: "Move closer" was true where PLAY! was pressed; once the player moves, the card asks again.
@@ -1354,7 +1355,7 @@ export default function RedeemRedeemableModal({
             message="Your Ticket is used and your game is ready."
             primary={{ label: 'Play Now', onPress: handlePlayNow }} />}
           {flowState === 'spend-error' && <ChallengeStatusCard title="Reconnect" art="loading"
-            message="We could not tell if this game started. Check your internet and tap Reconnect. You will not pay another Ticket."
+            message={`We could not tell if this game started. ${tryAgainWith('tap Reconnect')} You will not pay another Ticket.`}
             primary={{ label: 'Reconnect', onPress: handleStartWheel }}
             quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }} />}
           {flowState === 'save-error' && <ChallengeStatusCard title="Not Started"
@@ -1377,7 +1378,7 @@ export default function RedeemRedeemableModal({
             art={proofRejected ? 'none' : 'loading'}
             message={proofRejected
               ? 'We could not count that game. Your try is still open. Play it again. It costs no new Ticket.'
-              : 'We could not check your score yet. Check your internet and tap Reconnect. You will not pay another Ticket.'}
+              : `We could not check your score yet. ${tryAgainWith('tap Reconnect')} You will not pay another Ticket.`}
             primary={{ label: proofRejected ? 'Replay Game' : 'Reconnect', onPress: () => {
               if (proofRejected) {
                 proofRef.current = null;

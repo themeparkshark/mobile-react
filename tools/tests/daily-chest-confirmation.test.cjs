@@ -57,6 +57,7 @@ function chest({ reconciled = null, readBacks = null, reduced = false, props = {
       if (name === '../context/DailyGiftProvider') return { DailyGiftContext };
       if (name === '../context/CurrencyFlyProvider') return { useCurrencyFly: () => ({ triggerFly(value) { flights.push(value); }, getTarget: () => null }) };
       if (name === '../dev/ws7Preview') return { ws7Preview: () => '' };
+      if (name === '../services/connectionCopy') return { tryAgainLine: () => 'The game is slow right now. Try again.' };
       if (name === '../ui') return { BRAND: { navy: '#05346e', blue: '#0768b9', white: '#fff', gold: '#ffcf3b', goldLip: '#d99a00' },
         GameIcon: 'GameIcon', ICON_SOURCES: { coins: 'icon:coins', energy: 'icon:energy', ticket: 'icon:ticket' },
         gameAlert(title) { alerts.push(title); } };
@@ -138,6 +139,23 @@ test('daily chest failures keep retry available without displaying an earned rew
   assert.equal(daily.celebrated, false); assert.equal(daily.disabled, false);
   assert.equal(daily.refreshes, 0); assert.equal(daily.sounds.includes('win'), false);
   daily.open(); assert.equal(daily.updates.length, 2);
+});
+test('T172: a claim whose answer was late keeps opening, looks again and plays the real prize that landed', async () => {
+  const confirmed = { ...gift, redeemed_at: '2026-11-18T22:00:00Z' };
+  const daily = chest({ reconciled: confirmed, props: { inline: true } }); daily.open();
+  daily.updates[0].reject(Object.assign(new Error('timeout of 12000ms exceeded'), { code: 'ECONNABORTED' }));
+  await daily.settle(); daily.reveal(); await daily.settle(); await daily.settle(); daily.reveal();
+  assert.equal(daily.celebrated, true, 'the prize that landed is shown, never "could not open"');
+  assert.deepEqual(daily.alerts, [], 'no error dialog for a claim that worked');
+});
+test('T172: a late claim the server never confirms says so on the card (inside the sheet) and stays tappable', async () => {
+  const daily = chest({ props: { inline: true } }); daily.open();
+  daily.updates[0].reject(Object.assign(new Error('timeout of 12000ms exceeded'), { code: 'ECONNABORTED' }));
+  for (let i = 0; i < 4; i++) { await daily.settle(); daily.reveal(); }
+  assert.ok(daily.find(n => n.type === 'Text' && n.props.children === 'The game is slow right now. Your chest is safe. Tap it again.'));
+  assert.equal(daily.disabled, false);
+  assert.deepEqual(daily.alerts, [], 'no dialog hidden under the Rewards sheet');
+  daily.open(); assert.equal(daily.updates.length, 2, 'another tap claims again');
 });
 test('an already-collected chest reconciles provider state without a second celebration', async () => {
   const confirmed = { ...gift, redeemed_at: '2026-09-29T22:00:00Z' };

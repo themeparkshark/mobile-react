@@ -30,6 +30,7 @@ import CoinFillRing from './CoinFillRing';
 import KidText from '../KidText';
 import { coinLevelMarker, markWaitPartLanded, rememberWaitLevel, waitLevelMark, type WaitKey } from '../../../../services/lineplay/waitLevelMemory';
 import { isDimFlashingLightsEnabled } from '../../../../../modules/flash-safety';
+import { tryAgainLine } from '../../../../services/connectionCopy';
 
 export interface WaitCoinStageProps {
   readonly size: number;
@@ -138,7 +139,7 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
       scale.value = withTiming(1, { duration: 160 });
       queueHaptic('failBuzz');
       const status = (caught as { response?: { status?: number } })?.response?.status;
-      setError(status === 409 ? 'This coin changed. Open your shelf to refresh it.' : 'Could not level up. Check your internet and try again.');
+      setError(status === 409 ? 'This coin changed. Open your shelf to refresh it.' : `Could not level up. ${tryAgainLine()}`);
       timers.current.push(setTimeout(() => setError(null), 3500));
     } finally {
       setBusy(false);

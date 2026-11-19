@@ -29,6 +29,7 @@ import * as RootNavigation from '../RootNavigation';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon from '../ui/GameIcon';
 import SharkLoader from '../ui/SharkLoader';
+import { tryAgainLine } from '../services/connectionCopy';
 
 /** Dev preview only: the owned fixture coins plus three still to find, so the shelf shows its ghost slots. */
 function previewCatalog(): TripGoalData {
@@ -117,7 +118,7 @@ export default function CoinShelfScreen({ route }: {
     let failed = false;
     await Promise.all([player?.id ? loadCoinCollection(player.id, { force: true }).catch(() => { failed = true; return null; }) : null, loadCatalog()]);
     // Offline: the shelf keeps the last coins, but says the refresh didn't land.
-    if (failed) showToast('Couldn’t refresh your coins. Check your internet.', 'warning');
+    if (failed) showToast(`Couldn’t refresh your coins. ${tryAgainLine()}`, 'warning');
     setRefreshing(false);
   }, [player?.id, loadCatalog]);
 

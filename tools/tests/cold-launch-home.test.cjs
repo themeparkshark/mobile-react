@@ -67,10 +67,12 @@ function loadClient(apiUrl, log) {
       '../config': { apiUrl },
       '../services/telemetry/coreLoopEvents': { classifyCoreLoopRequest: () => null },
       '../services/telemetry': { addBreadcrumb() {}, captureMessage() {} },
-      '../services/connectivity': { reportReachable: () => reachability.push('up'), reportUnreachable: () => reachability.push('down') },
+      '../services/connectivity': { reportReachable: () => reachability.push('up'), reportUnreachable: () => reachability.push('down'), reportTimeout() {}, reportSlowAnswer() {}, FAILURES_BEFORE_OFFLINE: 2, SLOW_ANSWER_MS: 6000 },
       './getRetry': loadTs('src/api/getRetry.ts'),
       './dedupeGet': loadTs('src/api/dedupeGet.ts'),
       './jsonGuard': loadTs('src/api/jsonGuard.ts'),
+      '../dev/laneDelay': loadTs('src/dev/laneDelay.ts'),
+      '../services/walletSync': loadTs('src/services/walletSync.ts'),
       '../utils/hermesSafeError': loadTs('src/utils/hermesSafeError.ts'),
     }).default;
     client.defaults.headers.common.Authorization = 'Bearer test-token';

@@ -16,6 +16,7 @@ import ProjectRippleFeed from './ProjectRippleFeed';
 import MapSuggestionStub from './MapSuggestionStub';
 import { GameIcon, GameRichText } from '../../ui';
 import useUserIdle, { idlePollInterval } from '../../hooks/useUserIdle';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 interface Props {
   readonly parkId: number | null;
@@ -123,7 +124,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
       if (!focused.current || version !== requestVersion.current) return;
       // Keep the last confirmed world state; the next focus or refresh retries.
       setOffline(true);
-      if (open) setError('Could not refresh the project. Check your internet and try again.');
+      if (open) setError(`Could not refresh the project. ${tryAgainLine()}`);
     }
   }, [open, parkId, onActiveProjectChange, loadProjects]);
 
@@ -163,7 +164,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
       await load();
     } catch (cause) {
       const message = (cause as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      setError(message ?? 'Could not save that choice. Check your internet and try again.');
+      setError(message ?? `Could not save that choice. ${tryAgainLine()}`);
     } finally {
       setBusy(false);
     }
@@ -188,7 +189,7 @@ export default function ParkProjectWidget({ parkId, refreshVersion, onActiveProj
       if (status === 422) await load();
       setError(status === 422
         ? 'The story clue changed. Check today’s question and try again.'
-        : 'Could not check that answer. Check your internet and try again.');
+        : `Could not check that answer. ${tryAgainLine()}`);
     } finally {
       setBusy(false);
     }

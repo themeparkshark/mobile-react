@@ -45,6 +45,7 @@ import {
 import useRetentionFlags from '../../services/retention/useRetentionFlags';
 import { flagOn } from '../../services/retention/flags';
 import { useRung } from '../../services/reveal/revealLadder';
+import { tryAgainLine } from '../../services/connectionCopy';
 
 /** The Profile Pins door's own picture: an empty My Pins tab wears it. */
 const PINS_DOOR_ART = require('../../../assets/images/screens/profile/pin_collections.png');
@@ -220,7 +221,7 @@ export default function PinsScreen() {
         void load(true);
         gameAlert('Your odds changed', 'Take a look at the new odds, then open. No coins were spent.');
       }
-      else gameAlert('That box didn’t open', data?.data?.message ?? 'Check your internet and try again. Your coins are safe.');
+      else gameAlert('That box didn’t open', data?.data?.message ?? `${tryAgainLine()} Your coins are safe.`);
     } finally { setBusy(null); }
   }, [busy, coins, refreshPlayer, setCoins, load]);
 
@@ -246,7 +247,7 @@ export default function PinsScreen() {
       setCoins(r.coins_now);
       await load(true);
     } catch {
-      gameAlert('Not yet', 'Check your internet and try again.');
+      gameAlert('Not yet', `${tryAgainLine()}`);
     } finally { setBusy(null); }
   }, [busy, load, setCoins]);
 
@@ -265,7 +266,7 @@ export default function PinsScreen() {
         });
       }
     } catch {
-      gameAlert('Not yet', 'Check your internet and try again.');
+      gameAlert('Not yet', `${tryAgainLine()}`);
     } finally { setBusy(null); }
   }, [busy]);
 
@@ -279,7 +280,7 @@ export default function PinsScreen() {
         setHome(h => h && ({ ...h, mystery: h.mystery.map(s => (s.id === r.series.id ? r.series : s)) }));
         void load(true);
       }
-    } catch { gameAlert('Not yet', 'Check your internet and try again.'); }
+    } catch { gameAlert('Not yet', `${tryAgainLine()}`); }
     finally { setBusy(null); }
   }, [busy, load]);
 

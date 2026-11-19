@@ -6,7 +6,8 @@ import * as Haptics from 'expo-haptics';
 import { Image } from 'expo-image';
 import * as Location from 'expo-location';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { AppState, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { AppState, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import GameToggle from '../ui/GameToggle';
 import Animated, { FadeIn, FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import deletePlayer from '../api/endpoints/me/delete';
@@ -121,24 +122,9 @@ function BrandSwitch({ value, onValueChange, label, rowToggles = false }: {
    */
   readonly rowToggles?: boolean;
 }) {
-  if (rowToggles) {
-    return (
-      <View pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants">
-        <Switch trackColor={{ false: BRAND.sky, true: BRAND.blueBright }} ios_backgroundColor={BRAND.sky}
-          thumbColor={BRAND.white} value={value} />
-      </View>
-    );
-  }
-  return (
-    <Switch
-      accessibilityLabel={label}
-      trackColor={{ false: BRAND.sky, true: BRAND.blueBright }}
-      ios_backgroundColor={BRAND.sky}
-      thumbColor={BRAND.white}
-      onValueChange={() => { void Haptics.selectionAsync().catch(() => undefined); onValueChange(); }}
-      value={value}
-    />
-  );
+  // T150: the game's own toggle (kit piece), never the stock iOS switch.
+  if (rowToggles) return <GameToggle value={!!value} label={label} />;
+  return <GameToggle value={!!value} label={label} onChange={() => onValueChange()} />;
 }
 
 /** Apple re-confirm before deletion, so the server can revoke this app's Sign in with Apple grant. */
@@ -553,6 +539,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
+    // T150: every row is at least 56 pt tall.
+    minHeight: 56,
     paddingVertical: 12,
     paddingHorizontal: 14,
     borderRadius: RADIUS.md,

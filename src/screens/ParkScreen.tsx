@@ -6,7 +6,7 @@ import { localDay } from '../services/reveal/revealLadder';
 import { chunk } from 'lodash';
 import { useContext, useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import { useFocusEffect, useIsFocused, useNavigation, type NavigationProp } from '@react-navigation/native';
-import { AppState, ImageBackground, Pressable, ScrollView, Text, View, useWindowDimensions } from 'react-native';
+import { AppState, ImageBackground, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import getWikiTimes, { type WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
 import { loadParkShelf, peekParkShelf } from '../services/collection/parkShelfPrefetch';
 import Ribbon from '../components/Ribbon';
@@ -48,6 +48,10 @@ import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
 import { openingTab } from '../services/collection/shelfModel';
 import Reanimated, { FadeIn } from 'react-native-reanimated';
+import SharkLoader from '../ui/SharkLoader';
+import { quietRetry } from '../api/quietRetry';
+import { tryAgainLine } from '../services/connectionCopy';
+import { BRAND, FONT, OUTLINE } from '../ui/tokens';
 import { milestoneToday, nextTrophy, nextTrophyLine, partsWaiting, TROPHY_HELP, shelfCountLabel, shelfTabs, shelfTotals, storyOnTop,
   directoryNextCoin, landingTab, recapWaitMs, shownShelfTab, tabForSlot, visibleSecretSlots, visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
 
@@ -327,8 +331,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   
   // Trigger park tutorial on first visit
   useEffect(() => {
-    // Fix w3 T128: Finn's lesson waits for a painted shelf, never over a failed or blank one.
-    if (isFocused && tutorialReady && !loading && !!currentPark && !progressStale && !tutorialActive && !receivedArrival.current && !hasCompleted('park')) {
+    // Fix w3 T128 and T180: Finn's lesson waits for a painted shelf that loaded, never over a failed or blank one.
+    if (isFocused && tutorialReady && !loading && !progressStale && !!currentPark && !tutorialActive && !receivedArrival.current && !hasCompleted('park')) {
       // Away from the park (home PLAN) the card has no GO, so Finn's line says what to tap there (T136).
       const timer = setTimeout(() => startTutorial('park', { inPark: inThisPark }), 1000);
       return () => clearTimeout(timer);
@@ -418,7 +422,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
             new Promise<null>(resolve => { recapTimer = setTimeout(() => resolve(null), waitMs); })])
           : null;
         const { visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited } =
-          await loadParkShelf(Number(park), Number(player));
+          // T180: one silent retry before a slow server's miss shows anything (the shark loader stays up meanwhile).
+          await quietRetry(() => loadParkShelf(Number(park), Number(player)), undefined, () => active);
         await story;
         if (recapTimer) clearTimeout(recapTimer);
         if (!active) return;
@@ -600,15 +605,15 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
             }}
             source={require('../../assets/images/screens/park/background-new.png')}
           >
-            {progressStale && <Pressable onPress={() => setRefreshVersion(version => version + 1)}
-              accessibilityRole="button" accessibilityLabel="Retry park progress refresh"
-              style={{ backgroundColor: '#edfaff', padding: 12, margin: 16, borderRadius: 12,
-                borderWidth: 2, borderColor: '#ffc932' }}>
-              <Text style={{ color: '#075b9b', textAlign: 'center', fontFamily: 'Knockout', fontSize: 16 }}>
-                {currentPark
-                  ? 'Could not update your park progress. This may be old. Tap to try again.'
-                  : 'Could not load your park progress. Tap to try again.'}
-              </Text>
+            {/* T180: never a plain text box. No shelf yet: his shark with one button. An old shelf on screen: a slim
+                note in the kit's card look above it, and the shelf stays. */}
+            {progressStale && !currentPark && <SharkLoader state="error" title="Your shelf didn’t load"
+              message={tryAgainLine()} onRetry={() => setRefreshVersion(version => version + 1)} />}
+            {progressStale && !!currentPark && <Pressable onPress={() => setRefreshVersion(version => version + 1)}
+              accessibilityRole="button" accessibilityLabel="Your shelf may be old. Tap to try again"
+              style={({ pressed }) => [staleStyles.note, pressed && { transform: [{ scale: 0.97 }] }]}>
+              <GameIcon name="retry" size={22} />
+              <Text style={staleStyles.text} numberOfLines={2} maxFontSizeMultiplier={1.3}>This may be old. Tap to try again.</Text>
             </Pressable>}
             {currentPark && tasks && secretTasks && (
               <ScrollView ref={scrollRef}
@@ -868,3 +873,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     </Wrapper>
   );
 }
+
+const staleStyles = StyleSheet.create({
+  note: { flexDirection: 'row', alignItems: 'center', gap: 8, margin: 16, marginBottom: 4, paddingVertical: 8, paddingHorizontal: 12,
+    backgroundColor: BRAND.cream, borderRadius: 16, borderWidth: OUTLINE.thick, borderColor: BRAND.navy },
+  text: { flex: 1, color: BRAND.navy, fontFamily: FONT.body, fontSize: 15 },
+});

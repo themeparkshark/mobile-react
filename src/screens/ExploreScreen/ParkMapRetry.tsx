@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { BRAND, FONT, GameIcon, OUTLINE, RADIUS, SHADOW } from '../../ui';
 import { requestRideDetectionRetry } from '../../services/rideDetectionInit';
+import { isOffline } from '../../services/connectivity';
 
 /** Calm retries while the park map data will not load: 5 s, 10 s, 20 s, then every 30 s. */
 export function mapRetryDelay(attempt: number): number {
@@ -41,7 +42,8 @@ function ParkMapRetryCard({ retrying, onRetry }: { readonly retrying: boolean; r
     <GameIcon name="ride" size={30} />
     <View style={styles.copy}>
       <Text style={styles.title} numberOfLines={1}>{retrying ? 'LOOKING FOR RIDES' : "CAN'T SEE THE RIDES"}</Text>
-      <Text style={styles.detail} numberOfLines={1}>{retrying ? 'One moment...' : 'Weak signal. Tap to try again.'}</Text>
+      {/* T172: "weak signal" only when the phone really is offline; a busy server is the game being slow. */}
+      <Text style={styles.detail} numberOfLines={1}>{retrying ? 'One moment...' : isOffline() ? 'Weak signal. Tap to try again.' : 'The game is slow. Tap to try again.'}</Text>
     </View>
     {!retrying && <View style={styles.retry}><GameIcon name="retry" size={20} /></View>}
   </Pressable>;
