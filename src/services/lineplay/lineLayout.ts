@@ -103,6 +103,26 @@ export function pageRailMode(pagesShown: boolean): PageRailMode {
   return pagesShown ? 'pages' : 'back';
 }
 
+/** Noted in the played list once any LinePlay round is done, so the next LinePlay opens with the full rail. */
+export const FIRST_LINEPLAY_ROUND = 'lineplay:first-round';
+
+/**
+ * The very first LinePlay (T083): the story page with one PLAY and nothing else to choose, then that first
+ * round's own page. The rail (Story, Games, Next) waits until the first round is done, so a new player never meets three calls
+ * at once. Null `played` (still loading, or a guest) shows the usual rail. The rail's "Show games"
+ * button while Details is open on a small phone always stays.
+ */
+export function firstLinePlayCalm(input: {
+  readonly played: ReadonlySet<string> | null;
+  readonly roundsDone: number;
+  readonly pageKind: string | undefined;
+  readonly railMode: PageRailMode;
+}): boolean {
+  if (!input.played || input.played.size > 0 || input.roundsDone > 0) return false;
+  // The story page and the first round PLAY opens (its clue or game page): one thing to do until it is done.
+  return input.pageKind != null && input.railMode === 'pages';
+}
+
 /**
  * What the one rail button does while the window has stepped aside. A kid who pressed pause
  * reads "Tap play when you're ready", so the button is Play: one tap resumes and brings the
@@ -446,4 +466,14 @@ export function heroSlim(viewHeight: number): boolean {
 export const QUIZ_FULL_PAGE = 440;
 export function quizCompact(viewHeight: number): boolean {
   return viewHeight > 0 && viewHeight < QUIZ_FULL_PAGE;
+}
+
+/** How full the wait card's line Ticket is (T084): time near the ride over the Ticket's interval. */
+export function lineTicketProgress(verifiedSeconds: number, intervalSeconds: number): {
+  readonly progress: number; readonly full: boolean; readonly minutesLeft: number;
+} {
+  const interval = Math.max(1, Number.isFinite(intervalSeconds) ? intervalSeconds : 600);
+  const seconds = Math.max(0, Number.isFinite(verifiedSeconds) ? verifiedSeconds : 0);
+  const progress = Math.min(1, seconds / interval);
+  return { progress, full: progress >= 1, minutesLeft: Math.max(0, Math.ceil((interval - seconds) / 60)) };
 }

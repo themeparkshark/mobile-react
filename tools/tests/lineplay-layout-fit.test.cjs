@@ -142,7 +142,7 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   // No glide through a square clip (it cut glyphs mid-move), and no blink: the window dips to 35%
   // (never 0), takes its new size inside its own rounded frame, then rises once it has its new size.
   assert.equal((screen.match(/LinearTransition/g) ?? []).length, 2, 'only the rail glides (import + one use)');
-  assert.match(screen, /<Reanimated\.View style=\{\[styles\.pages, pagesFadeStyle, !pagesShown && \[styles\.pagesAside, \{ bottom: railBlock \}\]\]\}/);
+  assert.match(screen, /<Reanimated\.View style=\{\[styles\.pages, pagesFadeStyle, pagesHoldStyle, !pagesShown && \[styles\.pagesAside, \{ bottom: railBlock \}\]\]\}/);
   // Dim on the UI thread and change at once (the new layout lands while dim), rise two frames after
   // the new layout, and the UI thread caps the dim so a busy JS thread never holds it.
   assert.match(screen, /pagesFade\.value = withSequence\(withTiming\(PAGES_DIP_OPACITY, \{ duration: PAGES_DIP_MS \}\),\n\s*withDelay\(PAGES_DIM_HOLD_MAX_MS, withTiming\(1, \{ duration: PAGES_RISE_MS \}\)\)\);\n\s*revealPending\.current = true;\n\s*change\(\);/);
@@ -276,7 +276,8 @@ test('Details open on a 17 Pro: the navigation page is one "Tap to play" strip, 
 test('the chapter page in compact mode ends on whole trail bubbles, no small labels in the fade', () => {
   const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(card, /\{!compact && <Text style=\{styles\.stepName\} numberOfLines=\{3\}>\{name\}<\/Text>\}/);
-  assert.match(card, /accessibilityLabel=\{`\$\{complete \? 'Replay' : 'Open'\} \$\{name\}`\}/, 'the names stay in the spoken label');
+  // T083: the bubbles are progress only; the names stay in the spoken label.
+  assert.match(card, /accessibilityLabel=\{`\$\{name\}: \$\{complete \? 'done' : current \? 'next' : 'later'\}`\}/, 'the names stay in the spoken label');
   assert.match(card, /stepCompact: \{ minHeight: 0, paddingVertical: 5 \}/);
 });
 
@@ -780,11 +781,12 @@ test('the chapter page never shows a live-looking button that does nothing (dete
   // Locked is never a dead tap (wave 6): every button routes through choose(), which shakes and buzzes when locked.
   assert.match(chapter, /const off = \{ accessibilityState: \{ disabled: locked \} \} as const;/);
   assert.match(chapter, /if \(!locked\) \{ onChooseMission\(id\); return; \}\n\s+void Haptics\.notificationAsync/);
-  // Every mission button (PLAY, the strip, the 3 bubbles in both layouts, the crew chips, Crew Prompts) takes it.
+  // Every mission button (PLAY, the strip, the crew chips, Crew Prompts) takes it. The 3 bubbles in both layouts
+  // are progress only since T083, and still look off when locked.
   const presses = [...chapter.matchAll(/onPress=\{\(\) => choose\(/g)].length;
-  assert.equal(presses, 7);
+  assert.equal(presses, 5);
   assert.equal([...chapter.matchAll(/\{\.\.\.off\}/g)].length, presses, 'every onChooseMission button can be off');
-  assert.equal([...chapter.matchAll(/locked && styles\.locked(?:Play)?\b/g)].length, presses, 'and looks off');
+  assert.equal([...chapter.matchAll(/locked && styles\.locked(?:Play)?\b/g)].length, presses + 2, 'and looks off (the bubbles too)');
   assert.match(chapter, /locked: \{ opacity: 0\.6 \}/);
   assert.match(chapter, /lockedPlay: \{ backgroundColor: '#eef6fd', borderColor: '#7d9cbc' \}/, 'a solid pale strip, never gold faded to olive');
   assert.match(chapter, /export const LOCKED_LINE = 'Get in line to play';/);

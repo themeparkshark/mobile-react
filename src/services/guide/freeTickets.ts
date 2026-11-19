@@ -110,7 +110,7 @@ export function playsNow(step: FreeTicketStep | null): boolean {
 export function needTicketLines(queueTicketsOn: boolean, freeTryDaily = true): string[] {
   const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`];
   if (freeTryDaily !== false) lines.push('Tomorrow brings a new free try.');
-  if (queueTicketsOn === true) lines.push('Your first wait at a ride earns a Ticket.');
+  if (queueTicketsOn === true) lines.push('10 minutes in a ride line earns a Ticket.');
   return lines;
 }
 

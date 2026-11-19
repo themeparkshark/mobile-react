@@ -180,7 +180,32 @@ test('T074 hold: an offer shown at Matterhorn goes the moment the player walks o
   assert.equal(D.nextDwell(matter, null, false, { ...base, now: 20_000, still: true, walkedOff: false }), matter);
   const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/useQueueDwell.ts'), 'utf8');
   assert.match(hook, /const walkedOff = walkingNow\(samples\.current, at\);/);
-  assert.match(hook, /if \(walkingNow\(samples\.current, now\)\) setDwell\(previous => \(previous \? null : previous\)\);/);
+  assert.match(hook, /if \(walkingNow\(samples\.current, now\)\) \{\n[^\n]*\n[^\n]*\n\s+setDwell\(previous => \(previous \? null : previous\)\);/);
   assert.match(hook, /const shows = !!now && now\.parkId === parkId && !walkingNow\(samples\.current, at\) && dwellShows\(/);
   assert.match(hook, /still: nearlyStill\(samples\.current, at\), walkedOff \}\)\);/);
+});
+
+test('N14: walking out of a line ends the in-line card within a few steps (the phone\'s speed), never on jitter or a shuffle', () => {
+  const D = loadTs('src/screens/ExploreScreen/useQueueDwell.ts', { react: {}, '../../services/RideDetectionService': { currentRideDwell: () => null } });
+  const k = 1 / 111320;
+  const lng = m => -117.91782 - m * k / Math.cos(33.8135 * Math.PI / 180);
+  const at = (m, t, speedMps = null) => ({ at: t, latitude: 33.813453, longitude: lng(m), speedMps });
+  // Stood still (the last fix 60 s ago), then walks at 1.4 m/s with a fix every 3 m on the map.
+  const walk = [at(0, 0, 0), ...[3, 6, 9].map((m, i) => at(m, 60_000 + (i + 1) * 2_150, 1.4))];
+  assert.equal(D.walkingNow(walk.slice(0, 3), 60_000 + 2 * 2_150), false, '6 m out: not yet');
+  assert.equal(D.walkingNow(walk, 60_000 + 3 * 2_150), true, 'known 9 m and about 6.5 s into the walk');
+  // Without the speed (an older OS answer) the 15 m rule still decides: not yet at 9 m.
+  assert.equal(D.walkingNow(walk.map(s => ({ ...s, speedMps: null })), 60_000 + 3 * 2_150), false);
+  // GPS jitter while standing: no speed, or a jump back.
+  const jitter = [at(0, 0, 0), at(9, 60_000, 0), at(1, 62_000, 0), at(10, 64_000, 0)];
+  assert.equal(D.walkingNow(jitter, 64_000), false, 'jitter has no walking speed');
+  // A line shuffle: 5 m forward at walking speed, then stop.
+  const shuffle = [at(0, 0, 0), at(2.5, 60_000, 1.2), at(5, 62_000, 1.2)];
+  assert.equal(D.walkingNow(shuffle, 62_000), false, 'a step forward in line is not a walk-off');
+  // Back and forth at speed (a switchback): not moving away.
+  const back = [at(0, 0, 0), at(9, 60_000, 1.3), at(8, 62_000, 1.3)];
+  assert.equal(D.walkingNow(back, 62_000), false);
+  // The map passes the raw OS fix so the speed reaches the hook.
+  const screen = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen.tsx'), 'utf8');
+  assert.match(screen, /useQueueDwell\(park\?\.id \?\? null, mapFocused && !!player, undefined, undefined, location \?\? null,\n\s+latestLocationSampleRef\)/);
 });

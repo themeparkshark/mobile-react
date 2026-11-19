@@ -76,6 +76,13 @@ import { nextQueueDifficulty, replaySeed, type QueueDifficulty } from './replay'
 import { primeTriviaDeck } from './triviaDeck';
 import { primeTriviaHistory } from './triviaHistory';
 import { insideLineZone, waitIsTimed, type LineZone } from './lineZone';
+import { QUEUE_RIDE_TYPES } from '../../constants/queueRideTypes';
+
+const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
+/** T081: a catalog type with no line (a walk-in show, a walk-through). Unknown counts as a line, as before. */
+export function rideWithoutLine(type: string | null | undefined): boolean {
+  return type != null && !QUEUE_TYPES.has(type);
+}
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -150,6 +157,11 @@ export interface RideContext {
   readonly lineRewardsReady?: boolean;
   /** The ride's line zone from the catalog (lineZone.ts), when known: a wait is claimed only with evidence. */
   readonly zone?: LineZone | null;
+  /**
+   * The catalog type (T081). A show or walk-through (not a QUEUE_RIDE_TYPES type) has no line: games only, no line
+   * story, no timed wait or wait recap. Unknown (undefined or null) is a line, as before.
+   */
+  readonly rideType?: string | null;
 }
 
 export type WaitSource = 'posted' | 'last_known' | 'estimate';
@@ -645,6 +657,8 @@ export class LinePlaySession {
   private adaptiveEpisodeRecorded = false;
   private serverSessionId: string | null = null;
   private rewardUnavailable = false;
+  /** T081: this ride has no line (a show or walk-through): games only, no line story, no timed wait. */
+  private notQueueRide = false;
   /** A fix inside the ride's line zone, or the server's own timed session, was seen this wait (T071). */
   private atLineSeen = false;
   /** A live fix outside the ride's line zone was seen this wait (and none inside yet). */
@@ -835,7 +849,7 @@ export class LinePlaySession {
       chapter: this.chapter,
       serverSessionId: this.serverSessionId,
       rewardUnavailable: this.rewardUnavailable,
-      waitTimed: waitIsTimed({ serverSessionId: this.serverSessionId, atLineSeen: this.atLineSeen,
+      waitTimed: !this.notQueueRide && waitIsTimed({ serverSessionId: this.serverSessionId, atLineSeen: this.atLineSeen,
         awaySeen: this.awaySeen, serverSaidNotNear: this.rewardConnectionIssue === 'nearby' }),
       rewardConnectionIssue: this.guest ? 'sign_in' : this.rewardConnectionIssue,
       backgroundTrackingAvailable: this.backgroundTrackingAvailable,
@@ -1428,6 +1442,24 @@ export class LinePlaySession {
     this.emit();
   }
 
+  /**
+   * A game the Games sheet offers that this wait's playlist does not deal (Parade Beat): one round of it joins the
+   * playlist the first time it is picked, then it is an ordinary page. Rewards stay the server's verified time.
+   */
+  addPracticeGame(gameId: MiniGameId): Extract<ActivityItem, { kind: 'minigame' }> | null {
+    if (this.state !== 'active') return null;
+    const existing = this.playlist.find((item): item is Extract<ActivityItem, { kind: 'minigame' }> =>
+      item.kind === 'minigame' && item.gameId === gameId);
+    if (existing) return existing;
+    // One practice page more is fine even on a long wait's full playlist (the cap is for dealt rounds).
+    const item: Extract<ActivityItem, { kind: 'minigame' }> = { kind: 'minigame', id: `extra-${gameId}`, gameId,
+      seed: (this.playlistSeedOffset + this.playlist.length * 31) % 100_000 };
+    this.playlist = appendBeforeCrewPrompts(this.playlist, [item]);
+    this.persistCheckpoint();
+    this.emit();
+    return item;
+  }
+
   /** Adds replayable queue activities; the server still awards only verified nearby time. */
   addMoreRounds(): string | null {
     if (this.state !== 'active') return null;
@@ -1525,7 +1557,9 @@ export class LinePlaySession {
     this.serverSessionId = null;
     this.backgroundTrackingSessionId = null;
     this.backgroundTrackingAvailable = null;
-    this.rewardUnavailable = false;
+    this.notQueueRide = rideWithoutLine(ride.rideType);
+    // No line, no line session: the server would refuse it (B04), so none is asked for.
+    this.rewardUnavailable = this.notQueueRide;
     this.atLineSeen = false;
     this.awaySeen = false;
     this.rewardConnectionIssue = null;
@@ -1562,7 +1596,8 @@ export class LinePlaySession {
       item.kind === 'chapter_intro' && /-episode-\d+-intro$/.test(item.id))?.id;
     const savedEpisode = savedEpisodeId?.match(/-episode-(\d+)-intro$/);
     this.adaptiveEpisodeRecorded = false;
-    this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName,
+    // A show or walk-through gets the games, never a line story (T081).
+    this.chapter = this.notQueueRide ? null : getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName,
       saved ? savedEpisode ? Number(savedEpisode[1]) : undefined : this.playlistSeedOffset);
     if (!saved && (this.chapter?.episodeCount ?? 1) > 1 && playerId) {
       // Authored chapters start every new player on episode 1 (the original
@@ -1846,9 +1881,12 @@ export class LinePlaySession {
       } catch (error) {
         const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
         if (!response) this.keepOfflineFix(sample);
-        if (response?.status === 404 || response?.data?.code === 'LINE_REWARDS_UNAVAILABLE') {
+        if (response?.status === 404 || response?.data?.code === 'LINE_REWARDS_UNAVAILABLE' ||
+            response?.data?.code === 'NOT_A_QUEUE_RIDE') {
           this.rewardUnavailable = true;
           this.rewardConnectionIssue = null;
+          // The server says this ride has no line (B04): no timed wait and no wait recap from here on.
+          if (response?.data?.code === 'NOT_A_QUEUE_RIDE') this.notQueueRide = true;
         } else {
           this.rewardConnectionIssue = response?.data?.code === 'NOT_NEAR_RIDE' ? 'nearby'
             : response?.status === 401 || response?.status === 403 ? 'sign_in' : 'network';

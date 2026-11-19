@@ -169,6 +169,7 @@ function sessionHarness({ start, heartbeat, complete, saved = null, steps = null
     },
     './checkpointCredit': credit,
     './lineZone': require('./helpers/lineplay-zone.cjs'),
+    '../../constants/queueRideTypes': { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] },
     './queuePedometer': {
       prepareQueuePedometer: async () => {},
       readQueueSteps: async (from, to) => { calls.steps.push([from, to]); return steps ? steps(from, to) : null; },

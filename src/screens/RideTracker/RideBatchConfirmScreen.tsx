@@ -31,7 +31,7 @@ function BatchShell({ children, onBack }: { children: React.ReactNode; onBack: (
               style={{ width: 35, height: 35 }} contentFit="contain" />
           </Pressable>
         </TopbarColumn>
-        <TopbarColumn><TopbarText>Ride Journal</TopbarText></TopbarColumn>
+        <TopbarColumn><TopbarText>Ride Tracker</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false} />
       </Topbar>
       <ImageBackground source={require('../../../assets/images/seaweed_background.png')}
@@ -288,7 +288,7 @@ export default function RideBatchConfirmScreen() {
         </View>
         <Text style={batchStyles.description}>
           We noticed {rides.length} possible ride{rides.length !== 1 ? 's' : ''} from your location.
-          Choose the ones you actually rode for your journal.
+          Choose the ones you actually rode for your Ride Tracker.
         </Text>
 
         <FlatList
@@ -362,10 +362,10 @@ export default function RideBatchConfirmScreen() {
         </Text>
         <Text style={batchStyles.summaryXp}>
           {failedRideIds.size === selectedRides.length
-            ? 'Could not save to your journal. Check your internet and try again.'
+            ? 'Could not save to your Ride Tracker. Check your internet and try again.'
             : failedRideIds.size > 0
             ? `${failedRideIds.size} ${failedRideIds.size === 1 ? 'ride is' : 'rides are'} still waiting to save`
-            : 'Added to your ride journal'}
+            : 'Added to your Ride Tracker'}
         </Text>
 
         {savedRideIds.size > 0 && <View style={batchStyles.summaryStats}>

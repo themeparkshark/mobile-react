@@ -102,6 +102,13 @@ const GAME_PREVIEWS: Record<string, string> = {
   showdown: 'Challenge Captain Gill to a three-question ride trivia duel. Play solo or take turns with your crew.',
 };
 
+/** The slim banner's title size (one line beside the small shark on a short window): longer names a step smaller. */
+export function slimTitleSize(title: string): { readonly fontSize: number; readonly lineHeight: number } {
+  const n = title.length;
+  const fontSize = n > 26 ? 16 : n > 22 ? 17.5 : 19;
+  return { fontSize, lineHeight: Math.round(fontSize + 4) };
+}
+
 function ActivityHero({ kicker, title, teacher = false, navigator = false }: { kicker: string; title: string; teacher?: boolean; navigator?: boolean }) {
   const [artFailed, setArtFailed] = useState(false);
   // A short window (iPhone SE): one slim row with the name and a small shark, so what to do shows below it.
@@ -109,8 +116,10 @@ function ActivityHero({ kicker, title, teacher = false, navigator = false }: { k
   return <View style={[styles.hero, slim && styles.heroSlim]}>
     <View style={styles.heroCopy}>
       {!slim && <Text style={styles.heroKicker}>{kicker}</Text>}
-      <Text style={[styles.heroTitle, slim && styles.heroTitleSlim]} numberOfLines={slim ? 1 : undefined}
-        adjustsFontSizeToFit={slim} minimumFontScale={0.85}>{title}</Text>
+      {/* T090: no auto-shrink. iOS shrank this title to about 4 px when the window turned slim mid-layout after a
+          game (a zero-width pass), and never grew it back. The slim size is picked from the name's length instead. */}
+      <Text style={[styles.heroTitle, slim && styles.heroTitleSlim, slim && slimTitleSize(title)]}
+        numberOfLines={slim ? 1 : undefined} ellipsizeMode="tail">{title}</Text>
     </View>
     <Image source={navigator && !artFailed ? SPACE_NAVIGATOR_ART : teacher
       ? require('../../../../assets/images/tutorial/teacher-shark.png')

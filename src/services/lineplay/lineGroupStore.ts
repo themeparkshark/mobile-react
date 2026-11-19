@@ -11,6 +11,37 @@ import { crewForNextRide, isLineGroup, type LineGroup } from './lineGroup';
 
 const SESSION_KEY = (playerId: number) => `lineplay_group_session_v1:${playerId}`;
 const CREW_KEY = (playerId: number) => `lineplay_last_crew_v1:${playerId}`;
+const DAY_KEY = (playerId: number) => `lineplay_day_choice_v1:${playerId}`;
+
+/** The phone's local day (a park day), as YYYY-MM-DD. */
+export function localDay(now = Date.now()): string {
+  const d = new Date(now);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * T087: "Who's in line?" is asked once a day. The answer (just me, or the crew) is kept for the phone's local
+ * day, and the next wait today starts with it (the crew strip still changes it). Null when not answered today.
+ */
+export async function loadDayChoice(playerId: number, now = Date.now()): Promise<LineGroup | null> {
+  try {
+    const raw = await AsyncStorage.getItem(DAY_KEY(playerId));
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as { day?: unknown; group?: unknown };
+    if (saved.day !== localDay(now) || !isLineGroup(saved.group)) return null;
+    return crewForNextRide(saved.group);
+  } catch {
+    return null;
+  }
+}
+
+export async function saveDayChoice(playerId: number, group: LineGroup, now = Date.now()): Promise<void> {
+  try {
+    await AsyncStorage.setItem(DAY_KEY(playerId), JSON.stringify({ day: localDay(now), group: crewForNextRide(group) }));
+  } catch {
+    // Asked again next wait: no harm.
+  }
+}
 /** A crew is offered again for one park day. */
 export const LAST_CREW_TTL_MS = 14 * 60 * 60 * 1000;
 

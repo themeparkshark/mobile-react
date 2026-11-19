@@ -46,6 +46,6 @@ export function rideLogError(error: unknown): RideLogErrorView {
  * steps 1 and 2 never showed.
  */
 export function journalStepLabel(step: 'park' | 'ride' | 'details', openedOnRide: boolean): string {
-  if (openedOnRide) return 'RIDE JOURNAL';
-  return `RIDE JOURNAL · ${step === 'park' ? 1 : step === 'ride' ? 2 : 3} OF 3`;
+  if (openedOnRide) return 'LOG A RIDE';
+  return `LOG A RIDE · ${step === 'park' ? 1 : step === 'ride' ? 2 : 3} OF 3`;
 }

@@ -47,7 +47,7 @@ import { keepRideStepLog, releaseRideLogHold } from '../../services/rideLogOutbo
 import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
 import { slotPartsShown, waitingSlotParts } from '../../services/lineplay/slotParts';
 import { celebrateAdventureTicket, getTripGoal } from '../../api/endpoints/me/trip-goal';
-import { lineZoneForRide, loadParkRides } from '../../services/lineplay/resolveRide';
+import { lineZoneForRide, loadParkRides, rideTypeForRide } from '../../services/lineplay/resolveRide';
 import { startAwayCopy, startAwayMeters } from '../../services/lineplay/lineZone';
 import { readCheckpoint } from '../../services/lineplay/checkpoint';
 import { guide } from '../../services/guide/nextCoin';
@@ -150,6 +150,9 @@ const ARCADE_PRESENT_FRAMES = 3;
 const CREW_BAND_ROW = 44;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
+/** Parade Beat on the Games sheet (T: parade-beat-lineplay): not dealt by the playlist, added when picked. */
+const PARADE_BEAT_GAME = 'timing' as const;
+const ADD_PARADE_BEAT = -1;
 const GAME_NAMES: Record<string, string> = {
   tap: 'Whack-a-Shark', timing: 'Parade Beat', memory: 'Memory Match',
   trivia: 'Ride Trivia', shark: 'Sharky Swim', banana: 'Banana Basket', current: 'Current Quest',
@@ -215,7 +218,7 @@ import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { lineNudgeReady, linePlayTipReady } from '../../services/help/tipGate';
 import { chapterMissionIds, chapterPlayNow, railPageIcon, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
-  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastSpot } from '../../services/lineplay/lineLayout';
+  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastSpot, FIRST_LINEPLAY_ROUND, firstLinePlayCalm } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
@@ -470,7 +473,11 @@ export default function LinePlayScreen() {
   const [rideLogged, setRideLogged] = useState<{ id: string; waited: number | null } | null>(null);
   const [adventureStamped, setAdventureStamped] = useState(false);
   const rideStepDone = useRef<string | null>(null);
+  // The wait's own ride (T088 walk): when LinePlay is opened for a new ride while the last wait is still
+  // finishing, the route already names the new ride. The finished wait logs and recaps its own ride.
+  const waitRide: RideContext | undefined = snapshot.ride ?? ride;
   useEffect(() => {
+    const ride = waitRide;
     // Only a wait with evidence of this line logs a ride (T071): games played from afar never claim one.
     if (!ride || snapshot.state !== 'complete' || !snapshot.boardingConfirmed || snapshot.startedAt == null ||
         !snapshot.waitTimed) return;
@@ -492,7 +499,7 @@ export default function LinePlayScreen() {
       if (!adventureRideStampDue(ticket, ride.rideId)) return;
       return celebrateAdventureTicket(ticket!.id).then(() => setAdventureStamped(true));
     }).catch(() => undefined);
-  }, [ride, snapshot.state, snapshot.boardingConfirmed, snapshot.startedAt, snapshot.boardingAt,
+  }, [waitRide, snapshot.state, snapshot.boardingConfirmed, snapshot.startedAt, snapshot.boardingAt,
     snapshot.serverSessionId, snapshot.waitTimed, player?.id]);
   const rideLoggedRef = useRef<{ id: string } | null>(null);
   rideLoggedRef.current = rideLogged;
@@ -504,6 +511,7 @@ export default function LinePlayScreen() {
     if (rideLogged) void releaseRideLogHold(rideLogged.id).catch(() => undefined);
   }, [rideLogged]);
   const openRideJournal = useCallback(() => {
+    const ride = waitRide;
     if (!ride || !rideLogged) return;
     RootNavigation.navigate('RideLog', {
       ...rideStepJournalParams({ rideId: ride.rideId, rideName: ride.rideName, parkId: ride.parkId ?? null,
@@ -511,7 +519,7 @@ export default function LinePlayScreen() {
         rideType: rideCatalog?.type ?? null }),
       detectionId: rideLogged.id,
     } as never);
-  }, [ride, rideLogged, player?.id, snapshot.startedAt, snapshot.boardingAt, rideCatalog?.type]);
+  }, [waitRide, rideLogged, player?.id, snapshot.startedAt, snapshot.boardingAt, rideCatalog?.type]);
 
   // -- Unlock ladder events (BLUEPRINT 4.4 "Who records what") --------------------------------
   // line_played: the first verified minute of a wait. line_part_earned: a Part lands on a coin you own.
@@ -548,12 +556,17 @@ export default function LinePlayScreen() {
     const owner = startedRef.current;
     void (async () => {
       // Honesty (T071): the ride's line zone rides along, so the session claims a wait only with evidence of it.
-      const zone = ride.zone !== undefined ? ride.zone : await lineZoneForRide(ride.parkId, ride.rideId);
+      // T081: a walk-in show or walk-through (the catalog's type) plays games only, never a line story or wait recap.
+      // One catalog read answers both, side by side (never a second wait on a slow server).
+      const [zone, rideType] = await Promise.all([
+        ride.zone !== undefined ? ride.zone : lineZoneForRide(ride.parkId, ride.rideId),
+        // The type gets a little longer on a cold catalog: a show must never start a line story because /rides was slow.
+        ride.rideType !== undefined ? ride.rideType : rideTypeForRide(ride.parkId, ride.rideId, 6_000)]);
       const saved = playerId ? await readCheckpoint(playerId, ride.rideId).catch(() => null) : null;
       if (startedRef.current !== owner) return;
       const freshSample = latestLocationSampleRef.current;
       const sample = isRecentQueueSample(freshSample) ? freshSample : undefined;
-      const zoned: RideContext = { ...ride, zone };
+      const zoned: RideContext = { ...ride, zone, rideType };
       // A fresh start from outside the line asks first; a wait already running here reopens as it was.
       const away = saved?.state === 'active' ? null : startAwayMeters(sample, zone);
       if (away != null) { setAwayAsk({ meters: away, ride: zoned, playerId }); return; }
@@ -759,6 +772,14 @@ export default function LinePlayScreen() {
     void notePlayedGames(player.id, playedThisWait.split(',')).then(set => { if (live) setPlayedEver(set); });
     return () => { live = false; };
   }, [playedThisWait, player?.id]);
+  // Any round done in this wait (a clue or a game): the first LinePlay's calm rail is over for good (T083).
+  const roundsDone = snapshot.completedActivityIds.length;
+  useEffect(() => {
+    if (!player?.id || roundsDone === 0) return;
+    let live = true;
+    void notePlayedGames(player.id, [FIRST_LINEPLAY_ROUND]).then(set => { if (live) setPlayedEver(set); });
+    return () => { live = false; };
+  }, [roundsDone > 0, player?.id]);
   const nudged = useRef(false);
   useEffect(() => {
     if (snapshot.state !== 'active' || activeGame != null) return undefined;
@@ -1131,8 +1152,12 @@ export default function LinePlayScreen() {
     jumpToPage(index);
   };
   // NEW only on games this account has never played, two at most (all six NEW meant nothing).
-  const arcadeNew = arcadeNewFlags(arcadeBase, playedEver);
-  const arcadeChoices = arcadeBase.map((choice, i) => ({ ...choice, isNew: arcadeNew[i] }));
+  // Parade Beat is on the Games sheet in every wait (the playlist does not deal it): picking it adds its round.
+  const arcadeWithParade = arcadeBase.some(choice => choice.gameId === PARADE_BEAT_GAME) ? arcadeBase
+    : [...arcadeBase, { id: `extra-${PARADE_BEAT_GAME}`, title: GAME_NAMES[PARADE_BEAT_GAME], gameId: PARADE_BEAT_GAME,
+      index: ADD_PARADE_BEAT, completed: false, bestStars: snapshot.gameBestStars[PARADE_BEAT_GAME] }];
+  const arcadeNew = arcadeNewFlags(arcadeWithParade, playedEver);
+  const arcadeChoices = arcadeWithParade.map((choice, i) => ({ ...choice, isNew: arcadeNew[i] }));
   showToastRef.current = showToast;
 
   const somethingAsks = groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || leftLineWrapUp || resuming ||
@@ -1397,6 +1422,20 @@ export default function LinePlayScreen() {
   }, [snapshot.playlist.length]);
 
 
+  // T087: the loading card stays until the first question is answered and the queue card has laid out (no blank
+  // light-blue frame), then the two crossfade (UI thread).
+  const [pagesReady, setPagesReady] = useState(false);
+  const holdPages = groupPlay.asking || !pagesReady;
+  const heldShown = useRef(false);
+  if (holdPages) heldShown.current = true;
+  const pagesHoldFade = useSharedValue(holdPages ? 0 : 1);
+  useEffect(() => {
+    pagesHoldFade.value = reducedFx ? (holdPages ? 0 : 1) : withTiming(holdPages ? 0 : 1, { duration: 240 });
+  }, [holdPages, reducedFx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pagesHoldStyle = useAnimatedStyle(() => ({ opacity: pagesHoldFade.value }));
+  // The rail fades in only when it arrives after the calm first page (never on an ordinary open).
+  const calmShown = useRef(false);
+
   if (!ride) {
     return (
       // No ride: Alex's look (bright blue, a cream card, Finn, one gold button), never plain text on a dark page.
@@ -1458,6 +1497,25 @@ export default function LinePlayScreen() {
   // One gold button per screen: every page carries its own gold action (PLAY NOW, PLAY, PLAY AGAIN, the
   // board's PLAY strip), so while a page is on screen the rail's Next (and More games) is a quiet white button.
   const railQuiet = visibleItem != null;
+  // Both game sheets (the plain Games sheet and the bonus picker) choose through here, Parade Beat included.
+  const chooseArcade = (index: number) => {
+    if (index === ADD_PARADE_BEAT) {
+      const added = session.addPracticeGame(PARADE_BEAT_GAME);
+      if (__DEV__) console.log(`[arcade] parade added=${added?.id ?? 'none'} state=${session.getState()}`);
+      if (!added) return;
+      queuedArcadeGame.current = added;
+      setArcadeOpen(false);
+      return;
+    }
+    const page = activityPages[index];
+    if (page?.kind !== 'minigame') return;
+    queuedArcadeGame.current = page;
+    setArcadeOpen(false);
+    jumpToPage(index);
+  };
+  const firstCalm = firstLinePlayCalm({ played: playedEver, roundsDone: snapshot.completedActivityIds.length,
+    pageKind: activityPages[visiblePageIndex]?.kind, railMode });
+  if (firstCalm) calmShown.current = true;
   const jumpToPage = (index: number, animated = Math.abs(index - visiblePageIndex) <= 1) => {
     if (index < 0 || index >= activityPages.length) return;
     setPageIndex(index);
@@ -1712,7 +1770,7 @@ export default function LinePlayScreen() {
               coinState={recapCoinState}
               playerEnergy={recapEnergy}
               energyUnavailable={recapEnergyUnavailable}
-              rideName={ride.rideName}
+              rideName={waitRide?.rideName ?? ride.rideName}
               endReason={snapshot.endReason}
               onStillInLine={snapshot.endReason === 'left_queue'
                 ? () => { noteRideQuestionAnswered(); void session.continueInLine(); } : undefined}
@@ -1758,12 +1816,21 @@ export default function LinePlayScreen() {
             <>
             {/* Each page is a framed window (PageScroll) that stays put above the rail while its content scrolls.
                 When Details opens or closes, the window takes its new size unseen and fades back in; the rail never moves. */}
-            <Reanimated.View style={[styles.pages, pagesFadeStyle, !pagesShown && [styles.pagesAside, { bottom: railBlock }]]}
-              pointerEvents={pagesShown ? 'auto' : 'none'}
+            {holdPages && <Reanimated.View exiting={reducedFx ? undefined : FadeOut.duration(240)}
+              style={[styles.pagesHoldCover, { height: pagesHeight || undefined }]} pointerEvents="none">
+              <ActivitySkeleton />
+            </Reanimated.View>}
+            <Reanimated.View style={[styles.pages, pagesFadeStyle, pagesHoldStyle, !pagesShown && [styles.pagesAside, { bottom: railBlock }]]}
+              pointerEvents={pagesShown && !holdPages ? 'auto' : 'none'}
               onLayout={event => {
                 setPagesHeight(Math.round(event.nativeEvent.layout.height));
                 setPagesMeasuredLent(lentAtCommit.current);
                 revealPages();
+                // The first page lays its blocks out on the next frame or two (ChapterCard measures first).
+                if (!pagesReady) requestAnimationFrame(() => requestAnimationFrame(() => {
+                  if (__DEV__) console.log(`[pages] ready t=${Date.now()}`);
+                  setPagesReady(true);
+                }));
               }}>
             <View ref={pagesInnerRef} style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
               accessibilityElementsHidden={!pagesShown} importantForAccessibility={pagesShown ? 'auto' : 'no-hide-descendants'}>
@@ -1886,6 +1953,9 @@ export default function LinePlayScreen() {
             {/* The rail stays at its usual bottom spot in every state, so a thumb finds it in the same place. */}
             <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(180)}
               onLayout={event => setRailBlock(Math.round(event.nativeEvent.layout.height))}>
+            {/* The rail waits with the pages (T087: never Story, Games and Next beside the loading card). */}
+            {firstCalm || holdPages ? <View style={styles.railCalm} accessible={false} /> : <Reanimated.View
+              entering={reducedFx || !(calmShown.current || heldShown.current) ? undefined : FadeIn.duration(260)}>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
               mode={railMode} onShowPages={onRailBack} backAction={railBack} quiet={railQuiet}
               tabs={{
@@ -1923,6 +1993,7 @@ export default function LinePlayScreen() {
                 pendingEncoreId.current = session.addMoreRounds();
                 if (!pendingEncoreId.current) manualEncoreRequested.current = false;
               }} />
+            </Reanimated.View>}
             </Reanimated.View>
             </>
           )}
@@ -2145,6 +2216,8 @@ function ActivitySkeleton() {
 }
 
 const styles = StyleSheet.create({
+  // The rail's own footprint (48 pt row, padding, border, the compass overlap), empty on the calm first page.
+  railCalm: { height: 48 + 8 + 4, marginBottom: 56 },
   root: { flex: 1, backgroundColor: '#07569e' },
   tip: { position: 'absolute', left: 12, right: 12, top: 300, zIndex: 60 },
   safe: { flex: 1 },
@@ -2190,6 +2263,7 @@ const styles = StyleSheet.create({
   activityArea: { flex: 1, marginTop: spacing.lg },
   // Clipped, so while it glides (Details open/close) the page never slides under the rail.
   pages: { flex: 1 },
+  pagesHoldCover: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 2 },
   pagesInner: { flex: 1 },
   pagesHidden: { opacity: 0 },
   // A stepped-aside window leaves the flow but keeps its size; the rail stays at the bottom.

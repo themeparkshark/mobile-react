@@ -1239,7 +1239,8 @@ export function ExploreScreenBody() {
   const beaconAvoid = useMemo(() => [...visibleTasks, ...restingTasks].map(task => ({
     latitude: Number(task.latitude), longitude: Number(task.longitude) })), [visibleTasks, restingTasks]);
   // In line? Only at a real queue ride, 90 s nearly still, never right after that wait ended (core loop 4.1).
-  const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player, undefined, undefined, location ?? null);
+  const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player, undefined, undefined, location ?? null,
+    latestLocationSampleRef);
 
   // The Next Coin guide, its card and tab actions and the attention clock (core loop 4.1 and 4.3): useMapGuide.
   // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it, and the guide card

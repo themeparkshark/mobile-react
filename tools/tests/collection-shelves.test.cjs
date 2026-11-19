@@ -140,7 +140,7 @@ test('challenge copy: "Win the X coin", PLAY!, and the free ways in one order (c
   assert.equal(copy.challengeButtonLabel({ kind: 'extra_try', count: 2 }, 1), 'PLAY! Extra try');
   assert.equal(copy.challengeButtonLabel({ kind: 'claim', tickets: 5, sources: [] }, 1), 'Claim 5 stamp Tickets');
   assert.doesNotMatch(copy.needTicketCopy(false, true).lines.join(' '), /wait at a ride/, 'no line Ticket promise while Queue Tickets is off');
-  assert.match(copy.needTicketCopy(true, true).lines.join(' '), /first wait at a ride earns a Ticket/);
+  assert.match(copy.needTicketCopy(true, true).lines.join(' '), /10 minutes in a ride line earns a Ticket/);
 });
 
 test('unfound coin copy is type-aware and leads with the gameplay action', () => {

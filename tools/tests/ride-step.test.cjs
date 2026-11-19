@@ -322,8 +322,8 @@ test('the recap line, the journal label and the Adventure stamp', () => {
   assert.equal(rideStep.timedWaitMinutes(0, 11 * 60_000 + 50_000), 11, 'whole minutes, like the recap');
   assert.equal(rideStep.timedWaitMinutes(null, 5), null);
   const model = loadTs('src/screens/RideTracker/rideJournalModel.ts');
-  assert.equal(model.journalStepLabel('details', true), 'RIDE JOURNAL', 'never "3 of 3" without steps 1 and 2');
-  assert.equal(model.journalStepLabel('details', false), 'RIDE JOURNAL · 3 OF 3');
+  assert.equal(model.journalStepLabel('details', true), 'LOG A RIDE', 'never "3 of 3" without steps 1 and 2');
+  assert.equal(model.journalStepLabel('details', false), 'LOG A RIDE · 3 OF 3');
   assert.equal(rideStep.adventureRideStampDue({ id: 1, phase: 'celebrate', ride: { ride_id: 583 } }, 583), true);
   assert.equal(rideStep.adventureRideStampDue({ id: 1, phase: 'play', ride: { ride_id: 583 } }, 583), false, 'its line story first');
   assert.equal(rideStep.adventureRideStampDue({ id: 1, phase: 'celebrate', ride: { ride_id: 580 } }, 583), false);
@@ -686,8 +686,9 @@ test('a real ride later in the day is still asked about once (the fix is not a m
     assert.equal(pendingIn(store).filter(d => d.rideId === SPACE.id).length, 1, 'kept until answered');
     const relaunched = launch(store);
     await relaunched.hook.checkAndShowPendingRides();
-    assert.equal(relaunched.navigations.length, 1, 'the batch confirm asks about Space Mountain');
-    assert.deepEqual(plain(relaunched.navigations[0].params.detections.map(d => d.rideId)), [SPACE.id]);
+    assert.equal(relaunched.navigations.length, 0, 'T079: nothing opens by itself on the relaunch');
+    // It waits in the Ride Tracker's "Rides to check".
+    assert.deepEqual(plain((await relaunched.hook.ridesToCheck()).map(d => d.rideId)), [SPACE.id]);
   });
 });
 
@@ -736,11 +737,13 @@ test('one account\'s ride is never another account\'s ride question on a shared 
     const other = launch(store, { player: '66' });
     assert.equal(await other.hook.checkAndShowPendingRides(), false);
     assert.equal(other.navigations.length, 0);
+    assert.deepEqual(plain(await other.hook.ridesToCheck()), [], 'not in the new account\'s Ride Tracker');
     assert.equal(pendingIn(store).length, 1, 'kept for its own player');
-    // Player 48 signs back in: asked once.
+    // Player 48 signs back in: it is in their Ride Tracker (and nothing opens by itself).
     const back = launch(store, { player: '48' });
     await back.hook.checkAndShowPendingRides();
-    assert.equal(back.navigations.length, 1);
+    assert.equal(back.navigations.length, 0);
+    assert.equal((await back.hook.ridesToCheck()).length, 1);
     // A detection saved before this field (no playerId) still reaches whoever is signed in.
     const svc = loadTs('src/services/RideDetectionService.ts', {
       '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },
@@ -766,9 +769,10 @@ test('the batch confirm: its arrow says Go back, and "Back to Ride Tracker" real
 
 test('the batch confirm never lands on top of LinePlay (its wait, its ride question or its recap)', () => {
   const hook = read('src/hooks/useRideDetection.ts');
-  assert.match(hook, /if \(pending\.length === 0\) \{ questionWaiting = false; return false; \}\n[^\n]*\n[^\n]*\n\s+if \(navigationRef\.getCurrentRoute\(\)\?\.name === 'LinePlay'\) return false;/);
-  // The reopen for a pocketed ride comes first, so it is never blocked by this.
-  assert.ok(hook.indexOf('reopenLinePlayForRideQuestion()) return true') < hook.indexOf("name === 'LinePlay') return false;\n\n    // One ride question"));
+  // T079: the hook never opens the batch confirm at all; only the Ride Tracker's "Check my rides" does.
+  assert.doesNotMatch(hook, /navigate\('RideBatchConfirm'/);
+  const tracker = read('src/screens/RideTracker/RideTrackerScreen.tsx');
+  assert.match(tracker, /onPress=\{\(\) => \{\n\s+Haptics[^\n]*\n\s+nav\.navigate\('RideBatchConfirm', \{ detections: toCheck \}\);/);
 });
 
 // -- Fix round after the first gate (Nov 2026): items 12 to 15 ------------------------------------------
@@ -805,14 +809,14 @@ test('item 12: a launch at a park with a stale detection opens nothing in the fi
     // The first 30 s at the park (the map's gate says no): nothing opens, the real ride waits.
     assert.equal(await app.hook.checkAndShowPendingRides(), false);
     assert.equal(app.navigations.length, 0, 'nothing opens by itself in the first 30 s');
-    assert.deepEqual(plain(app.attention.asks), ['ride_question'], 'the ride question asked the map\'s attention rules');
     assert.deepEqual(pendingIn(store).map(d => d.id), ['det_580'], 'the stale and broken ones are gone for good');
     // A calm moment later: one batch with the real ride only, nothing pre-checked (the screen's own rule).
     gate.open = true;
     clock.now += 30_000;
-    assert.equal(await app.hook.checkAndShowPendingRides(), true);
-    assert.deepEqual(plain(app.navigations.map(n => [n.name, n.params.detections.map(d => d.rideName)])),
-      [['RideBatchConfirm', ['Indiana Jones Adventure']]]);
+    // T079: a calm moment opens nothing either; the real ride is in the Ride Tracker, nothing pre-checked there.
+    assert.equal(await app.hook.checkAndShowPendingRides(), false);
+    assert.equal(app.navigations.length, 0);
+    assert.deepEqual(plain((await app.hook.ridesToCheck()).map(d => d.rideName)), ['Indiana Jones Adventure']);
   });
   const svc = loadTs('src/services/RideDetectionService.ts', {
     '@react-native-async-storage/async-storage': { getItem: async () => null, setItem: async () => {}, removeItem: async () => {} },

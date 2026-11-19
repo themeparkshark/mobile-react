@@ -5,8 +5,8 @@
  * Handles foreground single-ride detection popups.
  * 
  * When the app is in the foreground and a ride is detected:
- *   - Shows a slide-up popup: "Did you just ride [name]?"
- *   - User taps "Yes! Log it" -> navigates to RideLog screen for that ride
+ *   - Shows a slide-up popup: "Did you get to the ride? [name]"
+ *   - User taps "I got to the ride" -> navigates to RideLog screen for that ride
  *   - User taps "Not this time" -> removes that detection from the queue
  * 
  * Does NOT show when user is on the RideBatchConfirmScreen.
@@ -160,8 +160,9 @@ const RideDetectionOverlay: React.FC = () => {
       <Animated.View style={[styles.popup, { transform: [{ translateY: slideAnim }] }]}>
         <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
           style={styles.shark} contentFit="contain" />
-        <Text style={styles.title}>DID YOU JUST RIDE...</Text>
-        <Text style={styles.rideName}>{currentDetection.rideName}?</Text>
+        {/* T088: LinePlay's own words for the one ride question (Did you get to the ride? I got to the ride / Not this time). */}
+        <Text style={styles.title}>DID YOU GET TO THE RIDE?</Text>
+        <Text style={styles.rideName}>{currentDetection.rideName}</Text>
         <Text style={styles.detail}>
           ~{dwellMin} min near the ride {'\u2022'} {timeStr}
           {currentDetection.isReRide ? ' \u2022 Re-ride!' : ''}
@@ -171,13 +172,13 @@ const RideDetectionOverlay: React.FC = () => {
           onPress={handleConfirm}
           disabled={buttonsDisabled}
           accessibilityRole="button"
-          accessibilityLabel={`Yes, I rode ${currentDetection.rideName}`}
+          accessibilityLabel={`I got to the ride: ${currentDetection.rideName}`}
           style={({ pressed }) => [
             styles.confirmBtn,
             (pressed || buttonsDisabled) && { opacity: 0.6 },
           ]}
         >
-          <Text style={styles.confirmBtnText}>Yes, Add My Ride</Text>
+          <Text style={styles.confirmBtnText}>I got to the ride</Text>
         </Pressable>
 
         <Pressable

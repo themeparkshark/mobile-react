@@ -192,7 +192,7 @@ const ShareableRideCard: React.FC<ShareableRideCardProps> = ({ ride, rideCount, 
         </View>
       ) : queued ? (
         // The ride is not in the journal yet, so its total is not known: a calm line, not a button.
-        <Text style={cardStyles.shareLater} accessibilityRole="text">Share once it joins your journal</Text>
+        <Text style={cardStyles.shareLater} accessibilityRole="text">Share once it joins your Ride Tracker</Text>
       ) : (
         // The one share button, the same gold-rimmed pill as every reveal.
         <Pressable

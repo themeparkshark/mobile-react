@@ -110,7 +110,7 @@ test('Supplies: free Ticket ways come before any pack; the line Ticket only whil
   const off = freeTicketWays(false).map(way => way.text);
   assert.ok(off.some(text => /3 treats/.test(text)));
   assert.ok(!off.some(text => /wait at a ride/.test(text)), 'no line Ticket promise while queue_tickets is off');
-  assert.ok(freeTicketWays(true).some(way => /first wait at a ride earns a Ticket/.test(way.text)));
+  assert.ok(freeTicketWays(true).some(way => /10 minutes in a ride line earns a Ticket/.test(way.text)));
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   const render = shop.slice(shop.indexOf('<ScrollView ref={scroll}'));
   // The free ways sit above every price (T155: folded to one line with See all).

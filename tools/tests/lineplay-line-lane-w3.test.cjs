@@ -60,8 +60,9 @@ test('T073: ride detection retries a failed start with backoff, and the map retr
 
 test('T074 and T080: the in-line offer is its own picture button under the card, steady, and never swaps out Tap PLAY!', () => {
   const copy = loadTs('src/services/guide/guideCopy.ts');
-  assert.deepEqual({ ...copy.lineOffer('here', 'Indiana Jones Adventure') }, { title: 'In line?', label: 'LINEPLAY' }, 'under Tap PLAY!');
-  assert.deepEqual({ ...copy.lineOffer('walk', 'Autopia') }, { title: 'In line?', label: 'LINEPLAY' }, 'with a fresh pick elsewhere');
+  // N14: the offer names its ride.
+  assert.deepEqual({ ...copy.lineOffer('here', 'Indiana Jones Adventure') }, { title: 'In line for Indiana Jones Adventure?', label: 'LINEPLAY' }, 'under Tap PLAY!');
+  assert.deepEqual({ ...copy.lineOffer('walk', 'Autopia') }, { title: 'In line for Autopia?', label: 'LINEPLAY' }, 'with a fresh pick elsewhere');
   assert.equal(copy.lineOffer('in_line', 'Autopia'), null, 'the card already is about this line');
   assert.equal(copy.lineOffer('line_story', 'Autopia'), null);
   assert.equal(copy.lineOffer('here', null), null, 'no dwell: no offer');

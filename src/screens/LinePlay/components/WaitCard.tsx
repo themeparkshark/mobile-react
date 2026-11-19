@@ -21,6 +21,7 @@ import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
   type PipState } from '../../../services/lineplay/bonusRounds';
 import { detailsSignLine, minutesWords, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
 import WaitStampBadge from './waitscreen/WaitStampBadge';
+import LineTicketFill from './LineTicketFill';
 
 /** A detail line with its art, never an emoji. */
 function HintLine({ icon, children }: { icon: GameIconName; children: string }) {
@@ -455,6 +456,11 @@ export default function WaitCard({
             </View> : null}
             {partBurst > 0 && <KidText style={styles.compactBurst}>{`+${partBurst} RIDE PART${partBurst === 1 ? '' : 'S'}!`}</KidText>}
           </View>
+          {/* The line Ticket fills while you wait near the ride (T084): only while it is still to earn today. */}
+          {queueTicketsOn && rewardTrackingAvailable && ticketAvailable === true && !completed && (
+            <LineTicketFill verifiedSeconds={verifiedEligibleSeconds} intervalSeconds={ticketIntervalSeconds}
+              reducedMotion={reducedMotion} />
+          )}
           <Pressable accessibilityRole="button" accessibilityState={{ expanded }}
             accessibilityLabel={expanded ? 'Hide wait and reward details' : 'Show wait and reward details'}
             onPress={toggleDetails} style={styles.compactDetails}

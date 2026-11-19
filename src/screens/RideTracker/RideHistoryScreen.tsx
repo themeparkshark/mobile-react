@@ -226,7 +226,7 @@ export default function RideHistoryScreen() {
         <View style={styles.emptyContainer}>
           <Image source={require('../../../assets/images/screens/lineplay/queue-recap-shark.png')}
             style={{ width: 110, height: 110 }} contentFit="contain" />
-          <Text style={styles.emptyTitle}>Your journal is taking a break</Text>
+          <Text style={styles.emptyTitle}>Your Ride Tracker is taking a break</Text>
           <Text style={styles.emptySubtitle}>Your saved memories are safe. Try loading them again.</Text>
           <GameButton label={refreshing ? 'Loading...' : 'Try again'} icon="retry" disabled={refreshing}
             onPress={onRefresh} style={{ marginTop: 24 }} />
@@ -236,7 +236,7 @@ export default function RideHistoryScreen() {
           title={selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Looking for your favorites' : 'No favorite memories here yet'
             : timeTab === 'today' ? 'No rides today yet!' : 'No rides yet!'}
           body={selectedPark === FAVORITES_FILTER_ID ? hasMore ? 'Check earlier memories for rides you have starred.' : 'Star a ride to add it to favorites'
-            : timeTab === 'today' ? 'Log a ride to see it here' : 'Add a favorite ride to start your journal'}
+            : timeTab === 'today' ? 'Log a ride to see it here' : 'Add a favorite ride to start your Ride Tracker'}
           action={{
             label: selectedPark === FAVORITES_FILTER_ID && hasMore ? loadingMore ? 'Loading...' : 'Check earlier memories' : 'Log a ride',
             icon: selectedPark === FAVORITES_FILTER_ID && hasMore ? 'search' : 'ride',

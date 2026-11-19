@@ -9,6 +9,7 @@
  */
 import type { GuideState, GuideTarget } from './nextCoin';
 import { shortParkName } from '../../helpers/parkName';
+import { plainRideName } from '../../helpers/plainRideName';
 import { TREATS_PER_TICKET, type FreeTicketStep } from './freeTickets';
 
 /** What the card's one button does. */
@@ -113,7 +114,8 @@ export const ALMOST_THERE_METERS = 16;
  */
 export function lineOffer(state: string, dwellRideName: string | null | undefined): { readonly title: string; readonly label: string } | null {
   if (!dwellRideName || state === 'in_line' || state === 'line_story' || state === 'goodbye' || state === 'home') return null;
-  return { title: 'In line?', label: 'LINEPLAY' };
+  // N14: the offer names the line it means (two queues can overlap), in the plain display name.
+  return { title: `In line for ${plainRideName(dwellRideName)}?`, label: 'LINEPLAY' };
 }
 
 /**
@@ -345,7 +347,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     case 'need_ticket': {
       const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`];
       if (ctx.freeTryDaily !== false) lines.push('Tomorrow brings a new free try.');
-      if (ctx.queueTicketsOn) lines.push('Your first wait at a ride earns a Ticket.');
+      if (ctx.queueTicketsOn) lines.push('10 minutes in a ride line earns a Ticket.');
       return card({
         kicker: 'NEED A TICKET',
         title: name ? `Next coin: ${name}` : 'Out of Tickets',

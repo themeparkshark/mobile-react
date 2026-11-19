@@ -213,7 +213,7 @@ export function mergeServerGlossary(
 }
 
 /** Tickets' earn line while Queue Tickets is on (12 words at most, like every glossary line). */
-export const TICKETS_EARN_WITH_LINE = '3 treats = 1 Ticket. Your first wait at a ride earns one.';
+export const TICKETS_EARN_WITH_LINE = '3 treats = 1 Ticket. 10 minutes in a ride line earns one.';
 
 /** The player's switches the glossary lines depend on (GET /api/feature-flags). */
 export interface GlossarySwitches {

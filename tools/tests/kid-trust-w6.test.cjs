@@ -113,7 +113,8 @@ test('arcade NEW means something: only games never played on this account, two t
   const sheet = read('src/screens/LinePlay/components/QueueArcadeSheet.tsx');
   assert.match(sheet, /\{showNew && choice\.isNew && choice\.bestStars == null && <View style=\{styles\.newPill\}>/);
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /const arcadeNew = arcadeNewFlags\(arcadeBase, playedEver\);/);
+  // Parade Beat joins the sheet's list (parade-beat-lineplay); the NEW rule reads the whole list.
+  assert.match(screen, /const arcadeNew = arcadeNewFlags\(arcadeWithParade, playedEver\);/);
   assert.match(screen, /void notePlayedGames\(player\.id, playedThisWait\.split\(','\)\)/);
   return (async () => {
     const after = await m.notePlayedGames(24, ['memory']);

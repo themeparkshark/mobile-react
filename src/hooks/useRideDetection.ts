@@ -6,8 +6,8 @@
  * 1. BACKGROUND (phone locked / app not active):
  *    - GPS tracks silently via background location task
  *    - Detections queue to AsyncStorage without any UI
- *    - When user opens app back up, batch confirm screen appears
- *      showing ALL rides detected while away
+ *    - They wait in the Ride Tracker ("Rides to check"); nothing opens by
+ *      itself when the app comes back (T079)
  * 
  * 2. FOREGROUND (app open and active):
  *    - GPS tracks in real-time
@@ -46,9 +46,6 @@ import useLivePoll from './useLivePoll';
 export const WAIT_TIMES_FOREGROUND_MS = 5 * 60 * 1000;
 export const WAIT_TIMES_BACKGROUND_MS = 15 * 60 * 1000;
 
-/** Tracks whether we've already navigated to batch confirm to prevent double navigation (BUG 8 fix) */
-let batchConfirmNavigating = false;
-
 /**
  * A ride question that is waiting for a calm moment (the map's attention rules said not now: the first 30 s
  * at a park, walking to the next coin, a game, a win card, or something else already opened by itself).
@@ -67,9 +64,6 @@ export function rideQuestionMayOpen(now = Date.now()): boolean {
   if (!open) questionWaiting = true;
   return open;
 }
-
-/** The park the guest is in now (ride detection's own), for the batch confirm. */
-let currentParkId: number | null = null;
 
 /**
  * Should this waiting detection ever be shown? No when it is stale or broken (another park day, a stay no
@@ -93,13 +87,12 @@ export function detectionWorthAsking(d: DetectedRide, now = Date.now()): boolean
 }
 
 /**
- * Check pending queue and navigate to batch confirm if there are rides.
- * Guards against double navigation and nav-not-ready.
+ * Tidy the waiting ride questions; never opens the batch confirm by itself (T079: a full-screen Ride Journal
+ * once opened mid-walk). Rides that wait live in the Ride Tracker ("Rides to check"), opened by the guest.
+ * The one automatic open left is LinePlay coming back on a wait the guest started (its own one question),
+ * and only at a calm moment. True when it opened LinePlay.
  */
 export async function checkAndShowPendingRides(): Promise<boolean> {
-  // Prevent double navigation (BUG 8 fix)
-  if (batchConfirmNavigating) return false;
-
   // Check if navigation is ready (ISSUE 9 fix)
   if (!navigationRef.isReady()) return false;
 
@@ -110,57 +103,32 @@ export async function checkAndShowPendingRides(): Promise<boolean> {
     // A phone pocketed to board, then the app closed: LinePlay comes back on that wait and asks its own
     // one question. That ride is never a batch confirm.
     if (await reopenLinePlayForRideQuestion()) return true;
-    const pending = await getPendingDetections();
-    if (pending.length === 0) { questionWaiting = false; return false; }
-    // The LinePlay screen is up (a wait, its ride question or its recap): the batch confirm never lands on
-    // top of it. The rides wait here until the guest leaves LinePlay.
-    if (navigationRef.getCurrentRoute()?.name === 'LinePlay') return false;
-
-    // One ride question (core loop 4.3): rides the ride step logged, shows, transport and walk-bys
-    // never come back as a question; the rest wait here while the guest walks to the next coin or
-    // another ride question was asked in the last 20 minutes.
-    const now = Date.now();
-    const verdicts = new Map<string, RidePromptVerdict>(pending.map(d => [d.id, detectionVerdict(d, now)]));
-    // Never shown: answered or not a ride (the gate), stale, broken, a show, closed for repairs, or only a coin game.
-    const worth = new Map(pending.map(d => [d.id, keepForBatch(verdicts.get(d.id)!) && detectionWorthAsking(d, now)]));
-    for (const d of pending) {
-      if (!worth.get(d.id)) await rideDetectionService.removePendingDetection(d.id);
-    }
-    // Rides from another park wait for that park (or the Ride Tracker): the batch here lists this park only.
-    const askable = pending.filter(d => worth.get(d.id) && detectionStillAskable(d, now, currentParkId));
-    if (askable.length === 0) { questionWaiting = false; return false; }
-    questionWaiting = true;
-    if (askable.some(d => verdicts.get(d.id) !== 'ask')) return false;
-    // Filter to medium/high confidence only
-    const meaningful = askable.filter(d => d.confidence !== 'low');
-    if (meaningful.length === 0) {
-      // Remove low confidence detections individually, not clearAll
-      // to prevent race with new detections added between read and clear (ISSUE 10 fix)
-      for (const d of pending) {
-        await rideDetectionService.removePendingDetection(d.id);
-      }
-      return false;
-    }
-
-    // Check we're not already on the batch confirm screen
-    const currentRoute = navigationRef.getCurrentRoute();
-    if (currentRoute?.name === 'RideBatchConfirm' || currentRoute?.name === 'RideLog') return false;
-    // Only at a calm moment, through the map's attention rules (never in the first 30 s at a park).
-    if (!rideQuestionMayOpen(now)) return false;
-
+    // Everything else waits in the Ride Tracker: forget what can never be asked, open nothing.
+    await ridesToCheck();
     questionWaiting = false;
-    batchConfirmNavigating = true;
-    noteRidePrompt(now);
-    navigate('RideBatchConfirm', { detections: meaningful } as any);
-
-    // Reset flag after a short delay to allow re-navigation later
-    setTimeout(() => { batchConfirmNavigating = false; }, 2000);
-    return true;
+    return false;
   } catch (e) {
-    batchConfirmNavigating = false;
     console.warn('Failed to check pending ride detections:', e);
     return false;
   }
+}
+
+/**
+ * The rides waiting for the guest's answer, for the Ride Tracker's "Rides to check" (today, any park).
+ * Forgets for good what can never be asked: answered or not a ride (the gate), stale, broken, a show,
+ * closed for repairs, only a coin game, or a low-confidence guess. Walking or too soon do not matter here:
+ * the guest opened the Ride Tracker.
+ */
+export async function ridesToCheck(now = Date.now()): Promise<DetectedRide[]> {
+  await ensureRideQuestionLedger().catch(() => undefined);
+  const pending = await getPendingDetections();
+  const keep: DetectedRide[] = [];
+  for (const d of pending) {
+    const worth = d.confidence !== 'low' && keepForBatch(detectionVerdict(d, now)) && detectionWorthAsking(d, now);
+    if (!worth) await rideDetectionService.removePendingDetection(d.id);
+    else if (detectionStillAskable(d, now, null)) keep.push(d);
+  }
+  return keep.sort((a, b) => a.enteredAt - b.enteredAt);
 }
 
 /**
@@ -204,7 +172,6 @@ export function detectionVerdict(detection: DetectedRide, now = Date.now()): Rid
 
 export function useRideDetection(enabled: boolean, parkId?: number | null) {
   const { location, latestLocationSampleRef } = useContext(LocationContext);
-  currentParkId = enabled ? parkId ?? null : null;
 
   // A ride question waiting for a calm moment is looked at again while the app is in front (paused in a pocket).
   const recheckWaiting = useCallback(() => questionWaiting ? checkAndShowPendingRides() : undefined, []);

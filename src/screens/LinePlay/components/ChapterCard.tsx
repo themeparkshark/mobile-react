@@ -198,15 +198,14 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, crew = f
           {chapter.missionNames.map((name, index) => {
             const complete = completedIds.has(missionIds[index]);
             const current = index === nextMissionIndex;
-            return <Pressable key={name} accessibilityRole="button"
-              accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`} {...off}
-              onPress={() => choose(missionIds[index])}
-              style={({ pressed }) => [styles.step, styles.stepStrip, current && styles.stepCurrent, complete && styles.stepDone,
-                paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
+            // Progress only (T083): the one PLAY above is the only call; a bubble is never a second button.
+            return <View key={name} accessible accessibilityLabel={`${name}: ${complete ? 'done' : current ? 'next' : 'later'}`}
+              style={[styles.step, styles.stepStrip, current && styles.stepCurrent, complete && styles.stepDone,
+                paused && styles.missionPaused, locked && styles.locked]}>
               <View style={[styles.stepBadge, styles.stepBadgeStrip, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
                 {complete ? <GameIcon name="check" size={18} /> : <Text style={[styles.stepNumber, styles.stepNumberStrip, current && styles.stepNumberCurrent]}>{index + 1}</Text>}
               </View>
-            </Pressable>;
+            </View>;
           })}
         </View>}
       </PageScroll>
@@ -232,16 +231,15 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, crew = f
         {chapter.missionNames.map((name, index) => {
           const complete = completedIds.has(missionIds[index]);
           const current = index === nextMissionIndex;
-          return <Pressable key={name} accessibilityRole="button"
-            accessibilityLabel={`${complete ? 'Replay' : 'Open'} ${name}`} {...off}
-            onPress={() => choose(missionIds[index])}
-            style={({ pressed }) => [styles.step, compact && styles.stepCompact, current && styles.stepCurrent, complete && styles.stepDone,
-              paused && styles.missionPaused, locked && styles.locked, pressed && styles.pressed]}>
+          // Progress only (T083): the one PLAY above is the only call; a bubble is never a second button.
+          return <View key={name} accessible accessibilityLabel={`${name}: ${complete ? 'done' : current ? 'next' : 'later'}`}
+            style={[styles.step, compact && styles.stepCompact, current && styles.stepCurrent, complete && styles.stepDone,
+              paused && styles.missionPaused, locked && styles.locked]}>
             <View style={[styles.stepBadge, current && !complete && styles.stepBadgeCurrent, complete && styles.stepBadgeDone]}>
               {complete ? <GameIcon name="check" size={22} /> : <Text style={[styles.stepNumber, current && styles.stepNumberCurrent]}>{index + 1}</Text>}
             </View>
             {!compact && <Text style={styles.stepName} numberOfLines={3}>{name}</Text>}
-          </Pressable>;
+          </View>;
         })}
       </Animated.View>}
 

@@ -1376,7 +1376,7 @@ export default function RedeemRedeemableModal({
                               <Text style={styles.wayEquals}>=</Text>
                               <GameIcon name="gift" size={24} />
                             </View>}
-                            {freeSteps.some(step => step.kind === 'line_ticket') && <View style={styles.wayTile} accessible accessibilityLabel="Your first wait at a ride earns a Ticket.">
+                            {freeSteps.some(step => step.kind === 'line_ticket') && <View style={styles.wayTile} accessible accessibilityLabel="10 minutes in a ride line earns a Ticket.">
                               <GameIcon name="line" size={26} />
                               <Text style={styles.wayEquals}>=</Text>
                               <GameIcon name="ticket" size={24} />

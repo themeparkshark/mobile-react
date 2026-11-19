@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { LineGroup } from './lineGroup';
-import { loadLastCrew, loadWaitGroup, saveWaitGroup } from './lineGroupStore';
+import { loadDayChoice, loadLastCrew, loadWaitGroup, saveDayChoice, saveWaitGroup } from './lineGroupStore';
 
 export interface LineGroupState {
   /** Storage answered for this wait (so the opener never flashes on a restore). */
@@ -30,12 +30,20 @@ export function useLineGroup(playerId: number | null, waitKey: string | null): L
     // No account yet (preview builds): the crew lives in memory for this wait.
     if (playerId == null) { setState({ key: waitKey, loaded: true, chosen: false, group: null }); return; }
     let alive = true;
-    void Promise.all([loadWaitGroup(playerId, waitKey), loadLastCrew(playerId)]).then(([saved, crew]) => {
-      if (!alive) return;
-      groupRef.current = saved.group;
-      setLastCrew(crew);
-      setState({ key: waitKey, loaded: true, chosen: saved.chosen, group: saved.group });
-    });
+    void Promise.all([loadWaitGroup(playerId, waitKey), loadLastCrew(playerId), loadDayChoice(playerId)])
+      .then(([saved, crew, today]) => {
+        if (!alive) return;
+        setLastCrew(crew);
+        // Answered earlier today (T087): this wait starts with that answer, asked once a day, not once a wait.
+        if (!saved.chosen && today) {
+          groupRef.current = today;
+          setState({ key: waitKey, loaded: true, chosen: true, group: today });
+          void saveWaitGroup(playerId, waitKey, today);
+          return;
+        }
+        groupRef.current = saved.group;
+        setState({ key: waitKey, loaded: true, chosen: saved.chosen, group: saved.group });
+      });
     return () => { alive = false; };
   }, [playerId, waitKey]);
 
@@ -44,6 +52,7 @@ export function useLineGroup(playerId: number | null, waitKey: string | null): L
     groupRef.current = group;
     setState({ key, loaded: true, chosen: true, group });
     if (id != null && key) void saveWaitGroup(id, key, group);
+    if (id != null && group) void saveDayChoice(id, group);
   }, []);
 
   const update = useCallback((change: (group: LineGroup) => LineGroup) => {

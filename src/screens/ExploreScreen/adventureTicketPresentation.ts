@@ -166,6 +166,6 @@ export function adventureTicketsLine(ticketsNeeded: number, freeTryReady: boolea
   if (!(ticketsNeeded > 0)) return null;
   const need = `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} needed.`;
   return queueTicketsOn === true
-    ? `${need} Your first wait at a ride earns one, and ${SHEET_TREATS_PER_TICKET} treats at home make one more.`
+    ? `${need} 10 minutes in a ride line earns one, and ${SHEET_TREATS_PER_TICKET} treats at home make one more.`
     : `${need} ${SHEET_TREATS_PER_TICKET} treats at home = 1 Ticket. Tomorrow brings a new free try.`;
 }
