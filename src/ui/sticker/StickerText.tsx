@@ -77,11 +77,12 @@ function StickerTextImpl({
   const place = useStickerPlace();
   const onPaper = place.surface === 'paper';
   const width = strokeFor(size, stroke);
-  const shrink = fit ?? lines === 1;
   const outlined = !(width === 0 || (tone === 'auto' && onPaper && stroke === undefined && size < STROKE.minSize));
-  // Outlined one-line titles are sized once for all copies (a copy never shrinks itself: that
-  // drew tiny ghost copies in the spike). Plain text keeps the system's own shrink.
-  const measure = outlined && shrink && lines === 1;
+  // A one-line outlined title shrinks to fit by default; plain text only when asked.
+  const shrink = (fit ?? (outlined && lines === 1)) && lines === 1;
+  // Sized once here, never by the system: iOS's own shrink drew tiny ghost copies (and tiny plain
+  // labels) in the spike.
+  const measure = shrink;
   const [box, setBox] = useState(0);
   const [natural, setNatural] = useState(0);
   const sized = !measure || (box > 0 && natural > 0);
@@ -100,8 +101,6 @@ function StickerTextImpl({
   };
   const textProps = {
     numberOfLines: lines,
-    adjustsFontSizeToFit: shrink && !outlined,
-    minimumFontScale: shrink && !outlined ? MIN_FIT_SCALE : undefined,
     maxFontSizeMultiplier: maxScale,
     accessible: false,
   } as const;
@@ -115,12 +114,25 @@ function StickerTextImpl({
     setBox(prev => (prev === w ? prev : w));
   }, [outlined, pad]);
 
+  // The natural one-line width at the asked size, measured outside the layout.
+  const measureNode = (
+    <View style={styles.measure} pointerEvents="none">
+      <Text numberOfLines={1} maxFontSizeMultiplier={maxScale} accessible={false} style={[base, { fontSize: size, letterSpacing: Math.round(size * spacing * 100) / 100 }]}
+        onTextLayout={e => { const w = Math.max(0, ...e.nativeEvent.lines.map(line => line.width)); setNatural(prev => (Math.abs(prev - w) < 0.5 ? prev : w)); }}>{children}</Text>
+    </View>
+  );
+
   // Small type: no stroke. White on blue gets one hard 1.5 pt drop; navy on paper stays plain.
   if (!outlined) {
     const small: TextStyle = fill === INK.white
       ? { color: fill, textShadowColor: SHADE.smallDrop, textShadowOffset: { width: 0, height: STROKE.smallDrop }, textShadowRadius: 0 }
       : { color: fill };
-    return <View style={style} onLayout={onReady ? onLayout : undefined} {...a11y}><Text {...textProps} style={[base, small]}>{children}</Text></View>;
+    return (
+      <View style={style} onLayout={measure || onReady ? onLayout : undefined} {...a11y}>
+        {measure ? measureNode : null}
+        <Text {...textProps} style={[base, small, sized ? styles.shown : styles.hidden]}>{children}</Text>
+      </View>
+    );
   }
 
   const offsets = ring(width, copies);
@@ -152,13 +164,7 @@ function StickerTextImpl({
   return (
     <View style={[room, style]} onLayout={measure || onReady ? onLayout : undefined}
       shouldRasterizeIOS={rasterize} renderToHardwareTextureAndroid={rasterize} {...a11y}>
-      {measure ? (
-        // The natural one-line width at the asked size, measured outside the layout.
-        <View style={styles.measure} pointerEvents="none">
-          <Text numberOfLines={1} maxFontSizeMultiplier={maxScale} accessible={false} style={[base, { fontSize: size, letterSpacing: Math.round(size * spacing * 100) / 100 }]}
-            onTextLayout={e => { const w = Math.max(0, ...e.nativeEvent.lines.map(line => line.width)); setNatural(prev => (Math.abs(prev - w) < 0.5 ? prev : w)); }}>{children}</Text>
-        </View>
-      ) : null}
+      {measure ? measureNode : null}
       <View style={sized ? styles.shown : styles.hidden}>
         {layers}
         <Text {...textProps} style={[base, { color: fill }]}>{children}</Text>

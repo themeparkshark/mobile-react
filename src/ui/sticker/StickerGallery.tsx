@@ -267,7 +267,7 @@ function PageSection() {
   return (
     <Section id="page" title="Page">
       <World>
-        <Page label={{ text: 'Title label', tone: 'gold' }}>
+        <Page label={{ text: 'Title label', tone: 'gold' }} style={{ marginTop: 16 }}>
           <RowCard title="Card on a page" line="Navy line and a lip only." />
         </Page>
       </World>

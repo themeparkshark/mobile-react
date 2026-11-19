@@ -143,7 +143,7 @@ test('a one-line title is sized once for every copy: never bigger, never under 6
   assert.equal(text.fitSize(30, 50, 200), 18, 'floor at 60 percent');
   assert.equal(text.fitSize(35, 157, 211), 26, 'rounded down to 0.1 pt');
   const source = fs.readFileSync(path.join(root, 'src/ui/sticker/StickerText.tsx'), 'utf8');
-  assert.match(source, /adjustsFontSizeToFit: shrink && !outlined/, 'outlined copies never shrink themselves');
+  assert.doesNotMatch(source, /adjustsFontSizeToFit/, 'no copy and no label shrinks itself');
 });
 
 test('one VoiceOver element per title: the copies are never accessible', () => {
