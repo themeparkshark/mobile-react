@@ -167,7 +167,7 @@ export default function ActivitySlot({
     const facts = storyFacts(chapter, parkId, rideId);
     return <PageScroll fill={CARD_FILL}>
       <PicturePuzzleCard kind={puzzle.kind} deckId={puzzle.deckId} seed={puzzleSeed(chapter.id, item.kind === 'trivia' || item.kind === 'lore' ? item.seed : 0)}
-        title={missionTitle} completed={completed} paused={paused} fact={chapterFact(chapter, facts)}
+        title={missionTitle} completed={completed} paused={paused} fact={chapterFact(chapter, facts, puzzle.kind === 'twin' ? 1 : 0)}
         onSolved={() => onActivityCompleted(item.id)} />
     </PageScroll>;
   }

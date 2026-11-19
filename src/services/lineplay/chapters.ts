@@ -355,13 +355,13 @@ const STORY_FACT_MAX = 170;
  * The true fact a chapter tells (T077): one of this ride's own checked facts, turning with the episode so a
  * returning player meets a new one. Never another ride's: callers pass only facts keyed to this ride.
  */
-export function chapterFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: readonly string[]): string | null {
+export function chapterFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: readonly string[], offset = 0): string | null {
   const clean = rideFacts.map(fact => fact.trim()).filter(Boolean);
   if (clean.length === 0) return null;
   const short = clean.filter(fact => fact.length <= STORY_FACT_MAX);
   const pool = short.length ? short : clean;
   const episode = Number(/-episode-(\d+)$/.exec(chapter.id)?.[1] ?? 0);
-  return pool[episode % pool.length];
+  return pool[(episode + Math.max(0, Math.floor(offset))) % pool.length];
 }
 
 /**

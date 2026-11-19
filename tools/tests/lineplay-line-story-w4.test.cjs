@@ -73,6 +73,8 @@ test('T077: returning players meet a new fact each story, and only facts passed 
   }
   assert.equal(seen.size, 3);
   assert.equal(chapters.chapterFact({ id: 'queue-8-autopia-8' }, []), null);
+  // Clue 2 tells the next fact, so the two puzzles never repeat one.
+  assert.notEqual(chapters.chapterFact({ id: 'queue-8-autopia-8-episode-0' }, facts, 1), chapters.chapterFact({ id: 'queue-8-autopia-8-episode-0' }, facts));
   // Long rows step aside while a short one exists.
   assert.equal(chapters.chapterFact({ id: 'queue-8-x-episode-1' }, ['x'.repeat(240), 'Short and true.']), 'Short and true.');
 });
