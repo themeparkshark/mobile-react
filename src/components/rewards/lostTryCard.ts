@@ -58,7 +58,10 @@ export const TICKET_BACK_LINE_ANY_GAME = 'Your Ticket came back. Try again!';
 export function lostTryCopy(input: LostTryInput): LostTryCopy {
   const copy = lostTryBase(input);
   const next = input.nextGame?.trim();
-  if (!next || !lostTryHasRetry(input)) return copy;
+  // hold-2 T232: the server deals the other picture game on the next try at this ride, whatever pays for it
+  // (the Ticket that came back, a free try, a VIP try, or a paid TRY AGAIN for 1 Ticket, the common case
+  // at the switch). So the card names it whenever the server says so, never only for a free retry.
+  if (!next) return copy;
   // A different game is next: say which, in place of "same game".
   if (copy.message === TICKET_BACK_LINE || copy.message === TICKET_BACK_LINE_ANY_GAME) {
     return { ...copy, message: `Your Ticket came back. New game: ${next}!` };

@@ -150,7 +150,7 @@ test('balance sim (18.3): the Final flips the winner in 15-30% of matches; the s
   assert.ok(rate >= 0.12 && rate <= 0.33, `Final flips ${rate}`);
 });
 
-test('S1 gate 2 (T234): place names stay the map names, no company word in any planned question, choice or fact; labels stay unique per question', () => {
+test('S1 gate 2 (T234, T043 hold-2): planned questions show the bank as written (no word swap to garble it); choices stay unique per question', () => {
   const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
   const content = loadTs('src/games/trivia-duel/engine/content.ts');
   const facts = loadTs('src/games/trivia-duel/engine/facts.ts');
@@ -165,7 +165,10 @@ test('S1 gate 2 (T234): place names stay the map names, no company word in any p
     const qs = plan.rounds.map((r) => r.question).concat(plan.finalAlt ? [plan.finalAlt.question] : []);
     for (const q of qs) {
       const all = [q.prompt, ...q.choices, q.fact ?? ''].join(' | ');
-      assert.ok(!labels.hasTrademarkName(all), `seed ${seed} ${q.id}: ${all}`);
+      // hold-2: no display-edge swap, so none of its garbles can appear.
+      assert.doesNotMatch(all, /park company|Walt World|the studio Studios|park designering|Walt’s park/, `seed ${seed} ${q.id}: ${all}`);
+      const src = pool.find((p) => p.id === q.id);
+      if (src) assert.equal(q.prompt, src.question, 'a bank question reads as written');
       assert.equal(new Set(q.choices).size, q.choices.length, `labels collide in ${q.id}`);
       assert.ok(!/\b[Tt]he the\b/.test(all), all);
     }
@@ -173,27 +176,32 @@ test('S1 gate 2 (T234): place names stay the map names, no company word in any p
     const again = match.planFromIds(plan.mode, plan.seed, plan.rounds.map((r) => r.question.id), pool, 'deckhand', false, plan.keys);
     assert.deepEqual(plain(again.rounds.map((r) => r.question.prompt)), plain(plan.rounds.map((r) => r.question.prompt)));
   }
-  // Every generated-format fact name has a label.
-  for (const f of facts.OPENING_FACTS) assert.ok(!labels.hasTrademarkName(labels.genericize(f.name)), f.name);
+  // Every generated-format fact name reads as written.
+  for (const f of facts.OPENING_FACTS) assert.equal(labels.genericize(f.name), f.name);
   // Labelled items keep their fact keys (no giveaways across a match).
   const q = content.materializeQuestion('gen-42', pool, 1);
   assert.ok(q.factKeys.length > 0);
 });
 
-test('a generic label never hands over the answer: such items sit out of the pool', () => {
+test('names as written: no label can hand over an answer, film titles still sit out, the bank reads as written (T043 hold-2)', () => {
   const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
   const content = loadTs('src/games/trivia-duel/engine/content.ts');
-  // Place names keep their own names (T234), so they never hand over an answer; company words still can.
+  // No label is swapped in (NAMES_IN_TEXT), so no label can give an answer away.
+  assert.equal(labels.NAMES_IN_TEXT, true);
   assert.equal(labels.labelLeaks('What kind of ride does Disney describe Space Mountain as?', 'A roller coaster in the dark'), false);
-  assert.equal(labels.labelLeaks('Which Imagineer tool sketches a ride first?', 'A park designer sketch'), true);
+  assert.equal(labels.labelLeaks('Which Imagineer tool sketches a ride first?', 'A park designer sketch'), false);
+  // A film title answer still sits out until Dustin rules on film names.
+  assert.equal(labels.mustDrop(['Which film inspired the ride?', 'Jaws']), true);
   assert.equal(labels.labelLeaks('Before it became a boat ride, what was Pirates of the Caribbean first planned as?', 'A walk-through wax museum'), false);
   const pool = [
     { id: 'leak', question: 'Which Imagineer tool sketches a ride first?', choices: ['A park designer sketch', 'A drop tower', 'A boat ride', 'A simulator'], correctIndex: 0, difficulty: 'easy', source: 'x' },
     { id: 'ok', question: 'Which year did Disneyland open its Space Mountain?', choices: ['1977', '1969', '1995', '1959'], correctIndex: 0, difficulty: 'easy', source: 'x' },
   ];
-  assert.deepEqual(plain(content.usablePool(pool).map((q) => q.id)), ['ok']);
-  // T043: the map's names, in plain grammar.
-  assert.equal(labels.genericize('Walt Disney’s private Disneyland apartment sits above which building?'), 'Walt’s private Disneyland apartment sits above which building?');
+  assert.deepEqual(plain(content.usablePool(pool).map((q) => q.id)), ['leak', 'ok']);
+  // T043: the bank's own words, as the map shows them.
+  assert.equal(labels.genericize('Walt Disney’s private Disneyland apartment sits above which building?'), 'Walt Disney’s private Disneyland apartment sits above which building?');
+  assert.equal(labels.genericize('Which Disneyland Railroad engine is named after a Disney animator instead of a railroad legend?'),
+    'Which Disneyland Railroad engine is named after a Disney animator instead of a railroad legend?');
   assert.equal(labels.genericize('Which Disney California Adventure land is newest?'), 'Which Disney California Adventure land is newest?');
   assert.equal(labels.genericize('Pirates of the Caribbean opened in 1967.'), 'Pirates of the Caribbean opened in 1967.');
 });

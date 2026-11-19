@@ -16,6 +16,7 @@ import YellowButton from '../YellowButton';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { joinTeam } from '../../api/endpoints/gym-battle';
 import { TEAM_STEP_ORDER, TEAM_STEP_VIBE, teamJoinOutcome } from './winTeamModel';
+import ForKeepsNote from './ForKeepsNote';
 
 export default function WinTeamStep({ reducedMotion, onDone }: {
   readonly reducedMotion: boolean;
@@ -62,7 +63,9 @@ export default function WinTeamStep({ reducedMotion, onDone }: {
       ))}
       {picked ? <View style={styles.cta}>
         <YellowButton text={stage === 'joining' ? 'One moment' : `Join ${teamName(picked)}`} disabled={stage === 'joining'} onPress={() => { void join(); }} />
-        <Text style={styles.keeps}>{stage === 'error' ? 'That did not go through. Tap Join again.' : 'This is for keeps.'}</Text>
+        {/* T186: the lock picture says "for keeps" before a word is read (the same note as the team screen). */}
+        {stage === 'error' ? <Text style={styles.keeps}>That did not go through. Tap Join again.</Text>
+          : <ForKeepsNote style={styles.keepsRow} />}
       </View> : null}
       <Pressable onPress={() => onDone(null)} hitSlop={10} accessibilityRole="button" accessibilityLabel="Later" style={styles.later}>
         <Text style={styles.laterText}>LATER</Text>
@@ -83,6 +86,7 @@ const styles = StyleSheet.create({
   rowVibe: { fontFamily: 'Knockout', fontSize: 14, color: '#3d5f8c' },
   cta: { alignSelf: 'stretch', marginTop: 10 },
   keeps: { fontFamily: 'Knockout', fontSize: 14, color: '#cdeaff', textAlign: 'center', marginTop: 2 },
+  keepsRow: { marginTop: 4 },
   later: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 16 },
   laterText: { fontFamily: 'Shark', fontSize: 17, color: '#ffffff' },
   done: { alignItems: 'center', paddingVertical: 18 },

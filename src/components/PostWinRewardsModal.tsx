@@ -48,6 +48,7 @@ import type { LimitedWindow } from '../models/task-type';
 import PerkChipRow from './coin/PerkChip';
 import { flyAfterTeamStep, type WinFlyWhen } from './rewards/teamOffer';
 import WinTeamStep from './rewards/WinTeamStep';
+import useResultInputLock from './rewards/useResultInputLock';
 import { WinOfferSlot } from './rewards/offerSlots';
 import RideFactLine from './collection/RideFactLine';
 
@@ -485,6 +486,7 @@ export default function PostWinRewardsModal({
     go?.();
   };
   const pressPrimary = () => {
+    if (!armedRef.current) return;
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     const go = () => leave('primary', () => {
       if (hasCoin && onNextCoin) onNextCoin(primary);
@@ -493,10 +495,17 @@ export default function PostWinRewardsModal({
     if (!throughTeam(go)) go();
   };
   const pressShelf = () => {
+    if (!armedRef.current) return;
     const go = () => leave('shelf', () => onViewCoin?.(false));
     if (!throughTeam(go)) go();
   };
   const closeCard = () => leave('close', onClose);
+  // Input lock (T046 hold-2): the same lock as every loss and try card. The buttons wake once the card
+  // has been up long enough and the taps have stopped, so a kid still tapping the game's holes never
+  // skips the card (or reaches the team step); the footer shows dimmed until then.
+  const { armed, lockedTap, dimStyle } = useResultInputLock(visible && caught);
+  const armedRef = useRef(armed);
+  armedRef.current = armed;
 
   const body = (
     <>
@@ -606,7 +615,7 @@ export default function PostWinRewardsModal({
       </ScrollView>
       {/* One big button and one quiet one, on a solid plate so they never sit on the dimmed tab bar. */}
       {panel === 'win' && <Animated.View testID="post-win-footer" style={[styles.footerPlate, { paddingBottom: Math.max(insets.bottom, 10) + 2 }, footerStyle]}>
-        <View style={[styles.footer, leaving && styles.footerLeaving]} pointerEvents={leaving ? 'none' : 'auto'}>
+        <Animated.View style={[styles.footer, leaving && styles.footerLeaving, dimStyle]} pointerEvents={leaving ? 'none' : 'auto'}>
           {primary.detail && <Text style={styles.nextDetail} numberOfLines={1}>{primary.detail}</Text>}
           <YellowButton text={winButtonLabel(primary, leaving)} onPress={pressPrimary} />
           {hasCoin && onViewCoin && (
@@ -620,8 +629,11 @@ export default function PostWinRewardsModal({
             <GameIcon name="check" size={14} />
             <Text style={styles.weekText}>{withNumberFont(weekLine)}</Text>
           </View>}
-        </View>
+        </Animated.View>
       </Animated.View>}
+      {/* While locked, a tap anywhere on the card is caught here and restarts the quiet wait (never a press). */}
+      {caught && !armed && <View testID="post-win-input-lock" style={StyleSheet.absoluteFill}
+        onStartShouldSetResponder={() => { lockedTap(); return true; }} />}
       </View>
       {visible && hasCoin && !caught && revealNow && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName} sight={sight}
         isNewCoin={isNewCoin} handoff={handoff}
@@ -641,7 +653,7 @@ export default function PostWinRewardsModal({
       onHide={() => { layer.onHidden(); handleHidden(); }}
       onDismiss={layer.onDismissed}
       onBackButtonPress={caught ? closeCard : undefined}
-      onBackdropPress={caught ? closeCard : undefined}
+      onBackdropPress={caught ? (armed ? closeCard : lockedTap) : undefined}
       backdropColor="#05346e"
       backdropOpacity={0.6}
     >

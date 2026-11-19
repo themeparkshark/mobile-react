@@ -50,10 +50,11 @@ test('T029 the loss card always shows the map as its small second button and its
   assert.match(modal, /lossPlan\.kind === 'ways' \? backToCard : \(\) => \{ void handleProtectedRetry\(\); \}/);
 });
 
-/* T046: a 600 ms input lock that mashing keeps extending. */
-test('T046 the result lock is 600 ms and a tap during it starts it again', () => {
-  assert.equal(mash.RESULT_INPUT_LOCK_MS, 600);
-  assert.equal(mash.nextMashUnlock(1600, 1200), 1800, 'a mash at 1200 pushes the wake time');
+/* T046: an input lock that mashing keeps extending (hold-2: longer than a steady tapper's gap, see fix-w3-hold-2). */
+test('T046 the result lock sleeps after the card appears and a tap during it restarts a quiet wait', () => {
+  assert.equal(mash.RESULT_INPUT_LOCK_MS, 1200);
+  assert.equal(mash.RESULT_QUIET_MS, 1500);
+  assert.equal(mash.nextMashUnlock(1600, 1200), 2700, 'a tap at 1200 pushes the wake time to 1200 + 1500');
   assert.equal(mash.nextMashUnlock(1600, 1700), 1600, 'a tap after the lock is a real press');
   const status = read('src/components/rewards/ChallengeStatusCard.tsx');
   assert.match(status, /onStartShouldSetResponder=\{\(\) => \{ lockedTap\(\); return true; \}\}/);

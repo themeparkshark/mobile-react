@@ -12,7 +12,16 @@
  * the real names.
  */
 
-export const NAMES_IN_TEXT = false;
+/**
+ * Fix round w3 hold-2 (T043, with the T234 decision default of Nov 18: plain names in trivia): the
+ * fact-checked bank is shown as its writers wrote it. The display-edge word swap was the root of every
+ * garbled line graders found ("named after a park company animator", "Walt World", "the studio Studios
+ * Florida", "park designering", "Mission: BREAKOUT! Opened"), and the map already shows the same plain
+ * names ("Walt Disney's Enchanted Tiki Room", "Universal Studios Florida"). Plain text only: no logo or
+ * look-alike art. Items whose answer is a film title still sit out (DROP_TERMS, mustDrop) until Dustin
+ * rules on film names. Set false to bring the old swap back.
+ */
+export const NAMES_IN_TEXT = true;
 
 /**
  * Place names (fix round w3 T234 and T043, decision default Nov 18): a park, land or ride keeps the plain
@@ -101,7 +110,7 @@ export function hasTrademarkName(text: string): boolean {
 
 /** An item that must sit out entirely (its answer is a film or brand title). */
 export function mustDrop(texts: readonly string[]): boolean {
-  if (NAMES_IN_TEXT) return false;
+  // Film titles are their own decision (19.2): they sit out whether or not place and company names show.
   return texts.some((t) => DROP_TERMS.some((d) => new RegExp(`\\b${d}\\b`).test(t)));
 }
 

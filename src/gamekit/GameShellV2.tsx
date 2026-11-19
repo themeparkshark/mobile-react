@@ -110,6 +110,7 @@ import { EASE } from '../ui/motionEasing';
 import { usePowerBudget } from '../power';
 import RideWinStamp from './results/RideWinStamp';
 import { RIDE_WIN_HANDOFF_MS } from './results/rideWinStampModel';
+import useResultInputLock from '../components/rewards/useResultInputLock';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 
@@ -1412,6 +1413,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const showSharedCard = !rideLoss && !rideWin && phase === 'results' && (!renderResults || !effectiveResult || (gameResults == null && (resultsSafe || resultsSafeRef.current || wrap != null)));
     sharedCardShownRef.current = showSharedCard;
     surfaceShownRef.current = gameResults != null || showSharedCard || rideWin;
+    // Input lock (T046 hold-2): the shared card's PLAY AGAIN sits where the targets were, so its buttons
+    // wake only once the card has been up and the taps have stopped (the same lock as the loss and win cards).
+    const resultsLock = useResultInputLock(showSharedCard);
 
     if (!visible) return null;
 
@@ -1623,7 +1627,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                     extras={resultExtras ?? resultsExtra ?? undefined}
                     extrasBeat={resultExtrasBeat}
                   >
-                  <View style={styles.actions}>
+                  <Animated.View style={[styles.actions, resultsLock.dimStyle]}>
                     <TouchableOpacity
                       style={[styles.sheetBtn, styles.primaryBtn, styles.bigBtn]}
                       onPress={playAgainFirst ? rematchRun : handleClaim}
@@ -1661,7 +1665,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
                         </Text>
                       </TouchableOpacity>
                     ) : null}
-                  </View>
+                    {/* While locked, a tap on the buttons is caught here and restarts the quiet wait (never a press). */}
+                    {!resultsLock.armed ? <View testID="results-input-lock" style={StyleSheet.absoluteFill}
+                      onStartShouldSetResponder={() => { resultsLock.lockedTap(); return true; }} /> : null}
+                  </Animated.View>
                   </ResultsCard>
                 </Animated.View>
               </Animated.View>

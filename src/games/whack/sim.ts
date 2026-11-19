@@ -29,7 +29,8 @@ import {
   METER_SPRINTER, MULT_CAP, PTS_ANGLER, PTS_BOSS_DEFEAT, PTS_BRUISER_HIT, PTS_BRUISER_KO, PTS_COIN_BUBBLE, PTS_CRIT,
   PTS_DOUBLE, PTS_FINN, PTS_GOLDEN, PTS_HELMET_POP, PTS_LAP_PER_SEC, PTS_PUFFER_POKE, PTS_SPRINTER, PTS_TENTACLE,
   QUICK_FRAC, REBONK_IGNORE_MS, TIER_AT, TIER_MULT, TWIN_WINDOW_MS, LOOKUP_TIER_COST_FROM, PERFECT_WINDOW_MS, PTS_PERFECT,
-  RIPE_STAGE_AT, RIPE_VALUE, SIXTEENTH_MS, resumeEaseExtension,
+  RIPE_STAGE_AT, RIPE_VALUE, SIXTEENTH_MS, resumeEaseExtension, RIDE_SLIP_MS, RIDE_SLIP_TAP_MS, RIDE_MASH_WINDOW_MS,
+  RIDE_MASH_SPAN_MS, RIDE_SLIP_TAP_MAX_MS,
 } from './waves';
 
 // Hole phases
@@ -169,6 +170,21 @@ export interface WhackSim {
   /** Bonks counted on the ride meter, and the bonks that win. */
   bonks: number;
   winBonks: number;
+  /**
+   * Bonk meter rides (hold-2, T040 regression): Butterfingers makes the fins slip until this game time.
+   * A slipped tap bonks nothing (a soft puff), and every tap while slipped keeps the fins slipping, so
+   * blind mashing never fills the meter; an aimed tap after a short stop bonks again.
+   */
+  slipUntil: number;
+  slips: number;
+  /** The last two misses on the bonk meter (whiffs and slipped taps): two inside RIDE_MASH_WINDOW_MS is a mash. */
+  m0: number;
+  m1: number;
+  /** The oldest of the last RIDE_MASH_SLIPS slipped taps: that many inside RIDE_MASH_SPAN_MS is a real mash. */
+  sl0: number;
+  sl1: number;
+  sl2: number;
+  sl3: number;
   win: boolean;
   winAt: number;
   // Stats
@@ -289,6 +305,14 @@ export function createSim(tl: Timeline, carry: BurstCarry = NO_CARRY, emit = tru
     bonkMeter: !!tl.ride && !!tl.bonkMeter,
     bonks: 0,
     winBonks: tl.winBonks > 0 ? tl.winBonks : 13,
+    slipUntil: -1,
+    slips: 0,
+    m0: -99999,
+    m1: -99999,
+    sl0: -99999,
+    sl1: -99999,
+    sl2: -99999,
+    sl3: -99999,
     win: false,
     winAt: -1,
     hits: 0,
@@ -665,10 +689,18 @@ export function simAdvanceTo(s: WhackSim, gt: number): void {
   if (gt > s.t) simAdvance(s, gt - s.t);
 }
 
+/** A miss on the bonk meter ride (a whiff or a slipped tap), for the mash window. */
+function noteMiss(s: WhackSim): void {
+  'worklet';
+  s.m0 = s.m1;
+  s.m1 = s.t;
+}
+
 function whiff(s: WhackSim, h: number): void {
   'worklet';
   s.whiffs += 1;
   const t = s.t;
+  if (s.bonkMeter) noteMiss(s);
   if (s.butterOn && t - s.w0 <= BUTTER_WINDOW_MS) {
     s.butters += 1;
     s.w0 = -99999;
@@ -676,6 +708,8 @@ function whiff(s: WhackSim, h: number): void {
     streakBreak(s);
     addMeter(s, METER_BUTTER);
     addCoin(s, COIN_BUTTER);
+    // Bonk meter rides: nothing takes a notch back, so the fins slip instead (see slipTap).
+    if (s.bonkMeter) s.slipUntil = t + RIDE_SLIP_MS;
     push(s, E_BUTTER, h, 0, 0);
     return;
   }
@@ -917,6 +951,18 @@ export function simTap(s: WhackSim, h: number, dx = 0, dy = 0, sub = 0): void {
   s.tapCount += 1;
   s.lastTap = s.t;
   if (hidden) return; // under a splat (swipe it) or an angler lock
+  if (s.bonkMeter && (s.t < s.slipUntil || s.t - s.m0 <= RIDE_MASH_WINDOW_MS)) {
+    // Slipped fins (T040 hold-2): while slipping, or right after two misses, the tap bonks nothing and
+    // keeps them slipping a little longer. It counts as a miss, so a mash in bursts never gets a clean tap.
+    s.slips += 1;
+    s.sl0 = s.sl1; s.sl1 = s.sl2; s.sl2 = s.sl3; s.sl3 = s.t;
+    // A real mash (4 slipped taps inside 2 s) needs a real stop before a tap bonks again.
+    const mashing = s.t - s.sl0 <= RIDE_MASH_SPAN_MS;
+    s.slipUntil = Math.max(s.slipUntil, s.t + (mashing ? RIDE_SLIP_TAP_MAX_MS : RIDE_SLIP_TAP_MS));
+    noteMiss(s);
+    push(s, E_BUTTER, h, 1, 0);
+    return;
+  }
   if (ph === P_TELL) {
     if (early) {
       s.anticipated += 1;

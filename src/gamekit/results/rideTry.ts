@@ -41,17 +41,20 @@ interface RunLike {
 const int = (value: unknown): number | null =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.floor(value)) : null;
 
+/**
+ * Every summary with a line is built here, so the words and the pip row always come from the same two
+ * numbers (hold-2 T053: the Whack bonk branch once returned the line with no pips).
+ */
+function counted(game: string, near: boolean, line: string, have: number, need: number): RideTrySummary {
+  return { game, near, line, have, need };
+}
+
 export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary | null {
   const meta = (run?.meta ?? {}) as Record<string, unknown>;
   const correct = int(meta.correctCount);
   if (correct !== null && (meta.mode === 'task' || meta.game === 'trivia')) {
     const right = Math.min(RIDE_TRIVIA_QUESTIONS, correct);
-    return {
-      game: 'trivia',
-      near: right === RIDE_TRIVIA_WIN - 1,
-      line: `${right} of ${RIDE_TRIVIA_QUESTIONS} right. ${RIDE_TRIVIA_WIN} wins the coin.`,
-      have: right, need: RIDE_TRIVIA_WIN,
-    };
+    return counted('trivia', right === RIDE_TRIVIA_WIN - 1, `${right} of ${RIDE_TRIVIA_QUESTIONS} right. ${RIDE_TRIVIA_WIN} wins the coin.`, right, RIDE_TRIVIA_WIN);
   }
   if (meta.game === 'memory') {
     const pairs = int(meta.pairs);
@@ -59,9 +62,9 @@ export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary 
     if (pairs === null || !total) return { game: 'memory', near: false, line: null };
     // A ride Ticket has three tries: the line tells the best one, never only a last try that found nothing.
     const best = Math.min(Math.max(pairs, int(meta.bestPairs) ?? 0), total);
-    if (best > pairs) return { game: 'memory', near: best / total >= NEAR_SHARE, line: `Best try: ${best} of ${total} pairs.`, have: best, need: total };
+    if (best > pairs) return counted('memory', best / total >= NEAR_SHARE, `Best try: ${best} of ${total} pairs.`, best, total);
     const got = Math.min(pairs, total);
-    return { game: 'memory', near: got / total >= NEAR_SHARE, line: `${got} of ${total} pairs.`, have: got, need: total };
+    return counted('memory', got / total >= NEAR_SHARE, `${got} of ${total} pairs.`, got, total);
   }
   if (meta.game === 'tap') {
     // T040: the bonks the meter showed (rules 5 bonk meter); older runs fall back to the percent.
@@ -69,12 +72,12 @@ export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary 
     const goal = int(meta.winBonks);
     if (bonksSeen !== null && goal) {
       const got = Math.min(bonksSeen, goal);
-      return { game: 'tap', near: got / goal >= NEAR_SHARE, line: `${got} of ${goal} bonks.` };
+      return counted('tap', got / goal >= NEAR_SHARE, `${got} of ${goal} bonks.`, got, goal);
     }
     const pct = int(meta.ridePercent);
     if (pct === null) return { game: 'tap', near: false, line: null };
     const bonks = Math.min(RIDE_WHACK_BONKS, Math.floor((Math.min(100, pct) * RIDE_WHACK_BONKS) / 100));
-    return { game: 'tap', near: pct >= NEAR_SHARE * 100, line: `${bonks} of ${RIDE_WHACK_BONKS} bonks.`, have: bonks, need: RIDE_WHACK_BONKS };
+    return counted('tap', pct >= NEAR_SHARE * 100, `${bonks} of ${RIDE_WHACK_BONKS} bonks.`, bonks, RIDE_WHACK_BONKS);
   }
   return null;
 }

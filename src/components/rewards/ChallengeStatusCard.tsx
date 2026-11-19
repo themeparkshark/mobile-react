@@ -17,7 +17,8 @@ import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { ResultPrimaryButton, ResultSecondaryButton } from '../../gamekit/results/ResultButtons';
 import SharkLoader from '../../ui/SharkLoader';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { RESULT_INPUT_LOCK_MS, nextMashUnlock } from './mashGuard';
+import { RESULT_INPUT_LOCK_MS } from './mashGuard';
+import useResultInputLock from './useResultInputLock';
 import TryPips from './TryPips';
 // Knockout draws 1 like a capital I: "1 Ticket used." read "I Ticket used." on the loss card.
 import { withNumberFont } from '../../ui/numberText';
@@ -43,9 +44,10 @@ export interface ChallengeStatusAction {
  */
 export const RETRY_TAP_GUARD_MS = 800;
 /**
- * Every button on a result or try card ignores taps for this long after the card appears (fix W3 T046),
- * and a tap that lands while it is locked starts the wait again (mashGuard.ts): a kid still mashing the
- * holes where the buttons now sit never skips the card or restarts the game.
+ * Every button on a result or try card sleeps for this long after the card appears (fix W3 T046), and
+ * a tap that lands while it is locked restarts a quiet wait longer than a steady tapper's gap
+ * (mashGuard.ts, hold-2): a kid still tapping where the buttons now sit never skips the card or spends
+ * a Ticket. The buttons show dimmed until they wake.
  */
 export { RESULT_INPUT_LOCK_MS } from './mashGuard';
 
@@ -98,27 +100,10 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
   const secondary = capsAction(secondaryIn);
   const quiet = capsAction(quietIn);
   const reduced = useReducedGameMotion();
-  // Input lock (T046): every button waits RESULT_INPUT_LOCK_MS after the card appears (a paid or free retry
-  // waits RETRY_TAP_GUARD_MS), and a tap while locked starts the wait again, so mashing never presses a button.
+  // Input lock (T046, hold-2): the buttons wake once the card has been up long enough and the taps have
+  // stopped (useResultInputLock); a paid or free retry sleeps at least RETRY_TAP_GUARD_MS.
   const lockMs = guardRetry ? Math.max(RETRY_TAP_GUARD_MS, RESULT_INPUT_LOCK_MS) : RESULT_INPUT_LOCK_MS;
-  const [armed, setArmed] = useState(false);
-  const unlockAt = useRef(0);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const arm = (delay: number) => {
-    unlockAt.current = Date.now() + delay;
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setArmed(true), delay);
-  };
-  useEffect(() => {
-    setArmed(false);
-    arm(lockMs);
-    return () => { if (timer.current) clearTimeout(timer.current); };
-  }, [lockMs]); // eslint-disable-line react-hooks/exhaustive-deps
-  const lockedTap = () => {
-    const now = Date.now();
-    const next = nextMashUnlock(unlockAt.current, now, RESULT_INPUT_LOCK_MS);
-    if (next !== unlockAt.current) { setArmed(false); arm(next - now); }
-  };
+  const { armed, lockedTap, dimStyle } = useResultInputLock(true, lockMs);
   // One button system with every results card: the big gold button first,
   // then white buttons under it (never a small text link, never above it).
   return (
@@ -143,11 +128,14 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
           {ticket > 0 && <TicketFlyBack to={ticketFlyTo ?? null} reduced={reduced} />}
           <Text style={styles.messageSmall}>{withNumberFont(message)}</Text>
         </View> : <Text style={styles.message}>{withNumberFont(message)}</Text>}
+        {/* Dimmed while locked, full once the buttons wake (never a silent dead tap). */}
+        <Animated.View style={[styles.buttons, dimStyle]}>
         {primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} note={primary.note} onPress={primary.onPress}
           disabled={primary.disabled || !armed} style={[styles.primary, primary.disabled && styles.dim]} />}
         {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled || !armed ? undefined : secondary.onPress}
           style={[styles.secondary, secondary.disabled && styles.dim]} />}
         {quiet && <ResultSecondaryButton label={quiet.label} onPress={armed ? quiet.onPress : undefined} style={styles.secondary} />}
+        </Animated.View>
         {extraRow ?? null}
         {footnotes?.map(note => (
           <View key={note.text} style={styles.footnote} accessible accessibilityLabel={note.text}>
@@ -212,6 +200,7 @@ const styles = StyleSheet.create({
   loader: { height: 110, alignSelf: 'stretch', justifyContent: 'center' },
   message: { fontFamily: 'Knockout', fontSize: 18, lineHeight: 23, color: '#ffffff', textAlign: 'center',
     marginBottom: 12 },
+  buttons: { alignSelf: 'stretch' },
   primary: { marginTop: 4 },
   secondary: { flex: 0, minHeight: 52 },
   dim: { opacity: 0.5 },

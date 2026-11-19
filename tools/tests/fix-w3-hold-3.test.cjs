@@ -32,10 +32,13 @@ test('regression: a server bank question plays exactly as written (no "The park 
   assert.ok(q.choices.includes('The Disney Studio'), q.choices.join(' / '));
   assert.equal(q.choices[q.correctIndex], 'The Disney Studio', 'the right answer reads as the server wrote it');
   assert.equal(q.fact, walt.fact, 'Walt Disney stays Walt Disney');
-  // The bundled pool (app copy) still goes through the labels: the IP rule for bundled lines is unchanged.
+  // The bundled pool (app copy) follows the one display switch (hold-2 T043, NAMES_IN_TEXT): names as written while
+  // it is on, the old word swap when it is off. Merge 2 kept both lanes: bank rows skip the labels either way.
   const content = loadTs('src/games/trivia-duel/engine/content.ts');
+  const labels = loadTs('src/games/trivia-duel/engine/labels.ts');
   const bundled = content.materializeQuestion('x-1', [{ id: 'x-1', question: 'Which Universal ride is it?', choices: ['A', 'B', 'C', 'D'], correctIndex: 0, difficulty: 'easy' }], 1);
-  assert.doesNotMatch(bundled.prompt, /Universal/);
+  if (labels.NAMES_IN_TEXT) assert.equal(bundled.prompt, 'Which Universal ride is it?');
+  else assert.doesNotMatch(bundled.prompt, /Universal/);
 });
 
 test('regression: Gill\'s badge in Beat the Buzzer never shows a seconds readout', () => {

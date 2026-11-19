@@ -52,7 +52,7 @@ test('cards without a paid retry keep their layout; every button waits out the s
   assert.equal(primary().props.disabled, true, 'a late game tap never presses the card');
   assert.equal(quiet().props.onPress, undefined, 'the map button waits too');
   assert.equal(app.timers.size, 1);
-  assert.equal([...app.delays.values()][0], 600);
+  assert.equal([...app.delays.values()][0], 1200, 'the lock sleeps longer than a steady tapper\'s gap (T046 hold-2)');
   const [[, arm]] = app.timers; arm(); app.render();
   assert.equal(primary().props.disabled, false);
   assert.equal(typeof quiet().props.onPress, 'function');

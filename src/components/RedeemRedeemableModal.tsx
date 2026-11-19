@@ -296,6 +296,8 @@ export default function RedeemRedeemableModal({
   const [lineStoryNext, setLineStoryNext] = useState(false);
   // TRY AGAIN names the lost attempt, so the server deals the same game.
   const retryOfRef = useRef<number | null>(null);
+  /** The game TRY AGAIN deals when the server switched it (T232), kept for the Setting Up card. */
+  const retryNextGameRef = useRef<string | null>(null);
   // First coin ever (team step after the win card): the player's coin count when the card opened.
   const rideCoinsBeforeRef = useRef<number | null>(null);
   const clearing = useRef<Promise<unknown> | null>(null);
@@ -788,6 +790,8 @@ export default function RedeemRedeemableModal({
     // A resolved loss is final. The next try needs a fresh request ID and
     // a new server-owned attempt; a returned Ticket or a free-try retry funds it.
     // It names the lost attempt, so TRY AGAIN deals the same game.
+    // hold-2 T232: keep the game TRY AGAIN deals for the Setting Up card (the lost attempt is cleared next).
+    retryNextGameRef.current = retryGameNameFor(attemptRef.current);
     retryOfRef.current = attemptRef.current?.id ?? retryOfRef.current;
     try {
       await clearAttemptCheckpoint();
@@ -834,7 +838,8 @@ export default function RedeemRedeemableModal({
   // retry_of in be-core-loop): on a server without it, TRY AGAIN may deal another game, so the line just
   // says try again.
   // T232: when the server says TRY AGAIN deals another game (retry_game), the card names it.
-  const retryGameName = retryGameNameFor(attemptRef.current);
+  // The Setting Up card shows after TRY AGAIN cleared the lost attempt, so it reads the name kept at the press.
+  const retryGameName = flowState === 'retrying' ? retryNextGameRef.current : retryGameNameFor(attemptRef.current);
   const lostCopy = lostTryCopy({ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,
     retryOffered: canOfferRetry, near: rideTry?.near === true, sameGame: playFlagsNow().retrySameGame,
     rescueSource: redeemable?.rescue_pass_source, nextGame: retryGameName });

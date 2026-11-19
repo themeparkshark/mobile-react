@@ -59,7 +59,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
   // Shared app hooks that every poll uses run for real in the component's realm.
   const realModules = { countText: 'src/helpers/countText.ts', useLivePoll: 'src/hooks/useLivePoll.ts', livePollPolicy: 'src/hooks/livePollPolicy.ts',
     gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts', appActive: 'src/hooks/appActive.ts',
-    matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts', gameMoments: 'src/gamekit/core/gameMoments.ts' };
+    matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts', gameMoments: 'src/gamekit/core/gameMoments.ts',
+    // The one result input lock (T046 hold-2) runs for real: its timer is the card's arm timer.
+    useResultInputLock: 'src/components/rewards/useResultInputLock.ts' };
   // A caller may run more of its own modules for real in the component's realm (options.realModules, by base name).
   Object.assign(realModules, options.realModules ?? {});
   const callerReal = new Set(Object.keys(options.realModules ?? {}));
