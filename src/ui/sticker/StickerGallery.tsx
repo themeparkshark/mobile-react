@@ -173,7 +173,7 @@ function TextSection() {
         </View>
         <Caps>wraps to two lines (220 pt box)</Caps>
         <View style={{ width: 220, borderWidth: 1, borderColor: SHADE.spotBlueLine, borderStyle: 'dashed' }}>
-          <StickerText size={30} spacing={0.09} lines={2} fit={false}>Disneyland Park Coin Caught</StickerText>
+          <StickerText size={30} spacing={0.09} lines={2} fit={false}>Welcome to Disneyland Park</StickerText>
         </View>
       </World>
     </Section>
@@ -210,7 +210,7 @@ function TextCandidatesSection() {
   );
 }
 
-const WORDS = ['Coin caught!', 'Daily Chest', 'Rewards', 'Walt Statue', 'Shark Shop', 'Level 7', 'Disneyland', 'Play!', 'Starter pack', 'Ride coins'];
+const WORDS = ['Coin caught!', 'Daily Chest', 'Rewards', 'Walt Statue', 'Shark Shop', 'Level 7', 'Disneyland', 'Play!', 'Starter pack', 'Coin shelf'];
 
 declare global {
   // eslint-disable-next-line no-var
