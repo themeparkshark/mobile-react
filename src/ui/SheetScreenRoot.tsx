@@ -9,6 +9,7 @@
  */
 import { useSyncExternalStore, type ReactNode } from 'react';
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import { pressTrace } from './pressTrace';
 import { overlayStack } from './sheetHost';
 import { accessibleFromChain, fabricFindNodeAtPoint, shadowOf, tapThrough } from './tapThrough';
 
@@ -57,7 +58,11 @@ export default function SheetScreenRoot({ children }: { readonly children?: Reac
   return (
     <View style={styles.root} collapsable={false} accessibilityElementsHidden={hidden}
       importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
-      onTouchStart={(event: TouchEvent) => noteTouch(event.nativeEvent.pageX, event.nativeEvent.pageY)}>
+      onTouchStart={(event: TouchEvent) => {
+        noteTouch(event.nativeEvent.pageX, event.nativeEvent.pageY);
+        // The phase log's first JS touch for a press on the screen itself (a sheet's own touches log leavingTap).
+        pressTrace('root.touch', () => `x=${Math.round(event.nativeEvent.pageX)} y=${Math.round(event.nativeEvent.pageY)}`);
+      }}>
       {children}
     </View>
   );
