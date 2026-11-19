@@ -136,3 +136,12 @@ test('N04: the kept board resets under an instant ticket tear that hands over on
 test('N04/T036: a just-started try never refreshes the player (an app-wide re-render at the hand-over)', () => {
   assert.match(modal, /if \(attempt\.status !== 'started'\) refreshPlayer\?\.\(\)\.then\(fresh => \{/);
 });
+
+test('T051: the striped tiles before the question take a tap with a wiggle, never a silent drop', () => {
+  assert.match(trivia, /onTapUI=\{onPreviewTapUI\}[^\n]*wiggleKey=\{previewWiggle\[i\] \?\? 0\}[^\n]*disabled=\{!preview\} \/>/);
+  assert.match(trivia, /pointerEvents=\{preview \? 'box-none' : 'none'\}/);
+  assert.match(trivia, /const onPreviewTapUI = useCallback\(\(i: number\) => \{\n\s+'worklet';\n\s+runOnJS\(previewTap\)\(i\);/);
+  // Once the question shows, the clock gate decides (w4): early taps wiggle, open taps lock.
+  const gate = fs.readFileSync('src/games/trivia-duel/engine/tapGate.ts', 'utf8');
+  assert.match(gate, /if \(phase === TAP_PH\.read\) return 'early';/);
+});

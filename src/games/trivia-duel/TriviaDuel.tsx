@@ -658,6 +658,18 @@ export function TriviaDuel(props: TriviaDuelProps) {
     }
   }, [qc, dispatch]);
 
+  // w5 T051: a tap on the striped tiles shown before the question (the opening and a repeat start) wiggles that tile,
+  // the same answer as a tap before the tiles open: nothing is spent, the next tap counts.
+  const [previewWiggle, setPreviewWiggle] = useState<number[]>([0, 0, 0, 0]);
+  const previewTap = useCallback((i: number) => {
+    pressTrace('trivia.tap', () => `early-preview ${i}`);
+    setPreviewWiggle((w) => w.map((v, k) => (k === i ? v + 1 : v)));
+  }, []);
+  const onPreviewTapUI = useCallback((i: number) => {
+    'worklet';
+    runOnJS(previewTap)(i);
+  }, [previewTap]);
+
   const onBuzzUI = useCallback(() => {
     runOnUI(() => {
       'worklet';
@@ -1986,11 +1998,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
 
           {/* Answer zone: the bottom 45%, every target at least 62pt tall. */}
           {((preview && visible) || phase === 'finalIntro') ? (
-            <View style={[styles.zone, { top: ZONE_TOP, height: ZONE_H, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2, opacity: 0.6 }]} pointerEvents="none">
+            <View style={[styles.zone, { top: ZONE_TOP, height: ZONE_H, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2, opacity: 0.6 }]} pointerEvents={preview ? 'box-none' : 'none'}>
               <View style={[styles.tiles, { flexDirection: 'row' }]}>
                 {[0, 1, 2, 3].map((i) => (
                   <View key={i} style={{ marginBottom: 12, marginRight: i % 2 === 0 ? 12 : 0 }}>
-                    <Tile index={i} label="" state="down" width={(tileGeom.zoneW - 12) / 2} height={96} onTapUI={onTapUI} flipDelay={0} heads={[]} share={-1} wiggleKey={0} reducedMotion={reducedMotion} fontSize={18} chomped={false} disabled />
+                    {/* w5 T051: the striped tiles before the question takes a tap too: it wiggles (never a silent drop). */}
+                    <Tile index={i} label="" state="down" width={(tileGeom.zoneW - 12) / 2} height={96} onTapUI={onPreviewTapUI} flipDelay={0} heads={[]} share={-1} wiggleKey={previewWiggle[i] ?? 0} reducedMotion={reducedMotion} fontSize={18} chomped={false} disabled={!preview} />
                   </View>
                 ))}
               </View>
