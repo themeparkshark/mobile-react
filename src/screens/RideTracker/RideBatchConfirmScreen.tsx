@@ -288,7 +288,7 @@ export default function RideBatchConfirmScreen() {
         </View>
         <Text style={batchStyles.description}>
           We noticed {rides.length} possible ride{rides.length !== 1 ? 's' : ''} from your location.
-          Choose the ones you actually rode for your journal.
+          Choose the ones you actually rode for your Ride Tracker.
         </Text>
 
         <FlatList

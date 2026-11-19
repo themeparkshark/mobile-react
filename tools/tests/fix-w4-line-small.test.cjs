@@ -57,6 +57,8 @@ test('T088: one name (Ride Tracker), the timed wait is said not asked, and the r
     'src/components/RideTracker/ShareableRideCard.tsx', 'src/screens/ParkDayRecapCard.tsx', 'src/services/rideLogOutbox.ts',
     'src/screens/RideTracker/rideJournalModel.ts']) {
     assert.doesNotMatch(visible(file), /['">`][^'"`\n]*\b[Jj]ournal\b|JOURNAL/, `${file} never says journal on screen`);
+    // JSX text on its own line (no quote before it), as the batch confirm had.
+    assert.doesNotMatch(visible(file), /^\s+[A-Z][^<>{}=\n]*\b[Jj]ournal\b[^<>{}=\n]*$/m, `${file} JSX text never says journal`);
   }
   const log = read('src/screens/RideTracker/RideLogScreen.tsx');
   assert.match(log, /\{waitTimedByLinePlay \? \(\n\s+<View style=\{\[s\.input, s\.waitTimedRow\]\}/);
