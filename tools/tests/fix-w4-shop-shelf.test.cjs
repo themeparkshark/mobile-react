@@ -181,3 +181,9 @@ test('T158: the JUST ONCE sticker sits on the label, not on the round icon', () 
   assert.doesNotMatch(round, /StarterSticker/);
   assert.match(label, /StarterSticker/);
 });
+
+test('Supplies on iPhone SE: the Starter Frame line is short enough for two lines', () => {
+  const card = read('src/components/money/BundleCard.tsx');
+  assert.match(card, /\{`Plus the \$\{product\.frame\.name\}`\}/);
+  assert.doesNotMatch(card, /for your shark`\}<\/Text>/);
+});

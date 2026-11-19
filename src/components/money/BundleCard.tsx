@@ -38,7 +38,8 @@ export default function BundleCard({ product, price, busy, disabled, onBuy, band
               <View style={st.frameRow} accessible accessibilityLabel={`Plus the ${product.frame.name}, shown on your shark.`}>
                 <MemberFlex inventory={player?.inventory as InventoryType | undefined} frame={product.frame.key}
                   size={compact ? 50 : 66} still />
-                <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid} numberOfLines={2}>{`Plus the ${product.frame.name} for your shark`}</Text>
+                {/* Fix w4: the short line fits two lines on iPhone SE (the long one ended in "for you..."); the picture shows it on the shark. */}
+                <Text maxFontSizeMultiplier={MAX_FONT} style={st.kid} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.85}>{`Plus the ${product.frame.name}`}</Text>
               </View>
             )}
           </View>
