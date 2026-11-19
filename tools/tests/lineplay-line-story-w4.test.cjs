@@ -234,3 +234,16 @@ test('T077: authored line stories head their page with the ride\'s land, like ev
     assert.equal(chapter.parkLabel, rideLands.rideLand(park, name).toUpperCase(), `${name} at park ${park}`);
   }
 });
+
+test('T075: no story clue name tells a player to read or decode, since a kid plays it as a picture puzzle', () => {
+  const rides = [[2, 'space-mountain-2', 'Space Mountain'], [8, 'space-mountain-8', 'Space Mountain'],
+    [8, 'jungle-cruise-8', 'Jungle Cruise'], [8, 'pirates-of-the-caribbean-8', 'Pirates of the Caribbean'],
+    [2, 'haunted-mansion-2', 'Haunted Mansion'], [8, 'haunted-mansion-8', 'Haunted Mansion'],
+    [8, 'big-thunder-mountain-railroad-8', 'Big Thunder Mountain Railroad'], [8, 'autopia-8', 'Autopia']];
+  for (const [park, slug, name] of rides) {
+    for (let episode = 0; episode < 3; episode += 1) {
+      const chapter = chapters.getLinePlayChapter(park, slug, name, episode, 1);
+      for (const mission of chapter.missionNames.slice(0, 2)) assert.doesNotMatch(mission, /^(Read|Decode)\b/, `${name}: ${mission}`);
+    }
+  }
+});
