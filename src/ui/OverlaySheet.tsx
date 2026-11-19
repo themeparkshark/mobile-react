@@ -236,7 +236,11 @@ export default function OverlaySheet(props: DoorModalProps) {
       <View pointerEvents="none" style={styles.anchor} collapsable={false}
         ref={(host: unknown) => { anchor.current = host; if (host && !nested) tapThrough.setScreenRoot(internalHandle(host)); }} />
       <FullWindowOverlayNative style={[styles.overlay, { width, height }, place]}>
-        <Animated.View collapsable={false} testID={props.testID} style={[StyleSheet.absoluteFill, enter, released && styles.released]}
+        {/* Released: hidden by a plain view's style. Reanimated re-applies the leave's last animated opacity on every
+            commit, so with a stalled frame clock the sheet would stay drawn mid-fade while it let touches through
+            (W4-SMOKE-2: a tap through a gate a kid could still see). */}
+        <View collapsable={false} style={[StyleSheet.absoluteFill, released && styles.released]} pointerEvents={released ? 'none' : 'box-none'}>
+        <Animated.View collapsable={false} testID={props.testID} style={[StyleSheet.absoluteFill, enter]}
           // Up or leaving, the sheet takes every touch over the window (a native sheet did); leaving, its buttons rest.
           // Released (invisible, about to leave the tree), every touch goes to what is under it.
           pointerEvents={released ? 'none' : 'auto'}
@@ -259,6 +263,7 @@ export default function OverlaySheet(props: DoorModalProps) {
             </ScrollView.Context.Provider>
           </VirtualizedListContextResetter>
         </Animated.View>
+        </View>
       </FullWindowOverlayNative>
     </>
   );

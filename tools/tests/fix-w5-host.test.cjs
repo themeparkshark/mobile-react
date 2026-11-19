@@ -188,3 +188,10 @@ test('N01 on every sibling: react-native-modal\'s own leave reaches the door as 
   const rnm = fs.readFileSync(path.join(root, 'node_modules/react-native-modal/dist/modal.js'), 'utf8');
   assert.match(rnm, /React\.createElement\(Modal, Object\.assign\(\{ transparent: true, animationType: 'none', visible: this\.state\.isVisible/, 'the render this wraps');
 });
+
+test('W4-SMOKE-2: a released sheet is hidden by a plain view, never by the animated style a stalled frame clock keeps mid-fade', () => {
+  const sheet = src('src/ui/OverlaySheet.tsx');
+  assert.match(sheet, /<View collapsable=\{false\} style=\{\[StyleSheet\.absoluteFill, released && styles\.released\]\} pointerEvents=\{released \? 'none' : 'box-none'\}>/);
+  assert.doesNotMatch(sheet, /enter, released && styles\.released/, 'the release is not on the Reanimated view');
+  assert.match(sheet, /released: \{ opacity: 0 \}/);
+});
