@@ -13,7 +13,7 @@ const SOFT = require('../../../assets/images/reveal/soft-spot.webp');
 const OUT = Easing.bezier(...BEZIER.out);
 const BREATHE = Easing.bezier(...BEZIER.inOut);
 /** Where the glow rests after its two breaths. */
-export const GLOW_REST = 0.75;
+export const GLOW_REST = 0.95;
 
 export default memo(function NewCoinGlow({ size, reduced }: { readonly size: number; readonly reduced: boolean }) {
   const glow = useSharedValue(reduced ? GLOW_REST : 0);
