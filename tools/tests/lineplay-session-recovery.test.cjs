@@ -1172,3 +1172,22 @@ test('T081: the server saying NOT_A_QUEUE_RIDE (B04) ends the timed wait on the 
   assert.equal(snap.rewardConnectionIssue, null, 'not a network problem');
   session.dispose();
 });
+
+test('Parade Beat on the Games sheet: picking it adds one round once, never a second copy', async () => {
+  const { Session } = makeHarness(null, server, null);
+  const session = new Session();
+  const sample = { latitude: 1, longitude: 2, timestamp: Date.now() };
+  await session.start(ride, sample, 12);
+  assert.ok(!session.snapshot().playlist.some(item => item.kind === 'minigame' && item.gameId === 'timing'), 'not dealt');
+  const added = session.addPracticeGame('timing');
+  assert.equal(added.gameId, 'timing');
+  assert.equal(session.snapshot().playlist.filter(item => item.kind === 'minigame' && item.gameId === 'timing').length, 1);
+  assert.equal(session.addPracticeGame('timing').id, added.id, 'the same page the second time');
+  assert.equal(session.snapshot().playlist.filter(item => item.kind === 'minigame' && item.gameId === 'timing').length, 1);
+  session.pause('manual');
+  assert.equal(session.addPracticeGame('banana'), null, 'only while the wait is active');
+  session.dispose();
+  const screen = fs.readFileSync(path.join(root, 'src/screens/LinePlay/LinePlayScreen.tsx'), 'utf8');
+  assert.match(screen, /if \(index === ADD_PARADE_BEAT\) \{\n\s+const added = session\.addPracticeGame\(PARADE_BEAT_GAME\);/);
+  assert.match(screen, /arcadeBase\.some\(choice => choice\.gameId === PARADE_BEAT_GAME\) \? arcadeBase/);
+});

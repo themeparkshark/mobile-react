@@ -150,6 +150,9 @@ const ARCADE_PRESENT_FRAMES = 3;
 const CREW_BAND_ROW = 44;
 const QUEUE_RECAP_SHARK = require('../../../assets/images/screens/lineplay/queue-recap-shark.png');
 
+/** Parade Beat on the Games sheet (T: parade-beat-lineplay): not dealt by the playlist, added when picked. */
+const PARADE_BEAT_GAME = 'timing' as const;
+const ADD_PARADE_BEAT = -1;
 const GAME_NAMES: Record<string, string> = {
   tap: 'Whack-a-Shark', timing: 'Parade Beat', memory: 'Memory Match',
   trivia: 'Ride Trivia', shark: 'Sharky Swim', banana: 'Banana Basket', current: 'Current Quest',
@@ -1124,8 +1127,12 @@ export default function LinePlayScreen() {
       bestStars: snapshot.gameBestStars[choice.gameId as keyof typeof snapshot.gameBestStars],
     }));
   // NEW only on games this account has never played, two at most (all six NEW meant nothing).
-  const arcadeNew = arcadeNewFlags(arcadeBase, playedEver);
-  const arcadeChoices = arcadeBase.map((choice, i) => ({ ...choice, isNew: arcadeNew[i] }));
+  // Parade Beat is on the Games sheet in every wait (the playlist does not deal it): picking it adds its round.
+  const arcadeWithParade = arcadeBase.some(choice => choice.gameId === PARADE_BEAT_GAME) ? arcadeBase
+    : [...arcadeBase, { id: `extra-${PARADE_BEAT_GAME}`, title: GAME_NAMES[PARADE_BEAT_GAME], gameId: PARADE_BEAT_GAME,
+      index: ADD_PARADE_BEAT, completed: false, bestStars: snapshot.gameBestStars[PARADE_BEAT_GAME] }];
+  const arcadeNew = arcadeNewFlags(arcadeWithParade, playedEver);
+  const arcadeChoices = arcadeWithParade.map((choice, i) => ({ ...choice, isNew: arcadeNew[i] }));
   showToastRef.current = showToast;
 
   const somethingAsks = groupPlay.sheetOpen || arcadeOpen || projectOpen || waitEndPrompt != null || boardingAsk || leftLineWrapUp || resuming ||
@@ -1950,6 +1957,13 @@ export default function LinePlayScreen() {
           if (next) handlePlayGame(next);
         }}
         onChoose={(index) => {
+          if (index === ADD_PARADE_BEAT) {
+            const added = session.addPracticeGame(PARADE_BEAT_GAME);
+            if (!added) return;
+            queuedArcadeGame.current = added;
+            setArcadeOpen(false);
+            return;
+          }
           const page = activityPages[index];
           if (page?.kind !== 'minigame') return;
           queuedArcadeGame.current = page;

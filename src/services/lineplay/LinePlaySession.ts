@@ -1442,6 +1442,24 @@ export class LinePlaySession {
     this.emit();
   }
 
+  /**
+   * A game the Games sheet offers that this wait's playlist does not deal (Parade Beat): one round of it joins the
+   * playlist the first time it is picked, then it is an ordinary page. Rewards stay the server's verified time.
+   */
+  addPracticeGame(gameId: MiniGameId): Extract<ActivityItem, { kind: 'minigame' }> | null {
+    if (this.state !== 'active') return null;
+    const existing = this.playlist.find((item): item is Extract<ActivityItem, { kind: 'minigame' }> =>
+      item.kind === 'minigame' && item.gameId === gameId);
+    if (existing) return existing;
+    if (this.playlist.length >= MAX_SESSION_ACTIVITY_SLOTS) return null;
+    const item: Extract<ActivityItem, { kind: 'minigame' }> = { kind: 'minigame', id: `extra-${gameId}`, gameId,
+      seed: (this.playlistSeedOffset + this.playlist.length * 31) % 100_000 };
+    this.playlist = appendBeforeCrewPrompts(this.playlist, [item]);
+    this.persistCheckpoint();
+    this.emit();
+    return item;
+  }
+
   /** Adds replayable queue activities; the server still awards only verified nearby time. */
   addMoreRounds(): string | null {
     if (this.state !== 'active') return null;
