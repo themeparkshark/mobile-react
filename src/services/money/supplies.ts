@@ -86,7 +86,7 @@ export function useSupplies(enabled = true): SuppliesState {
 
 const ORDER: (keyof ShopGrants)[] = ['tickets', 'coins', 'energy', 'rescue_passes'];
 const WORDS: Record<keyof ShopGrants, [string, string]> = {
-  tickets: ['ticket', 'tickets'], coins: ['Shark Coin', 'Shark Coins'], energy: ['energy', 'energy'], rescue_passes: ['extra try', 'extra tries'],
+  tickets: ['Ticket', 'Tickets'], coins: ['Shark Coin', 'Shark Coins'], energy: ['Energy', 'Energy'], rescue_passes: ['extra try', 'extra tries'],
 };
 
 /** "15 tickets, 1,500 Shark Coins and 2 extra tries" (plus any extra thing, e.g. "the Starter Frame", in the same list). */

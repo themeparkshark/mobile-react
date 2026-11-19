@@ -426,8 +426,8 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
 function heroLook(kind: HeroKind | 'trip', product: ShopProduct): { band: string; art: PackArtKey } {
   if (kind === 'starter') return { band: 'STARTER PACK · JUST ONCE', art: 'chest' };
   if (kind === 'next') return { band: `YOUR NEXT PACK · ${product.title.toUpperCase()}`, art: 'bag' };
-  if (kind === 'parkday') return { band: `${product.title.toUpperCase()} · ONE A DAY`, art: 'bag' };
-  return { band: `${product.title.toUpperCase()} · FOR A PARK TRIP`, art: 'bag' };
+  // Plain pack names (T228): no "one a day" limit words on a band a kid reads.
+  return { band: product.title.toUpperCase(), art: 'bag' };
 }
 
 /**

@@ -136,7 +136,8 @@ test('Supplies: every purchase door is listed whenever its switch is on, regardl
   // One word per thing: held passes are Extra tries; the Park Day Pack has its own heading; worth only at the gate.
   assert.match(shop, /key === 'rescue' \? 'Extra tries'/);
   assert.match(shop, /'EXTRA TRY' : 'EXTRA TRIES'/);
-  assert.match(shop, /ONE A DAY/, 'the Park Day Pack says it is one a day');
+  // Hold-fix 3 (T228 decision: plain pack names): the band is the pack's name, never "ONE A DAY".
+  assert.doesNotMatch(shop, /ONE A DAY|FOR A PARK TRIP/);
   assert.doesNotMatch(read('src/components/money/BundleCard.tsx'), /\bWorth \$|worth\.worth\}/, 'Worth $X lives only in the grown-up sheet');
   assert.match(read('src/services/money/supplies.ts'), /rescue_passes: \['extra try', 'extra tries'\]/);
 });

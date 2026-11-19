@@ -83,8 +83,8 @@ test('VIP numbers: per month for yearly, the win line uses the server multiplier
 test('top-up headlines say what is missing in plain words', () => {
   assert.equal(copy.topUpHeadline(120, 'coins', 'gear'), 'Need 120 more Shark Coins for this?');
   assert.equal(copy.topUpHeadline(830, 'coins', 'mystery-box'), 'Need 830 more Shark Coins for this box?');
-  assert.equal(copy.topUpHeadline(1, 'tickets', 'ride'), 'Out of tickets?');
-  assert.equal(copy.topUpHeadline(40, 'energy', 'level-up'), 'Need 40 more energy to level up?');
+  assert.equal(copy.topUpHeadline(1, 'tickets', 'ride'), 'Out of Tickets?');
+  assert.equal(copy.topUpHeadline(40, 'energy', 'level-up'), 'Need 40 more Energy to level up?');
 });
 
 test('Shark Pass words: the real last day, reward names and the pass row summed from the server', () => {

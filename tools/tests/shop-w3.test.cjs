@@ -72,9 +72,10 @@ test('T155/T221: first look is the Starter Pack, one Ticket row and VIP; the res
   assert.equal(p.handoff, null, 'no door focus: no hand-off card');
   assert.equal(p.hero.kind, 'starter');
   assert.deepEqual(ids([p.hero.product]), ['pack.starter']);
-  assert.deepEqual(ids(p.ticketRow), ['deal.daily', 'tickets.5', 'tickets.12'], 'one row of at most 3');
+  // Hold-fix 3 (T221): 5 for $0.99 never sits beside today's 9 for $0.99; bigger price always gives more.
+  assert.deepEqual(ids(p.ticketRow), ['deal.daily', 'tickets.12', 'tickets.25'], 'one row of at most 3');
   assert.deepEqual(ids(p.more.bundles), ['pack.parkday', 'pack.parktrip']);
-  assert.deepEqual(p.more.packs.map(s => [s.key, ids(s.packs)]), [['tickets', ['tickets.25']], ['coins', ['coins.500', 'coins.1200', 'coins.3250']], ['rescue', ['rescue.3']]]);
+  assert.deepEqual(p.more.packs.map(s => [s.key, ids(s.packs)]), [['coins', ['coins.500', 'coins.1200', 'coins.3250']], ['rescue', ['rescue.3']]]);
   assert.ok(1 + p.ticketRow.length <= 4, 'a first look holds 4 price points, not 13');
   const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
   assert.doesNotMatch(shop, /scrollTo\(|onSection\(/, 'Supplies never opens scrolled to a section');
@@ -89,12 +90,13 @@ test('T154: the out-of-Tickets door opens on a hand-off card (smallest Ticket pa
   const p = plan({ focus: 'tickets', wallet: { tickets: 0 } });
   assert.equal(p.handoff.need, 'tickets');
   assert.equal(p.handoff.out, true);
-  assert.deepEqual(ids([p.handoff.pack]), ['tickets.5']);
+  // Hold-fix 3 (T221): today's 9 Tickets for $0.99 is the smallest buy, so the hand-off shows it, not 5 for $0.99.
+  assert.deepEqual(ids([p.handoff.pack]), ['deal.daily']);
   assert.equal(m.handoffHead('tickets', true), 'Your shark is out of Tickets');
   assert.equal(m.handoffHead('tickets', false), 'Need more Tickets?');
   assert.equal(m.handoffFreeWay('tickets'), 'Or free: 3 treats at home = 1 Ticket');
   assert.equal(p.hero.kind, 'starter', 'Starter Pack first while unbought');
-  assert.ok(!ids(p.ticketRow).includes('tickets.5'), 'the hand-off pack is not shown twice');
+  assert.ok(!ids(p.ticketRow).includes('deal.daily'), 'the hand-off pack is not shown twice');
   const after = plan({ products: boughtStarter(), focus: 'tickets', wallet: { tickets: 0 } });
   assert.deepEqual(ids([after.hero.product]), ['pack.parkday'], 'after the Starter Pack, the out-of-Tickets door shows the Park Day Pack');
   const coins = plan({ focus: 'coins', wallet: { coins: 10 } });

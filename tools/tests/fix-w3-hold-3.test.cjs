@@ -65,3 +65,56 @@ test('T118: after the Daily 3 chest opens, the level chest waits for the next op
   assert.match(hook, /if \(!view\) setChestThisVisit\(false\);\s*else if \(view\.k === 'reveal' && view\.rewards\) setChestThisVisit\(true\);/);
   assert.match(hook, /chestOpenedThisVisit: chestThisVisit,/);
 });
+
+const P = (id, section, grants, extra = {}) => ({ product_id: `com.themeparkshark.app.${id}`, section, grants, available: true, title: id, badge: null, limit: null, deal_key: null, unavailable_reason: null, ...extra });
+// The catalog :8012 serves on Nov 18 (be-economy dropped tickets.12 and tickets.25).
+const LIVE = [
+  P('pack.starter', 'featured', { tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }, { limit: 'once', title: 'Starter Pack' }),
+  P('deal.daily', 'featured', { tickets: 9 }, { limit: 'daily', deal_key: 'ticket_stack', title: 'Ticket Stack' }),
+  P('pack.parkday', 'featured', { tickets: 20, coins: 500, energy: 200, rescue_passes: 2 }, { limit: 'daily', title: 'Park Day Pack' }),
+  P('pack.parktrip', 'featured', { tickets: 60, coins: 1500, energy: 400, rescue_passes: 6 }, { limit: 'daily', title: 'Park Trip Pack' }),
+  P('tickets.5', 'tickets', { tickets: 5 }),
+  P('coins.500', 'coins', { coins: 500 }), P('rescue.3', 'rescue', { rescue_passes: 3 }),
+];
+const USD = { 'pack.starter': 1.99, 'deal.daily': 0.99, 'pack.parkday': 2.99, 'pack.parktrip': 5.99, 'tickets.5': 0.99, 'coins.500': 0.99, 'rescue.3': 0.99 };
+const PRICES = Object.fromEntries(Object.entries(USD).map(([k, v]) => [`com.themeparkshark.app.${k}`, { price: `$${v.toFixed(2)}`, amount: v }]));
+const ids = list => Array.from(list, p => p.product_id.replace('com.themeparkshark.app.', ''));
+
+test('T221: the Ticket row never shows 9 Tickets for $0.99 next to 5 Tickets for $0.99', () => {
+  const m = loadTs('src/services/money/suppliesPlan.ts');
+  const plan = over => m.planSupplies({ products: LIVE, prices: PRICES, focus: null, wallet: { tickets: 0 }, priced: () => true, ...over });
+  const p = plan();
+  assert.deepEqual(ids(p.ticketRow), ['deal.daily']);
+  const onPage = [...p.ticketRow, ...p.more.bundles, ...p.more.deals, ...p.more.packs.flatMap(s => s.packs)];
+  assert.ok(!ids(onPage).includes('tickets.5'), 'the outdone pack is not anywhere on the page today');
+  // Every Tickets-only card on the page: a higher price always gives more Tickets.
+  const ticketCards = onPage.filter(x => Object.keys(x.grants).every(k => k === 'tickets')).sort((a, b) => USD[ids([a])[0]] - USD[ids([b])[0]]);
+  for (let i = 1; i < ticketCards.length; i++) assert.ok(ticketCards[i].grants.tickets > ticketCards[i - 1].grants.tickets);
+  // The out-of-Tickets door: the smallest buy is today's 9 for $0.99.
+  assert.deepEqual(ids([plan({ focus: 'tickets' }).handoff.pack]), ['deal.daily']);
+  // Bought today (or a coin deal day): 5 Tickets for $0.99 comes back.
+  const bought = LIVE.map(x => (x.deal_key ? { ...x, available: false, unavailable_reason: 'bought_today' } : x));
+  assert.deepEqual(ids(plan({ products: bought }).ticketRow), ['deal.daily', 'tickets.5'], 'the bought pick says Back tomorrow beside it');
+  const coinDay = LIVE.map(x => (x.deal_key ? { ...x, grants: { coins: 1000 } } : x));
+  assert.deepEqual(ids(plan({ products: coinDay }).ticketRow), ['tickets.5']);
+});
+
+test('T228: plain pack names on every band (no ONE A DAY), and the need-a-Ticket offer is not a daily deal', () => {
+  const shop = read('src/screens/StoreScreen/SuppliesShop.tsx');
+  const look = shop.slice(shop.indexOf('function heroLook'), shop.indexOf('function heroLook') + 600);
+  assert.doesNotMatch(look, /ONE A DAY|FOR A PARK TRIP/);
+  assert.match(look, /return \{ band: product\.title\.toUpperCase\(\), art: 'bag' \};/);
+  const offers = loadTs('src/services/money/naturalOffers.ts', noStore);
+  assert.doesNotMatch(offers.OFFER_COPY.need_ticket.title, /today/i);
+});
+
+test('regression: the gate summary says Tickets and Energy with capitals, like Shark Coins', () => {
+  const { grantsText } = loadTs('src/services/money/supplies.ts', {
+    react: { useEffect() {}, useState: v => [v, () => {}] }, '../../components/GrownUpGate': { askGrownUp: async () => false },
+    '../../api/endpoints/me/shop': {}, '../purchases': {}, './track': { trackMoney() {} },
+  });
+  assert.match(grantsText({ tickets: 20, coins: 500, energy: 200 }), /^20 Tickets, 500 Shark Coins and 200 Energy$/);
+  assert.equal(grantsText({ tickets: 1 }), '1 Ticket');
+  const copy = loadTs('src/services/money/copy.ts');
+  assert.equal(copy.topUpHeadline(1, 'tickets', 'ride'), 'Out of Tickets?');
+});

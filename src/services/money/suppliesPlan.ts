@@ -61,6 +61,21 @@ export function bestTicketDeal(products: readonly ShopProduct[], prices: PriceMa
   return beaten ? null : deal.product_id;
 }
 
+const ticketsOnly = (p: ShopProduct): boolean => (p.grants.tickets ?? 0) > 0
+  && Object.keys(p.grants).every(k => k === 'tickets' || !(p.grants[k as ShopCurrency] ?? 0));
+
+/**
+ * Bigger price always gives more (hold-fix 3, T221). A Tickets-only card is left off the page while another
+ * buyable Tickets-only card costs the same or less and gives more Tickets: TODAY'S PICK at 9 Tickets for $0.99
+ * never sits beside 5 Tickets for $0.99. On a day the pick is something else (or bought), the pack comes back.
+ */
+export function outdoneOnTickets(p: ShopProduct, products: readonly ShopProduct[], prices: PriceMap): boolean {
+  const price = amount(p, prices);
+  if (!ticketsOnly(p) || price === null) return false;
+  return products.some(q => q !== p && q.available && ticketsOnly(q)
+    && (amount(q, prices) ?? Infinity) <= price && (q.grants.tickets ?? 0) > (p.grants.tickets ?? 0));
+}
+
 export function planSupplies({ products, prices, focus, wallet, priced }: {
   products: readonly ShopProduct[];
   prices: PriceMap;
@@ -69,14 +84,18 @@ export function planSupplies({ products, prices, focus, wallet, priced }: {
   /** Whether Apple priced this product (an unpriced product is never a dead card). */
   priced: (p: ShopProduct) => boolean;
 }): SuppliesPlan {
-  const live = products.filter(priced);
+  const live = products.filter(priced).filter((p, _i, all) => !outdoneOnTickets(p, all, prices));
   const bySection = (key: ShopProduct['section']) => live.filter(p => p.section === key);
   const featured = bySection('featured');
   const need: SuppliesNeed | null = focus === 'tickets' || focus === 'coins' || focus === 'rescue' ? focus : null;
 
-  // The hand-off pack: the smallest buyable pack of the one thing the door came for.
+  // The hand-off pack: the smallest buyable pack of the one thing the door came for (for Tickets, today's
+  // Tickets-only pick counts as a pack: the cheapest card that gives the most Tickets for that price).
+  const handoffCands = need === 'tickets' ? [...bySection('tickets'), ...bySection('featured').filter(p => isDeal(p) && ticketsOnly(p))]
+    : need ? bySection(need) : [];
   const handoffPack = need
-    ? bySection(need).filter(p => p.available).sort((a, b) => (amount(a, prices) ?? 99) - (amount(b, prices) ?? 99))[0] ?? null
+    ? handoffCands.filter(p => p.available).sort((a, b) => ((amount(a, prices) ?? 99) - (amount(b, prices) ?? 99))
+      || ((b.grants.tickets ?? 0) - (a.grants.tickets ?? 0)))[0] ?? null
     : null;
   const handoff = need ? { need, out: (wallet[NEED_KEY[need]] ?? 0) <= 0, pack: handoffPack } : null;
 
@@ -91,8 +110,7 @@ export function planSupplies({ products, prices, focus, wallet, priced }: {
 
   const deals = featured.filter(isDeal);
   // A deal joins the Ticket row only when it gives Tickets and nothing else (its card names one thing).
-  const ticketDeals = deals.filter(p => (p.grants.tickets ?? 0) > 0
-    && Object.keys(p.grants).every(k => k === 'tickets' || !(p.grants[k as ShopCurrency] ?? 0)));
+  const ticketDeals = deals.filter(p => ticketsOnly(p) && p !== handoffPack);
   const ticketPacks = bySection('tickets').filter(p => p !== handoffPack);
   const ticketRow = [...ticketDeals, ...ticketPacks].slice(0, TICKET_ROW_MAX);
 

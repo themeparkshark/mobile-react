@@ -5,7 +5,7 @@ import type { ShopCurrency, ShopGrants } from '../../api/endpoints/me/shop';
 import countText from '../../helpers/countText';
 
 const CURRENCY_WORD: Record<keyof ShopGrants, [string, string]> = {
-  tickets: ['ticket', 'tickets'], coins: ['Shark Coin', 'Shark Coins'], energy: ['energy', 'energy'], rescue_passes: ['extra try', 'extra tries'], // one word per thing (4.5): held passes are extra tries (T218 sibling)
+  tickets: ['Ticket', 'Tickets'], coins: ['Shark Coin', 'Shark Coins'], energy: ['Energy', 'Energy'], rescue_passes: ['extra try', 'extra tries'], // one word per thing (4.5): held passes are extra tries (T218 sibling)
 };
 
 export function unitWord(kind: keyof ShopGrants, n: number): string {
@@ -19,7 +19,7 @@ export type TopUpCurrency = Extract<ShopCurrency, 'coins' | 'tickets' | 'energy'
 export function topUpHeadline(need: number, kind: TopUpCurrency, reason: TopUpReason): string {
   const n = Math.max(1, Math.ceil(need));
   const amount = `${countText(n)} more ${unitWord(kind, n)}`;
-  if (kind === 'tickets' && reason === 'ride') return n === 1 ? 'Out of tickets?' : `Need ${amount}?`;
+  if (kind === 'tickets' && reason === 'ride') return n === 1 ? 'Out of Tickets?' : `Need ${amount}?`;
   switch (reason) {
     case 'gear': return `Need ${amount} for this?`;
     case 'mystery-box': return `Need ${amount} for this box?`;
