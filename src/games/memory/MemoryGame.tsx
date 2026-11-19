@@ -65,6 +65,7 @@ import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
 import { useStageHold, useRetryRound } from '../../gamekit/StageHoldContext';
 import { noteRideTry } from '../../gamekit/results/rideTry';
+import { pressTrace } from '../../ui/pressTrace';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
 import { deckById, deckIdForRideName, type Deck } from './decks';
@@ -528,6 +529,8 @@ export default function MemoryGame({
   const runRef = useRef<Run | null>(null);
   const [boardKey, setBoardKey] = useState(0);
   const [shape, setShape] = useState({ cols: 4, rows: 4, pairs: 8 });
+  const shapeRef = useRef(shape);
+  shapeRef.current = shape;
   const [faces, setFaces] = useState<Record<number, number>>({});
   const [wells, setWells] = useState<number[]>([]);
   const [prizes, setPrizes] = useState<(PrizeEntry | null)[]>([]);
@@ -829,6 +832,31 @@ export default function MemoryGame({
   }, [baseSeed, deck.symbols.length, mode]);
 
   const newBoardView = useCallback((cols: number, rows: number, pairs: number) => {
+    // w5 N04: a TRY AGAIN on the kept board (before its GO) with the same shape resets the mounted cards in place.
+    // Remounting the cards (a new board key) blocked the JS thread 0.5 to 0.9 s on device, once at TRY AGAIN and
+    // again when the server's seed landed, so the count and the first tap waited. Face-down cards all look alike,
+    // so the new seed's layout is only new slot positions and cleared faces.
+    const was = shapeRef.current;
+    const n = cols * rows;
+    const g = geoRef.current;
+    const r = runRef.current;
+    const mounted = cards.current.length >= n && cards.current.slice(0, n).every(Boolean);
+    if (retryDealRef.current && g && r && mounted && was.cols === cols && was.rows === rows && was.pairs === pairs) {
+      for (let slot = 0; slot < n; slot++) {
+        const c = cards.current[r.eng.ids[slot]];
+        c?.reset();
+        const p = slotXY(g, slot);
+        c?.place(p.x, p.y);
+      }
+      setFaces({});
+      setWells([]);
+      setPrizes(Array.from({ length: pairs }, () => null));
+      setPot(null);
+      setSlotIds(Array.from({ length: n }, (_, i) => i));
+      flights.current?.clear();
+      pressTrace('memory.inplace');
+      return;
+    }
     cards.current = [];
     setShape({ cols, rows, pairs });
     setFaces({});
@@ -877,7 +905,8 @@ export default function MemoryGame({
       const offStage = stageHeldRef.current || retryDealRef.current;
       dealCards(offStage);
       const n = geo.cols * geo.rows;
-      later(reducedMotion || offStage ? 60 : n * 38 + 240, () => setStageDealt(true));
+      pressTrace('memory.deal', () => `fast=${offStage}`);
+      later(reducedMotion || offStage ? 60 : n * 38 + 240, () => { pressTrace('memory.dealt'); setStageDealt(true); });
     }, 30);
     return () => clearTimeout(t);
   }, [geo, boardKey, dealCards, later, reducedMotion]);

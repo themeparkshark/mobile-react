@@ -157,3 +157,20 @@ test('w5 N04: the kept board is live while the deal travels; only GO waits for i
   assert.match(modal, /if \(!attemptRef\.current && flowStateRef\.current === 'replay'\) \{ lossBeforeDealRef\.current = true; return; \}/);
   assert.match(modal, /if \(flowState === 'minigame' && lossBeforeDealRef\.current && attemptRef\.current\) void resolveAttempt\('loss'\);/);
 });
+
+test('w5 N04: Memory re-deals a kept board of the same shape in place (no card remount), every card reset', () => {
+  const card = fs.readFileSync('src/games/memory/MemoryCard.tsx', 'utf8');
+  // The in-place path runs only for a TRY AGAIN re-deal before GO, with every card mounted and the same shape.
+  assert.match(memory, /if \(retryDealRef\.current && g && r && mounted && was\.cols === cols && was\.rows === rows && was\.pairs === pairs\) \{/);
+  assert.match(memory, /c\?\.reset\(\);\n\s+const p = slotXY\(g, slot\);\n\s+c\?\.place\(p\.x, p\.y\);/);
+  // It never bumps the board key (the remount that blocked the JS thread for 0.5 to 0.9 s).
+  const inPlace = memory.slice(memory.indexOf('const mounted = cards.current.length'), memory.indexOf("pressTrace('memory.inplace');"));
+  assert.doesNotMatch(inPlace, /setBoardKey|setStageDealt\(false\)/);
+  // The card reset puts back every value a try can change (flip, hide, slip, gold, eye, moved, rims).
+  const reset = card.slice(card.indexOf('    reset() {'), card.indexOf('  }), [v, s, rm]);'));
+  for (const k of ['flip', 'lift', 'opacity', 'scale', 'rotZ', 'arcY']) assert.match(reset, new RegExp(`s\\.${k}\\.value = `), k);
+  const vKeys = [...card.matchAll(/^\s{4}(\w+): makeMutable\(/gm)].map((m) => m[1]).filter((k) => !['x', 'y', 'flip', 'lift', 'opacity', 'scale', 'rotZ', 'arcY'].includes(k));
+  assert.ok(vKeys.length >= 18);
+  for (const k of vKeys) assert.ok(new RegExp(`v\\.${k}\\.value = |'${k}'`).test(reset), `card value ${k} is reset`);
+  assert.match(reset, /setRimColor\(MM\.blue\);/);
+});

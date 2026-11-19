@@ -847,6 +847,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // then GO throws gold confetti (never on a first play).
     const [rareGo, setRareGo] = useState(false);
     useEffect(() => {
+      if (phase === 'countdown' && visible) pressTrace('shell.gate', () => `${gameIdRef.current} on=${stageOn} held=${stageHeld}`);
       if (phase !== 'countdown' || !visible || !stageOn || stageHeld) return;
       pressTrace('shell.live', () => gameIdRef.current);
       clearCountdown();
