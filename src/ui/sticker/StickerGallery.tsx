@@ -27,9 +27,14 @@ import TitleLabel from './TitleLabel';
 import WaveFoot from './WaveFoot';
 import { ART, ART_RATIO } from './art';
 import SvgTitle from './spike/SvgTitle';
+import ProofGate from './proof/ProofGate';
+import ProofRewards from './proof/ProofRewards';
+import ProofShelf from './proof/ProofShelf';
 import { FONT, GALLERY, INK, SHADE, STROKE } from './tokens';
 
-export type GallerySection = 'level' | 'type' | 'text' | 'textcand' | 'titles30' | 'page' | 'card' | 'button' | 'spot' | 'chips' | 'round' | 'wave' | 'progress';
+/** The three proof screens: full-screen compositions with sample data (spike step 0). */
+export type ProofSection = 'gate' | 'rewards' | 'shelf';
+export type GallerySection = ProofSection | 'level' | 'type' | 'text' | 'textcand' | 'titles30' | 'page' | 'card' | 'button' | 'spot' | 'chips' | 'round' | 'wave' | 'progress';
 export type TitleVariant = 'shadow16' | 'shadow12' | 'shadow8' | 'copies16' | 'copies12' | 'svg' | 'plain';
 
 const SECTIONS: readonly GallerySection[] = ['level', 'type', 'text', 'textcand', 'page', 'card', 'button', 'spot', 'chips', 'round', 'wave', 'progress', 'titles30'];
@@ -505,6 +510,9 @@ export default function StickerGallery({ route }: { route?: { params?: Params } 
   const variant = params.variant ?? 'shadow16';
   const t0 = params.t0 ?? mountAt;
   const shown = only ? [only] : SECTIONS;
+  if (only === 'gate') return <ProofGate />;
+  if (only === 'rewards') return <ProofRewards />;
+  if (only === 'shelf') return <ProofShelf />;
   return (
     <View style={{ flex: 1, backgroundColor: INK.blue }}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 40, paddingHorizontal: 16 }}>

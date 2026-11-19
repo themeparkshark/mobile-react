@@ -7,7 +7,8 @@ import { memo } from 'react';
 import { View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
 import Lift from './Lift';
 import { useStickerPlace } from './StickerContext';
-import { INK, SHADE, SPOT } from './tokens';
+import StickerText from './StickerText';
+import { DROP, INK, LINE, SHADE, SPOT } from './tokens';
 
 export type SpotState = 'empty' | 'ghost' | 'next' | 'yours';
 
@@ -17,13 +18,28 @@ export type SpotProps = {
   readonly size?: number;
   /** VoiceOver: what goes here ("Walt Statue coin, not yet"). */
   readonly label?: string;
+  /** The spot as a text field (the gate's answer): a typed digit is stuck on as a white sticker. */
+  readonly glyph?: string;
   readonly style?: StyleProp<ViewStyle>;
 };
 
-function SpotImpl({ state, art, size = SPOT.size, label, style }: SpotProps) {
+function SpotImpl({ state, art, size = SPOT.size, label, glyph, style }: SpotProps) {
   const { surface } = useStickerPlace();
   const paper = surface === 'paper';
   const a11y = label ? { accessible: true, accessibilityRole: 'image' as const, accessibilityLabel: label } : { accessible: false };
+  if (state === 'yours' && glyph !== undefined) {
+    // A typed digit: a white paper sticker with a navy line and a hard drop (level 2: no white edge).
+    return (
+      <View style={[{ width: size, height: size }, style]} {...a11y}>
+        <View style={{ position: 'absolute', left: 0, right: 0, top: DROP.tag, bottom: -DROP.tag, borderRadius: size / 2, backgroundColor: DROP.inPage }} />
+        <View style={{ flex: 1, borderRadius: size / 2, backgroundColor: INK.white, borderWidth: LINE.card, borderColor: INK.navy, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ paddingTop: 3 }}>
+            <StickerText size={Math.round(size * 0.55)} tone="navy" stroke={0} lineHeight={Math.round(size * 0.7)} role="none" maxScale={1}>{glyph}</StickerText>
+          </View>
+        </View>
+      </View>
+    );
+  }
   if (state === 'yours' && art) {
     // The sticker itself sits a little proud of its spot (the board: 50 on a 46 spot).
     const big = Math.round(size * 1.087);

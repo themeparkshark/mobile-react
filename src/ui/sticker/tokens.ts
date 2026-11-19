@@ -113,6 +113,8 @@ export const SHADE = {
   smallDrop: 'rgba(5,44,96,0.55)',
   /** Second-line text on blue. */
   onBlueSoft: '#d7ebfc',
+  /** Header and footer band: the top stop of the water's shade (kit.css .hdr). */
+  bandTop: '#0a84d8',
 } as const;
 
 /** Hard drops: straight down, navy, no blur. */
@@ -257,6 +259,12 @@ export const LABEL = { height: 30, heightLarge: 36, padX: 14, font: 17, fontLarg
 export const BADGE = { size: 22, ring: 2, font: 13 } as const;
 export const BAR = { height: 18, dot: 22, dotLine: 2.5, inset: 3 } as const;
 export const SPOT = { size: 46, ghostOpacity: 0.42, line: 2 } as const;
+/** Header band (kit.css .hdr): the wave crest sits this far under the safe area top. */
+export const HEADER = { crest: 46, edge: 4, line: 2.5, drop: 4, shadeOpacity: 0.38, title: 30, round: 47, period: 48.75 } as const;
+/** The gate's answer spots and keys. */
+export const GATE = { spot: 44, keyGap: 12, rowGap: 10 } as const;
+/** Alex's ribbon (872 x 222): words centred at this share of its height. */
+export const RIBBON = { ratio: 872 / 222, textAt: 0.45, edge: 3, copies: 12 } as const;
 export const WAVE = { height: 60, crest: 9, amplitude: 5.2, period: 42, textureOpacity: 0.4, contentTop: 19 } as const;
 
 /** Motion of the look: stuck on (1.08 to 1.0, the drop closing), 150 ms fades under Reduce Motion. */

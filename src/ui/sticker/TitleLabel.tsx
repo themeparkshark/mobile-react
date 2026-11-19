@@ -18,11 +18,15 @@ const FACES = {
   blue: { colors: [SHADE.blueFaceTop, INK.blueBright] as const },
 };
 
-function TitleLabelImpl({ children, tone = 'white', large = false, edge: asked }: {
+function TitleLabelImpl({ children, tone = 'white', large = false, edge: asked, width, padLeft }: {
   readonly children: string;
   readonly tone?: TitleLabelTone;
   readonly large?: boolean;
   readonly edge?: boolean;
+  /** A fixed width (the gate's label); otherwise it hugs its words. */
+  readonly width?: number;
+  /** Room on the left for art that hangs off the label's end (the lock). */
+  readonly padLeft?: number;
 }) {
   const { edge } = useEdge('TitleLabel', asked);
   const height = large ? LABEL.heightLarge : LABEL.height;
@@ -30,7 +34,7 @@ function TitleLabelImpl({ children, tone = 'white', large = false, edge: asked }
   return (
     <Shell radius={RADIUS.label} line={LINE.card} face={FACES[tone]} edge={edge ? EDGE.label : 0}
       drop={DROP.label} dropColor={edge ? DROP.color : DROP.inPage}
-      style={{ height, paddingHorizontal: LABEL.padX, justifyContent: 'center', alignSelf: 'flex-start' }}>
+      style={{ height, width, paddingHorizontal: LABEL.padX, paddingLeft: padLeft ?? LABEL.padX, justifyContent: 'center', alignSelf: 'flex-start' }}>
       <View style={{ paddingTop: 2 }}>
         {tone === 'blue'
           ? <StickerText size={size} stroke={2.1} drop={2} spacing={0.04} lineHeight={size + 4} role="header">{children}</StickerText>

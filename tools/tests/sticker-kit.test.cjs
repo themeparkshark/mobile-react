@@ -179,7 +179,7 @@ test('every pressable has a role and a VoiceOver label, and reaches 44 pt', () =
   for (const full of files) {
     const text = source(full);
     for (const m of text.matchAll(/<Pressable([^>]*)>/g)) {
-      assert.match(m[1], /accessibilityRole="button"/, `${rel(full)} pressable without a role`);
+      assert.match(m[1], /accessibilityRole="(button|tab)"/, `${rel(full)} pressable without a role`);
       assert.match(m[1], /accessibilityLabel=/, `${rel(full)} pressable without a label`);
       assert.match(m[1], /accessibilityState=/, `${rel(full)} pressable without its state`);
     }
@@ -220,4 +220,51 @@ test('wave foot path and badge text', () => {
   assert.equal(badge.badgeText(0), '');
   assert.equal(badge.badgeText(3), '3');
   assert.equal(badge.badgeText(12), '9+');
+});
+
+// ---------- spike step 0, part 2: the three proof screens ----------
+const proof = loadTs('src/ui/sticker/proof/proofData.ts');
+const plain = v => JSON.parse(JSON.stringify(v));
+
+test('gate keys: digits add up to the answer length, delete takes one off', () => {
+  assert.equal(proof.gatePress('', '2', 3), '2');
+  assert.equal(proof.gatePress('29', '7', 3), '297');
+  assert.equal(proof.gatePress('297', '1', 3), '297');
+  assert.equal(proof.gatePress('297', 'del', 3), '29');
+  assert.equal(proof.gatePress('', 'del', 3), '');
+  assert.equal(proof.gatePress('2', 'ok', 3), '2');
+});
+
+test('gate answer box is spots: typed are yours, the next wears the gold ring, the rest are empty', () => {
+  assert.deepEqual(plain(proof.gateSpots('', 3).map(s => s.state)), ['next', 'empty', 'empty']);
+  assert.deepEqual(plain(proof.gateSpots('29', 3).map(s => s.state)), ['yours', 'yours', 'next']);
+  assert.deepEqual(plain(proof.gateSpots('29', 3).map(s => s.glyph)), ['2', '9', null]);
+  assert.deepEqual(plain(proof.gateSpots('297', 3).map(s => s.state)), ['yours', 'yours', 'yours']);
+});
+
+test('week row shows all four spot states', () => {
+  assert.deepEqual(plain(proof.weekSpots(3)), ['yours', 'yours', 'next', 'ghost', 'empty', 'empty', 'empty']);
+});
+
+test('shelf states: one next up, coins not out yet are empty, found are yours', () => {
+  const states = proof.shelfStates([true, false, false, true, false], [false, false, true, false, false]);
+  assert.deepEqual(states, ['yours', 'next', 'empty', 'yours', 'ghost']);
+  const sample = proof.sampleFound(35, 15);
+  assert.equal(sample.length, 35);
+  assert.equal(sample.filter(Boolean).length, 15);
+  assert.deepEqual(plain(proof.rowsOf([1, 2, 3, 4, 5, 6, 7], 5)), [[1, 2, 3, 4, 5], [6, 7]]);
+});
+
+test('proof screens use kit parts only: no raw Pressable, Modal, shadow blur or system font', () => {
+  for (const name of ['ProofGate.tsx', 'ProofRewards.tsx', 'ProofShelf.tsx']) {
+    const text = source(path.join(dir, 'proof', name));
+    assert.doesNotMatch(text, /<Pressable|<Modal|<TouchableOpacity|shadowRadius|fontFamily|fontWeight/, `${name} draws a one-off control or style`);
+  }
+});
+
+test('the shelf grid never renders React while scrolling: memoised cells, no onScroll', () => {
+  const text = source(path.join(dir, 'proof', 'ProofShelf.tsx'));
+  assert.match(text, /const CoinCell = memo\(/);
+  assert.match(text, /const ShelfRow = memo\(/);
+  assert.doesNotMatch(text, /onScroll|useAnimatedScrollHandler/);
 });

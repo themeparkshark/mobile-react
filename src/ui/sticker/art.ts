@@ -19,6 +19,16 @@ export const ART = {
   chestOpen: require('../../../assets/images/daily/chest-open.png'),
   levelChest: require('../../../assets/images/retention/level-chest-closed.png'),
   brownChest: require('../../../assets/images/modals/brown_closed.png'),
+  ribbon: require('../../../assets/images/ribbon.png'),
+  locked: require('../../../assets/images/locked.png'),
+  shelf: require('../../../assets/images/screens/park/shelf-polished-v2.png'),
+  parkBackground: require('../../../assets/images/screens/park/background-new.png'),
+  pinShark: require('../../../assets/images/screens/pin-collections/shark.png'),
+  ride: require('../../../assets/icons/game/ride.png'),
+  star: require('../../../assets/images/screens/pin-collections/star.png'),
+  sparkle: require('../../../assets/icons/game/sparkle.png'),
+  streak: require('../../../assets/icons/game/streak.png'),
+  stampBook: require('../../../assets/images/screens/profile/shortcut_stamp_book.png'),
 } as const;
 
 /** width / height of each file. */
@@ -34,6 +44,17 @@ export const ART_RATIO = {
   energy: 196 / 284,
   bronze: 275 / 294,
   chest: 1,
+  ribbon: 872 / 222,
+  locked: 468 / 589,
+  shelf: 2170 / 725,
+  pinShark: 1189 / 1158,
+  ride: 384 / 313,
+  star: 363 / 384,
+  sparkle: 129 / 125,
+  streak: 333 / 384,
+  stampBook: 363 / 386,
+  levelChest: 512 / 511,
+  brownChest: 1526 / 1347,
 } as const;
 
 export type ArtName = keyof typeof ART;

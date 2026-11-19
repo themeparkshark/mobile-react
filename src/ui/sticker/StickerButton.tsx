@@ -8,7 +8,7 @@
  * Layers, back to front: drop, base edge, cap edge, lip, cap (face). Pressing moves the cap
  * and its edge down and the drop up, by transforms on the UI thread. Nothing re-renders.
  */
-import { memo, useEffect } from 'react';
+import { memo, useEffect, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
@@ -39,6 +39,8 @@ export type StickerButtonProps = {
   readonly faceHeight?: number;
   readonly fontSize?: number;
   readonly width?: number;
+  /** A code-drawn glyph in place of the words (the gate's delete key); `label` still speaks. */
+  readonly glyph?: ReactNode;
   /** Gallery only: hold the pressed look. */
   readonly showPressed?: boolean;
   readonly onPress?: () => void;
@@ -97,7 +99,7 @@ function Busy({ reduced }: { reduced: boolean }) {
 
 function StickerButtonImpl({
   label, accessibilityLabel, accessibilityHint, color = 'gold', size = 'medium', primary = false, disabled = false, busy = false,
-  edge: asked, faceHeight, fontSize, width, showPressed = false, onPress, style,
+  edge: asked, faceHeight, fontSize, width, glyph, showPressed = false, onPress, style,
 }: StickerButtonProps) {
   const { edge, place } = useEdge('StickerButton', asked);
   const onMap = place.level === 'map';
@@ -158,7 +160,7 @@ function StickerButtonImpl({
             borderTopWidth: BUTTON.shine, borderColor: look.shine }, shineStyle]} />
         ) : null}
         <View style={styles.center}>
-          {busy ? <Busy reduced={reduced} /> : (
+          {busy ? <Busy reduced={reduced} /> : glyph ? glyph : (
             <View style={styles.lbl}>
               {ink === 'navy'
                 ? <StickerText size={font} tone="navy" stroke={0} spacing={g.spacing} lineHeight={Math.round(font * 1.15)} role="none" maxScale={1.2}>{label}</StickerText>
@@ -168,8 +170,8 @@ function StickerButtonImpl({
           )}
         </View>
         {primary && !disabled && !busy ? (
-          <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: size === 'large' ? 16 : 12, top: size === 'large' ? 8 : 6, opacity: 0.95 }, shineStyle]}>
-            <Glint size={size === 'large' ? 13 : 11} />
+          <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: size === 'large' ? 16 : face < 42 ? 8 : 12, top: size === 'large' ? 8 : face < 42 ? 4 : 6, opacity: 0.95 }, shineStyle]}>
+            <Glint size={size === 'large' ? 13 : face < 42 ? 9 : 11} />
           </Animated.View>
         ) : null}
       </Animated.View>
