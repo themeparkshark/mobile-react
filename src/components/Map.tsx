@@ -9,6 +9,7 @@ import { edgeArrow, GUIDE_PATH_MS, guideLine } from './map/guide';
 import { PlayerSharkMarker } from './map/PlayerSharkMarker';
 import { courseDeg, facingFor, strideHalfMs, wakeTurn } from './map/playerMotion';
 import { glideMeters, newFixCadence } from './map/glide';
+import { FIT_STEP, fitMeters, guideFitZoom } from './map/guideFit';
 import { useFollowCamera } from './map/useFollowCamera';
 import FollowButton from './map/FollowButton';
 import MapSharkLook from './map/MapSharkLook';
@@ -603,6 +604,22 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     followRef.current = true;
     cam.recenter(followZoomRef.current);
   };
+  // T018: while following, the guide's coin within 150 m stays in frame with the shark (the camera eases out just
+  // enough, then back to the player's own zoom once the coin is reached or gone). The player's pinch stays theirs.
+  const fitApplied = useRef<number | null>(null);
+  const guideLat = guideTarget?.latitude; const guideLng = guideTarget?.longitude;
+  const fitBucket = location && guideLat != null && guideLng != null
+    ? Math.round(fitMeters(location, { latitude: guideLat, longitude: guideLng }) / 10) : null;
+  useEffect(() => {
+    if (!focusedOnPlayer || !location || !viewSize) return;
+    const meters = guideLat != null && guideLng != null ? fitMeters(location, { latitude: guideLat, longitude: guideLng }) : null;
+    const want = guideFitZoom({ meters, latitude: location.latitude, view: viewSize, followZoom: followZoomRef.current });
+    const now = fitApplied.current ?? followZoomRef.current;
+    if (Math.abs(want - now) < FIT_STEP) return;
+    fitApplied.current = want === followZoomRef.current ? null : want;
+    cam.recenter(want);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedOnPlayer, fitBucket, guideLat, guideLng, viewSize?.width, viewSize?.height]);
   // Panned away (or focused on a ride): the camera follows the shark again `returnAfterMs` after the
   // last touch, so a walker never has to find themselves (the walks: it stayed parked 200 m behind).
   const lastTouchRef = useRef(0);
@@ -1020,7 +1037,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             onZoomChange?.(zoom);
             setCameraZoom(current => (Math.abs(current - zoom) < 0.02 ? current : zoom));
           }
-          if (followRef.current && Number.isFinite(zoom)) followZoomRef.current = Math.min(FOLLOW_ZOOM_MAX, Math.max(FOLLOW_ZOOM_MIN, zoom));
+          if (followRef.current && Number.isFinite(zoom) && fitApplied.current === null) followZoomRef.current = Math.min(FOLLOW_ZOOM_MAX, Math.max(FOLLOW_ZOOM_MIN, zoom));
           // A pinch or a tap that left the shark centered (within ~8 m) goes back
           // to following; a real pan stays put until the recenter button.
           if (!feature.properties?.isUserInteraction || followRef.current || !location) return;
@@ -1028,7 +1045,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           gestureZoomRef.current = NaN;
           setFollowHold(false);
           // The zoom a player pinched to is the zoom a recenter comes back to, even if the pinch also slid the map.
-          if (Number.isFinite(startZoom) && Math.abs(zoom - startZoom) >= 0.12) followZoomRef.current = Math.min(FOLLOW_ZOOM_MAX, Math.max(FOLLOW_ZOOM_MIN, zoom));
+          if (Number.isFinite(startZoom) && Math.abs(zoom - startZoom) >= 0.12) { followZoomRef.current = Math.min(FOLLOW_ZOOM_MAX, Math.max(FOLLOW_ZOOM_MIN, zoom)); fitApplied.current = null; }
           const [lng, lat] = feature.geometry.coordinates;
           if (Math.abs(lat - location.latitude) < 0.00007 && Math.abs(lng - location.longitude) < 0.00007) {
             followRef.current = true;

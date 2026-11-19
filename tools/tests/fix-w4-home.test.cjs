@@ -205,3 +205,26 @@ test('N11: the ride name under PLAY! is one line, fitted, and a very long name k
   assert.match(modal, /<Text style=\{styles\.captionText\} numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>\{playCaptionName\(coin\.name\)\}<\/Text>/);
   assert.match(modal, /accessibilityLabel=\{badge === 'free_try' \? `\$\{coin\.name\}\. Free try today\.`/, 'the spoken label keeps the full name');
 });
+
+test('T018: the follow camera fits the shark and a coin within 150 m on iPhone SE; farther coins keep the zoom and the edge arrow', () => {
+  const F = loadTs('src/components/map/guideFit.ts');
+  const se = { width: 375, height: 520 };
+  const pro = { width: 402, height: 680 };
+  const lat = 33.8121;
+  // On SE, 60 m away does not fit at the default 17.6: the camera eases out just enough.
+  const z60 = F.guideFitZoom({ meters: 60, latitude: lat, view: se, followZoom: 17.6 });
+  assert.ok(z60 < 17.6 && z60 > 16.5, `SE 60 m: ${z60}`);
+  // The coin then sits inside the clear circle: meters per point times radius covers 60 m.
+  const mpp = 40075016.686 * Math.cos(lat * Math.PI / 180) / (512 * 2 ** z60);
+  assert.ok(F.fitRadius(se) * mpp >= 59.9);
+  // A near coin needs no change; a coin past 150 m keeps the player's zoom (the edge arrow shows the way).
+  assert.equal(F.guideFitZoom({ meters: 25, latitude: lat, view: pro, followZoom: 17.6 }), 17.6);
+  assert.equal(F.guideFitZoom({ meters: 400, latitude: lat, view: se, followZoom: 17.6 }), 17.6);
+  assert.ok(F.guideFitZoom({ meters: 150, latitude: lat, view: se, followZoom: 17.6 }) >= F.FIT_MIN_ZOOM);
+  // A player who zoomed out further keeps their zoom (the fit only ever zooms out).
+  assert.equal(F.guideFitZoom({ meters: 60, latitude: lat, view: se, followZoom: 15.9 }), 15.9);
+  assert.ok(Math.abs(F.fitMeters({ latitude: lat, longitude: -117.919 }, { latitude: lat + 60 / 111320, longitude: -117.919 }) - 60) < 0.5);
+  const map = read('src/components/Map.tsx');
+  assert.match(map, /const want = guideFitZoom\(\{ meters, latitude: location\.latitude, view: viewSize, followZoom: followZoomRef\.current \}\);/);
+  assert.match(map, /fitApplied\.current === null\) followZoomRef\.current =/, 'a fit never becomes the player\'s own zoom');
+});
