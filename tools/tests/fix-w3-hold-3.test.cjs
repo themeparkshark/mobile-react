@@ -138,3 +138,11 @@ test('T156: the Supplies VIP card says what VIP gives in plain numbers, like the
   assert.match(shop, /style=\{st\.vipSub\}>\{VIP_PITCH\}</);
   assert.match(shop, /vipCardTiles\(perks \?\? \[\]\)/);
 });
+
+test('regression: the Starter Pack shown as the first-win offer sends starter_seen (the server sets starter_seen_at)', () => {
+  const offer = strip(read('src/components/money/CalmOffer.tsx'));
+  const seenEffect = offer.slice(offer.indexOf('if (!show || playerId == null) return;'), offer.indexOf('}, [show]);'));
+  assert.match(seenEffect, /if \(placement === 'first_win' && pack\) trackMoney\('starter_seen', `offer\.\$\{placement\}`, pack\.product_id\);/);
+  // Only the placement that shows the Starter Pack: the Park Day Pack card never counts as the Starter Pack seen.
+  assert.doesNotMatch(seenEffect, /need_ticket[^\n]*starter_seen/);
+});
