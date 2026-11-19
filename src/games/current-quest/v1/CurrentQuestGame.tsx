@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Dimensions, Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import Animated, {
+  cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, ZoomIn,
+} from 'react-native-reanimated';
 import { GameShellV2, Haptic, playSfx, type GameResult } from '../../../gamekit';
+import useReducedGameMotion from '../../../hooks/useReducedGameMotion';
+import GameIcon from '../../../ui/GameIcon';
 import {
   beginCurrentBoard, CURRENT_TIERS, currentStars, makeCurrentBoard, moveCurrent, scoreCurrentBoard,
   type CurrentProgress, type CurrentTier,
@@ -11,6 +16,86 @@ const BOARD_WIDTH = Math.min(Dimensions.get('window').width - 42, 350);
 const GAP = 6;
 const SHARK = require('../../../../assets/images/screens/pin-collections/shark.png');
 const QUEST_ICONS = require('../../../assets/games/current-quest/icons-v1.png');
+/** T032: the tap hand players know from Parade Beat and the map, and the open chest for a cleared voyage. */
+const TAP_HAND = require('../../../../assets/images/ride-photo/tap-hand.webp');
+const CHEST_OPEN = require('../../../assets/games/current-quest/chest_open.png');
+
+/** T032: one loop of the start card's tap demo (the hand taps the tile beside the shark, the shark swims in). */
+export const TAP_DEMO_MS = 1600;
+
+/** Pure demo pose at loop phase p (0..1): the finger dips onto the tile, then the shark slides across to it. */
+export function tapDemoPose(p: number): { finger: number; swim: number } {
+  'worklet';
+  const ease = (a: number, b: number, x: number) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  const finger = ease(0.05, 0.18, p) * (1 - ease(0.22, 0.34, p));
+  const swim = ease(0.24, 0.6, p) * (1 - ease(0.88, 1, p));
+  return { finger, swim };
+}
+
+/**
+ * T032: the start card's picture for a TAP game (the old pill said "Collect pearls" and the how-to card
+ * showed a swipe): the shark on its tile, a hand tapping the tile next to it (the shark swims there),
+ * then the pearl and the chest. Existing art only; UI thread; Reduce Motion holds the tap pose still.
+ */
+function TapPathDemo({ reduced }: { reduced: boolean }) {
+  const t = useSharedValue(reduced ? 0.15 : 0);
+  useEffect(() => {
+    if (reduced) { t.value = 0.15; return undefined; }
+    t.value = withRepeat(withTiming(1, { duration: TAP_DEMO_MS, easing: Easing.linear }), -1, false);
+    return () => cancelAnimation(t);
+  }, [reduced, t]);
+  const fingerSt = useAnimatedStyle(() => {
+    const q = tapDemoPose(t.value);
+    return { transform: [{ translateY: -12 + 12 * q.finger }, { rotate: `${6 - 10 * q.finger}deg` }] };
+  });
+  const sharkSt = useAnimatedStyle(() => ({ transform: [{ translateX: 46 * tapDemoPose(t.value).swim }] }));
+  return (
+    <View style={styles.demoRow} accessible={false}>
+      <View style={styles.demoTiles}>
+        <View style={[styles.demoTile, styles.visitedCell]} />
+        <View style={[styles.demoTile, styles.nextCell]} />
+        <Animated.View style={[styles.demoShark, sharkSt]}>
+          <Image source={SHARK} resizeMode="contain" style={styles.demoSharkArt} />
+        </Animated.View>
+        <Animated.View style={[styles.demoHand, fingerSt]} pointerEvents="none">
+          <Image source={TAP_HAND} resizeMode="contain" style={styles.demoHandArt} />
+        </Animated.View>
+      </View>
+      <GameIcon name="arrow" size={18} />
+      <QuestIcon slot={0} size={30} />
+      <GameIcon name="arrow" size={18} />
+      <QuestIcon slot={2} size={38} />
+    </View>
+  );
+}
+
+/** T032: a splash ring on the tile the shark just swam to (one-shot, UI thread). */
+function Splash({ size }: { size: number }) {
+  const v = useSharedValue(0);
+  useEffect(() => { v.value = withTiming(1, { duration: 420, easing: Easing.out(Easing.quad) }); }, [v]);
+  const st = useAnimatedStyle(() => ({ opacity: 1 - v.value, transform: [{ scale: 0.5 + v.value * 0.9 }] }));
+  return <Animated.View pointerEvents="none" style={[styles.splash, { width: size, height: size, borderRadius: size / 2 }, st]} />;
+}
+
+/** T032: a cleared voyage pops the open chest over the board (spring), with a gold shine, before NEXT VOYAGE. */
+function ChestPop({ reduced, size }: { reduced: boolean; size: number }) {
+  const pop = useSharedValue(reduced ? 1 : 0);
+  const shine = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) return undefined;
+    pop.value = withSpring(1, { damping: 9, stiffness: 180 });
+    shine.value = withDelay(120, withSequence(withTiming(1, { duration: 260 }), withTiming(0.35, { duration: 500 })));
+    return () => { cancelAnimation(pop); cancelAnimation(shine); };
+  }, [reduced, pop, shine]);
+  const chestSt = useAnimatedStyle(() => ({ transform: [{ scale: 0.3 + 0.7 * pop.value }, { translateY: (1 - pop.value) * 24 }] }));
+  const shineSt = useAnimatedStyle(() => ({ opacity: shine.value, transform: [{ scale: 0.8 + shine.value * 0.3 }] }));
+  return (
+    <View pointerEvents="none" style={styles.chestLayer} testID="cq-chest-pop">
+      <Animated.View style={[styles.chestShine, { width: size * 1.3, height: size * 1.3, borderRadius: size * 0.65 }, shineSt]} />
+      <Animated.Image source={CHEST_OPEN} resizeMode="contain" style={[{ width: size, height: size }, chestSt]} />
+    </View>
+  );
+}
 
 function QuestIcon({ slot, size }: { slot: 0 | 1 | 2; size: number }) {
   return <View style={{ width: size, height: size, overflow: 'hidden' }}>
@@ -28,11 +113,38 @@ export interface CurrentQuestGameProps {
   onClose: () => void;
   onQuit?: (resume: () => void) => void;
   onComplete: (multiplier: number, meta?: Record<string, unknown>) => void;
+  /**
+   * T032: PLAY AGAIN on the results card. A finished run's proof goes here before the replay starts
+   * (the line's bonus proof is never thrown away by playing again; the replay deals new routes).
+   */
+  onRunProof?: (meta: Record<string, unknown>) => void;
 }
 
-/** Three short route puzzles. Completing them records play only; queue rewards stay server-owned. */
-export default function CurrentQuestGame({ visible, seed, taskName, tier = 'standard', onClose, onQuit,
-  onComplete }: CurrentQuestGameProps) {
+/** T032: PLAY AGAIN deals a fresh set of routes: run 0 keeps the server's seed (its proof), later runs mix it. */
+export function replaySeed(seed: number, run: number): number {
+  if (run <= 0) return seed >>> 0;
+  return (Math.imul((seed >>> 0) ^ (run * 0x9e3779b9), 0x85ebca6b) >>> 0);
+}
+
+/** Three short route puzzles, and PLAY AGAIN for another set (T032). */
+export default function CurrentQuestGame(props: CurrentQuestGameProps) {
+  const [run, setRun] = useState(0);
+  const base = useMemo(() => props.seed == null ? (Math.random() * 0xffffffff) >>> 0 : props.seed >>> 0, [props.visible, props.seed]);
+  const lastMeta = useRef<Record<string, unknown> | null>(null);
+  const { onRunProof } = props;
+  const rematch = useCallback(() => {
+    if (lastMeta.current && onRunProof) onRunProof(lastMeta.current);
+    lastMeta.current = null;
+    setRun((n) => n + 1);
+  }, [onRunProof]);
+  return <CurrentQuestRun key={run} {...props} seed={replaySeed(base, run)} onRematch={rematch}
+    onResult={(meta) => { lastMeta.current = meta; }} />;
+}
+
+/** One run: three short route puzzles. Completing them records play only; queue rewards stay server-owned. */
+function CurrentQuestRun({ visible, seed, taskName, tier = 'standard', onClose, onQuit,
+  onComplete, onRematch, onResult }: CurrentQuestGameProps & { onRematch: () => void; onResult: (meta: Record<string, unknown>) => void }) {
+  const reduced = useReducedGameMotion();
   const voyages = CURRENT_TIERS[tier]?.voyages ?? 3;
   const roundSeed = useMemo(() => seed == null ? (Math.random() * 0xffffffff) >>> 0 : seed >>> 0,
     [visible, seed]);
@@ -123,16 +235,18 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
     playSfx('star', 0.65);
     if (stage < voyages - 1) {
       setStageClear(true);
-      setHint(`Current ${stage + 1} cleared. A new route is ready.`);
+      // T032: the chest pops over the board (a picture), so the line under it stays short.
+      setHint('Treasure! On to the next voyage.');
       return;
     }
     const durationSeconds = Math.max(1, Math.round(
       (Date.now() - startedAtRef.current - pausedTotalRef.current) / 1000));
-    setResult({ score: nextScore, stars: currentStars(boards, completedRef.current),
-      message: 'TREASURE FOUND!', meta: { score: nextScore, duration: durationSeconds,
-        seed: roundSeed, tier, moves: completedRef.current.map(item => item.moves),
-        paths: completedRef.current.map(item => item.history) } });
-  }, [board, boards, result, roundSeed, score, stage, voyages, tier]);
+    const meta = { score: nextScore, duration: durationSeconds,
+      seed: roundSeed, tier, moves: completedRef.current.map(item => item.moves),
+      paths: completedRef.current.map(item => item.history) };
+    onResult(meta);
+    setResult({ score: nextScore, stars: currentStars(boards, completedRef.current), message: 'TREASURE FOUND!', meta });
+  }, [board, boards, result, roundSeed, score, stage, voyages, tier, onResult]);
 
   const nextStage = useCallback(() => {
     if (!playingRef.current || !stageClear || stage >= 2) return;
@@ -154,9 +268,10 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
 
   return <GameShellV2 visible={visible} title="Current Quest" subtitle={taskName}
     score={score + (stageClear || result ? 0 : progress.collected.length * 35)}
-    objective="Collect pearls and reach the treasure"
+    objective="Tap the tile next to your shark to swim there. Collect pearls, then reach the treasure."
+    countdownDemo={<TapPathDemo reduced={reduced} />}
     result={result} onStart={handleStart} onPause={handlePause} onResume={handleResume}
-    onClose={onClose} onQuit={onQuit} onComplete={onComplete}
+    onClose={onClose} onQuit={onQuit} onComplete={onComplete} onRematch={onRematch}
     onWrapUp={() => { setWrapped(true); return null; }}>
     <View style={styles.field}>
       <LinearGradient colors={['#07548f', '#0c8bc9', '#9cdef4']} style={StyleSheet.absoluteFill} />
@@ -202,15 +317,18 @@ export default function CurrentQuestGame({ visible, seed, taskName, tier = 'stan
               rock && styles.rockCell, visited && styles.visitedCell,
               adjacent && !rock && !visited && styles.nextCell,
               treasure && styles.goalCell, pressed && styles.pressedCell]}>
-            {here ? <Image source={SHARK} resizeMode="contain"
+            {here && !reduced && progress.path.length > 1 ? <Splash key={`s${progress.path.length}`} size={cellSize * 0.9} /> : null}
+            {here ? <Animated.Image key={`h${progress.path.length}`} source={SHARK} resizeMode="contain"
+              entering={reduced ? undefined : ZoomIn.springify().damping(11).stiffness(220)}
               style={{ width: cellSize * 0.77, height: cellSize * 0.77 }} />
               : rock ? <QuestIcon slot={1} size={cellSize * 0.78} />
                 : pearl ? <QuestIcon slot={0} size={cellSize * 0.62} />
                   : treasure ? <QuestIcon slot={2} size={cellSize * 0.83} />
-                    : visited ? <View style={styles.trailDot} />
+                    : visited ? <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(10)} style={styles.trailDot} />
                       : <View style={styles.waterDot} />}
           </Pressable>;
         })}
+        {stageClear && !result ? <ChestPop reduced={reduced} size={Math.min(150, BOARD_WIDTH * 0.45)} /> : null}
       </View>
       {resting ? null : <Text style={styles.hint} accessibilityLiveRegion="polite">{hint}</Text>}
       {resting ? null : stageClear ? <Pressable accessibilityRole="button" accessibilityLabel="Start next voyage"
@@ -264,4 +382,14 @@ const styles = StyleSheet.create({
   nextButton: { marginTop: 3, minHeight: 46, minWidth: 205, borderRadius: 13, borderWidth: 2,
     borderColor: '#fff', backgroundColor: '#ffd34f', alignItems: 'center', justifyContent: 'center' },
   nextButtonText: { color: '#073a70', fontFamily: 'Knockout', fontSize: 18 },
+  demoRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 4 },
+  demoTiles: { width: 96, height: 50, flexDirection: 'row', gap: 6, alignItems: 'center' },
+  demoTile: { width: 44, height: 44, borderRadius: 10, borderWidth: 2, borderColor: '#a9ecff', backgroundColor: '#52b6df' },
+  demoShark: { position: 'absolute', left: 3, top: 6 },
+  demoSharkArt: { width: 38, height: 38 },
+  demoHand: { position: 'absolute', left: 60, top: 14 },
+  demoHandArt: { width: 30, height: 36 },
+  splash: { position: 'absolute', borderWidth: 3, borderColor: '#ffffff' },
+  chestLayer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
+  chestShine: { position: 'absolute', backgroundColor: '#fff1b7' },
 });

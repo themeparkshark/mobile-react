@@ -127,3 +127,24 @@ test('T052: a signed-in warm-up card shows the way to a coin (footsteps, ride, c
   assert.match(r, /if \(!node \|\| !guest\) \{ go\(\); return; \}/);
   assert.ok(fs.existsSync(path.join(ROOT, 'assets/images/ride-photo/footsteps.webp')), 'existing art only');
 });
+
+test('T032: Current Quest (LinePlay) teaches a tap, moves on every step, pops a chest per voyage and offers PLAY AGAIN', () => {
+  const cq = read('src/games/current-quest/v1/CurrentQuestGame.tsx');
+  assert.match(cq, /countdownDemo=\{<TapPathDemo reduced=\{reduced\} \/>\}/, 'the start card pictures a tap on the next tile');
+  assert.match(cq, /TAP_HAND = require\('\.\.\/\.\.\/\.\.\/\.\.\/assets\/images\/ride-photo\/tap-hand\.webp'\)/);
+  assert.match(cq, /<Splash key=\{`s\$\{progress\.path\.length\}`\}/, 'a splash on every step');
+  assert.match(cq, /entering=\{reduced \? undefined : ZoomIn\.springify\(\)\.damping\(10\)\} style=\{styles\.trailDot\}/, 'the trail pops in');
+  assert.match(cq, /\{stageClear && !result \? <ChestPop /, 'a chest pops per voyage');
+  assert.doesNotMatch(cq, /A new route is ready/);
+  assert.match(cq, /onRematch=\{onRematch\}/);
+  assert.match(cq, /if \(lastMeta\.current && onRunProof\) onRunProof\(lastMeta\.current\);/, 'PLAY AGAIN never drops the line proof');
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /onRunProof=\{groupTurn \? undefined : \(meta\) => session\.recordCurrentQuest\(meta\)\}/);
+  // The replay seed: run 0 is the server's seed (the proof), later runs deal new routes.
+  const src = cq.slice(cq.indexOf('export function replaySeed'), cq.indexOf('\n}\n', cq.indexOf('export function replaySeed')) + 2);
+  // eslint-disable-next-line no-new-func
+  const replaySeed = new Function(`${src.replace('export function', 'function').replace(/: number/g, '')}; return replaySeed;`)();
+  assert.equal(replaySeed(12345, 0), 12345);
+  assert.notEqual(replaySeed(12345, 1), 12345);
+  assert.notEqual(replaySeed(12345, 1), replaySeed(12345, 2));
+});
