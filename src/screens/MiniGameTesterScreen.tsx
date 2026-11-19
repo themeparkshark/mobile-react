@@ -316,7 +316,8 @@ export default function MiniGameTesterScreen() {
         visible={activeGame !== null}
         taskId={999}
         taskName={previewRideName}
-        coinImageUrl={undefined}
+        // Dev only (lane captures): EXPO_PUBLIC_RIDE_GAME_PREVIEW_COIN is the previewed ride's coin_url (T060 HUD ring).
+        coinImageUrl={ridePreview ? process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW_COIN || undefined : undefined}
         preferredGame={activeGame === 'random' ? undefined : activeGame ?? undefined}
         rewardMode={ridePreview && sharkyPreview !== 'queue' ? 'task-attempt' : 'legacy'}
         isPractice={ridePreview}
