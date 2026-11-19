@@ -138,3 +138,43 @@ test('T053 hold-2: the Whack bonk-meter loss line carries have/need like Memory 
   const modal = require('node:fs').readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
   assert.match(modal, /pips=\{rideTry\?\.need \? \{ have: rideTry\.have \?\? 0, need: rideTry\.need \} : null\}/);
 });
+
+/* T046 hold-2: a steady once-a-second tapper never presses a result button; the win card and the shared card lock too. */
+test('T046 hold-2: the steady tapper (1 tap a second, any phase, 4 minutes) never presses TRY AGAIN; a player who stops presses first time', () => {
+  const M = loadTs('src/components/rewards/mashGuard.ts');
+  for (const gap of [600, 800, 1000, 1200]) {
+    for (let phase = 0; phase < gap; phase += 50) {
+      const taps = [];
+      for (let t = phase; t < 240000; t += gap) taps.push(t);
+      assert.equal(M.firstPressOf(taps), null, `a tapper every ${gap} ms (first tap at ${phase} ms) pressed a button`);
+    }
+  }
+  // Under the old 600 ms lock the same tapper pressed within about 2 s (checker 2: 4 Tickets in 4 minutes).
+  assert.notEqual(M.firstPressOf([300, 1300, 2300, 3300], 600, 600), null);
+  // A player who reads the card and taps once presses it.
+  assert.equal(M.firstPressOf([1400]), 1400);
+  // A stray tap, a stop, then a deliberate tap.
+  assert.equal(M.firstPressOf([300, 2000]), 2000);
+  assert.equal(M.firstPressOf([300, 1500]), null, 'a second tap inside the quiet wait is still a mash');
+});
+
+test('T046 hold-2: the loss and try card, the win card and the shared results card all use the one lock, dimmed until it wakes', () => {
+  const fs = require('node:fs');
+  const read = (p) => fs.readFileSync(p, 'utf8');
+  const hook = read('src/components/rewards/useResultInputLock.ts');
+  assert.match(hook, /nextMashUnlock\(unlockAt\.current, now, quietMs\)/);
+  assert.match(hook, /useAnimatedStyle\(\(\) => \(\{ opacity: glow\.value \}\)\)/, 'the dim runs on the UI thread');
+  const status = read('src/components/rewards/ChallengeStatusCard.tsx');
+  assert.match(status, /const \{ armed, lockedTap, dimStyle \} = useResultInputLock\(true, lockMs\);/);
+  assert.match(status, /<Animated\.View style=\{\[styles\.buttons, dimStyle\]\}>/);
+  const win = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(win, /useResultInputLock\(visible && caught\)/);
+  assert.match(win, /\{caught && !armed && <View testID="post-win-input-lock" style=\{StyleSheet\.absoluteFill\}\s+onStartShouldSetResponder=\{\(\) => \{ lockedTap\(\); return true; \}\} \/>\}/);
+  assert.match(win, /onBackdropPress=\{caught \? \(armed \? closeCard : lockedTap\) : undefined\}/);
+  assert.match(win, /const pressPrimary = \(\) => \{\n    if \(!armedRef\.current\) return;/);
+  assert.match(win, /const pressShelf = \(\) => \{\n    if \(!armedRef\.current\) return;/);
+  assert.match(win, /styles\.footer, leaving && styles\.footerLeaving, dimStyle\]/);
+  const shell = read('src/gamekit/GameShellV2.tsx');
+  assert.match(shell, /const resultsLock = useResultInputLock\(showSharedCard\);/);
+  assert.match(shell, /\{!resultsLock\.armed \? <View testID="results-input-lock" style=\{StyleSheet\.absoluteFill\}\n\s+onStartShouldSetResponder=\{\(\) => \{ resultsLock\.lockedTap\(\); return true; \}\} \/> : null\}\n\s+<\/Animated\.View>\n\s+<\/ResultsCard>/);
+});

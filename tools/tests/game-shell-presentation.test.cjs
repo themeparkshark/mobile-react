@@ -109,7 +109,7 @@ test('changing motion preference keeps the countdown deadline and settles a resu
   assert.deepEqual(Array.from(view.timers.keys()), countdown, 'a visual preference change never restarts the game countdown');
   view.find(node => node.type === 'Pressable').props.onPress(); view.render();
   view.change({ result: { score: 400, stars: 1 } });
-  assert.equal(view.timers.size, 0);
+  assert.deepEqual([...view.delays.values()], [1200], 'only the results input lock waits (T046 hold-2): no delayed burst or replay');
   assert.equal(view.tree.props.animationType, 'none');
   const card = view.find(node => node.type === 'ReanimatedView' && node.props.style?.[0]?.width === '90%' && node.props.style?.[1]?.opacity !== undefined);
   assert.equal(card.props.style[1].opacity, 1);
@@ -260,7 +260,8 @@ test('PLAY AGAIN is the big button; a won reward outside the queue leads with CO
   const lose = shell(false, false, { onRematch() { rematches++; } });
   startPlaying(lose.view);
   lose.view.change({ result: { score: 50, stars: 0 } });
-  const actions = lose.view.find(node => node.type === 'View' && Array.isArray(node.props.children) && hasText(node.props.children[0], 'PLAY AGAIN'));
+  // The actions sit in the input lock's dimmable wrapper (T046 hold-2).
+  const actions = lose.view.find(node => (node.type === 'View' || node.type === 'ReanimatedView') && Array.isArray(node.props.children) && hasText(node.props.children[0], 'PLAY AGAIN'));
   assert.ok(actions, 'PLAY AGAIN is the first (big) button');
   assert.ok(button(lose.view, 'DONE'), 'DONE is the second button');
   lose.view.unmount();
@@ -268,7 +269,7 @@ test('PLAY AGAIN is the big button; a won reward outside the queue leads with CO
   const coin = shell(false, false, { onRematch() { rematches++; } });
   startPlaying(coin.view);
   coin.view.change({ result: { score: 500, stars: 2 } });
-  const coinActions = coin.view.find(node => node.type === 'View' && Array.isArray(node.props.children) && hasText(node.props.children[0], 'CONTINUE'));
+  const coinActions = coin.view.find(node => (node.type === 'View' || node.type === 'ReanimatedView') && Array.isArray(node.props.children) && hasText(node.props.children[0], 'CONTINUE'));
   assert.ok(coinActions);
   coin.view.unmount();
   // In the queue the run is counted before the replay, so PLAY AGAIN leads even on a win.

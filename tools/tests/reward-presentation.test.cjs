@@ -93,6 +93,11 @@ test('changing to reduced motion stops the active catch without replaying its su
   catchView.preference(true); assert.equal(bursts, 1);
   catchView.unmount(); assert.equal(catchView.timers.size, 0); assert.ok(catchView.cancelled.length >= 11);
 });
+/** The win card's input lock (T046 hold-2) wakes once its 1.2 s sleep runs out with no tap. */
+function wake(view) {
+  for (const [id, fn] of [...view.timers]) if (view.delays.get(id) === 1200) { view.timers.delete(id); fn(); }
+  view.render();
+}
 function rewardView(reducedMotion) {
   return runtime('src/components/PostWinRewardsModal.tsx', {
     '../context/AuthProvider': { AuthContext: { value: { player: null } } },
@@ -246,6 +251,7 @@ test('a first coin shows one reward row: Shark Coins, the Parts and XP it grante
   assert.ok(!chips.some(([label]) => /saved for growing coins|Energy/.test(label)), 'no Energy riddle before rung 3: it flies to the Shelf button');
   assert.equal(rewards.find(node => node.props?.accessibilityLabel?.startsWith('Reward receipt')), undefined);
   assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to Map', 'no guide target: never a nameless NEXT COIN');
+  wake(rewards);
   rewards.find(node => node.props?.accessibilityLabel === 'See my shelf').props.onPress(); assert.equal(opened, false);
 });
 test('a repeat coin uses a short once-only deposit and cancels pending feedback on skip', async () => {
@@ -280,6 +286,9 @@ test('no money on the win card: a non-member sees no VIP line, and NEXT COIN han
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
   assert.equal(view.find(n=>/VIP|Starter|Shark Pass/.test(String(n.props?.accessibilityLabel ?? ''))), undefined);
   view.find(n=>n.type==='./YellowButton').props.onPress();
+  assert.deepEqual(presses,[],'a press before the result lock wakes is dropped (T046 hold-2)');
+  wake(view);
+  view.find(n=>n.type==='./YellowButton').props.onPress();
   assert.deepEqual(presses,['map'],'no guide target yet: NEXT COIN goes back to the map');
   view.tree.props.onHide();assert.equal(hidden,1);assert.deepEqual(navigated,[]);
 });
@@ -299,6 +308,7 @@ test('after rung 3 a repeat win shows its Parts as one line, ready to level up; 
   assert.ok(view.find(n=>n.props?.children==='Ready to level up'));
   assert.deepEqual(rowChips(view), [['Shark Coins', 10], ['Ride Parts', 2], ['Energy', 40], ['XP', 25]], 'fix W3 T048: the XP granted shows too');
   assert.equal(view.find(n=>n.type==='./YellowButton').props.text,'NEXT COIN');
+  wake(view);
   view.find(n=>n.props?.accessibilityLabel==='See my shelf').props.onPress(); assert.equal(opened,false);
 });
 test('post-win model: milestone headline, next unlock and parts meter use only confirmed numbers', () => {

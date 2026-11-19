@@ -877,8 +877,9 @@ test('the win card answers a tap at once, and its shelf picture never depends on
   assert.equal(win.winShelfLine(null, null, true), null);
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.doesNotMatch(card, /startsWith\('Limited'\)/);
-  assert.match(card, /<View style=\{\[styles\.footer, leaving && styles\.footerLeaving\]\} pointerEvents=\{leaving \? 'none' : 'auto'\}>/);
-  assert.match(card, /onBackdropPress=\{caught \? closeCard : undefined\}/);
+  assert.match(card, /<Animated\.View style=\{\[styles\.footer, leaving && styles\.footerLeaving, dimStyle\]\} pointerEvents=\{leaving \? 'none' : 'auto'\}>/);
+  // The win card answers its first tap once the result lock wakes (T046 hold-2); a tap before that restarts the wait.
+  assert.match(card, /onBackdropPress=\{caught \? \(armed \? closeCard : lockedTap\) : undefined\}/);
 });
 
 test('"Same game" follows the server\'s own same-game switch when it sends one', () => {
