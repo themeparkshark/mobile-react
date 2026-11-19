@@ -112,7 +112,7 @@ export function freeTicketWays(queueTicketsOn: boolean): { icon: GameIconName; t
     { icon: 'search', text: 'Every 3 treats on your home map = 1 Ticket' },
     { icon: 'star', text: 'Stamps in your Stamp Book give free Tickets' },
     { icon: 'gift', text: 'Today\u2019s free try plays one ride coin' },
-    ...(queueTicketsOn ? [{ icon: 'ride' as GameIconName, text: 'Your first wait at a ride earns a Ticket' }] : []),
+    ...(queueTicketsOn ? [{ icon: 'ride' as GameIconName, text: '10 minutes in a ride line earns a Ticket' }] : []),
   ];
 }
 

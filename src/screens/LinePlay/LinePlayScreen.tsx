@@ -214,7 +214,7 @@ import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { lineNudgeReady, linePlayTipReady } from '../../services/help/tipGate';
 import { chapterMissionIds, chapterPlayNow, railPageIcon, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
-  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastSpot } from '../../services/lineplay/lineLayout';
+  PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastSpot, FIRST_LINEPLAY_ROUND, firstLinePlayCalm } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
 import '../../services/fright/lineplay';
 
@@ -758,6 +758,14 @@ export default function LinePlayScreen() {
     void notePlayedGames(player.id, playedThisWait.split(',')).then(set => { if (live) setPlayedEver(set); });
     return () => { live = false; };
   }, [playedThisWait, player?.id]);
+  // Any round done in this wait (a clue or a game): the first LinePlay's calm rail is over for good (T083).
+  const roundsDone = snapshot.completedActivityIds.length;
+  useEffect(() => {
+    if (!player?.id || roundsDone === 0) return;
+    let live = true;
+    void notePlayedGames(player.id, [FIRST_LINEPLAY_ROUND]).then(set => { if (live) setPlayedEver(set); });
+    return () => { live = false; };
+  }, [roundsDone > 0, player?.id]);
   const nudged = useRef(false);
   useEffect(() => {
     if (snapshot.state !== 'active' || activeGame != null) return undefined;
@@ -1441,6 +1449,11 @@ export default function LinePlayScreen() {
   // One gold button per screen: every page carries its own gold action (PLAY NOW, PLAY, PLAY AGAIN, the
   // board's PLAY strip), so while a page is on screen the rail's Next (and More games) is a quiet white button.
   const railQuiet = visibleItem != null;
+  const firstCalm = firstLinePlayCalm({ played: playedEver, roundsDone: snapshot.completedActivityIds.length,
+    pageKind: activityPages[visiblePageIndex]?.kind, railMode });
+  // The rail fades in only when it arrives after the calm first page (never on an ordinary open).
+  const calmShown = useRef(false);
+  if (firstCalm) calmShown.current = true;
   const jumpToPage = (index: number, animated = Math.abs(index - visiblePageIndex) <= 1) => {
     if (index < 0 || index >= activityPages.length) return;
     setPageIndex(index);
@@ -1869,6 +1882,8 @@ export default function LinePlayScreen() {
             {/* The rail stays at its usual bottom spot in every state, so a thumb finds it in the same place. */}
             <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(180)}
               onLayout={event => setRailBlock(Math.round(event.nativeEvent.layout.height))}>
+            {firstCalm ? <View style={styles.railCalm} accessible={false} /> : <Reanimated.View
+              entering={reducedFx || !calmShown.current ? undefined : FadeIn.duration(260)}>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
               mode={railMode} onShowPages={onRailBack} backAction={railBack} quiet={railQuiet}
               tabs={{
@@ -1906,6 +1921,7 @@ export default function LinePlayScreen() {
                 pendingEncoreId.current = session.addMoreRounds();
                 if (!pendingEncoreId.current) manualEncoreRequested.current = false;
               }} />
+            </Reanimated.View>}
             </Reanimated.View>
             </>
           )}
@@ -2140,6 +2156,8 @@ function ActivitySkeleton() {
 }
 
 const styles = StyleSheet.create({
+  // The rail's own footprint (48 pt row, padding, border, the compass overlap), empty on the calm first page.
+  railCalm: { height: 48 + 8 + 4, marginBottom: 56 },
   root: { flex: 1, backgroundColor: '#07569e' },
   tip: { position: 'absolute', left: 12, right: 12, top: 300, zIndex: 60 },
   safe: { flex: 1 },

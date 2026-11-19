@@ -276,7 +276,8 @@ test('Details open on a 17 Pro: the navigation page is one "Tap to play" strip, 
 test('the chapter page in compact mode ends on whole trail bubbles, no small labels in the fade', () => {
   const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
   assert.match(card, /\{!compact && <Text style=\{styles\.stepName\} numberOfLines=\{3\}>\{name\}<\/Text>\}/);
-  assert.match(card, /accessibilityLabel=\{`\$\{complete \? 'Replay' : 'Open'\} \$\{name\}`\}/, 'the names stay in the spoken label');
+  // T083: the bubbles are progress only; the names stay in the spoken label.
+  assert.match(card, /accessibilityLabel=\{`\$\{name\}: \$\{complete \? 'done' : current \? 'next' : 'later'\}`\}/, 'the names stay in the spoken label');
   assert.match(card, /stepCompact: \{ minHeight: 0, paddingVertical: 5 \}/);
 });
 
@@ -780,11 +781,12 @@ test('the chapter page never shows a live-looking button that does nothing (dete
   // Locked is never a dead tap (wave 6): every button routes through choose(), which shakes and buzzes when locked.
   assert.match(chapter, /const off = \{ accessibilityState: \{ disabled: locked \} \} as const;/);
   assert.match(chapter, /if \(!locked\) \{ onChooseMission\(id\); return; \}\n\s+void Haptics\.notificationAsync/);
-  // Every mission button (PLAY, the strip, the 3 bubbles in both layouts, the crew chips, Crew Prompts) takes it.
+  // Every mission button (PLAY, the strip, the crew chips, Crew Prompts) takes it. The 3 bubbles in both layouts
+  // are progress only since T083, and still look off when locked.
   const presses = [...chapter.matchAll(/onPress=\{\(\) => choose\(/g)].length;
-  assert.equal(presses, 7);
+  assert.equal(presses, 5);
   assert.equal([...chapter.matchAll(/\{\.\.\.off\}/g)].length, presses, 'every onChooseMission button can be off');
-  assert.equal([...chapter.matchAll(/locked && styles\.locked(?:Play)?\b/g)].length, presses, 'and looks off');
+  assert.equal([...chapter.matchAll(/locked && styles\.locked(?:Play)?\b/g)].length, presses + 2, 'and looks off (the bubbles too)');
   assert.match(chapter, /locked: \{ opacity: 0\.6 \}/);
   assert.match(chapter, /lockedPlay: \{ backgroundColor: '#eef6fd', borderColor: '#7d9cbc' \}/, 'a solid pale strip, never gold faded to olive');
   assert.match(chapter, /export const LOCKED_LINE = 'Get in line to play';/);

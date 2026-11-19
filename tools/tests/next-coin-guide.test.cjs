@@ -382,7 +382,7 @@ test('free Tickets order: earned to claim (stamps first), free try, extra tries,
   assert.equal(F.playsNow({ kind: 'treats', treatsPerTicket: 3 }), false);
   // State A (queue_tickets off): no line Ticket copy anywhere.
   assert.ok(F.needTicketLines(false).every(line => !/wait|line/i.test(line)));
-  assert.ok(F.needTicketLines(true).some(line => /first wait at a ride earns a Ticket/.test(line)));
+  assert.ok(F.needTicketLines(true).some(line => /10 minutes in a ride line earns a Ticket/.test(line)));
   assert.ok(F.needTicketLines(false).some(line => line === '3 treats at home = 1 Ticket.'));
   assert.ok([...F.needTicketLines(true)].every(line => !line.includes(String.fromCharCode(0x2014))), 'no em dashes in copy');
 });
@@ -449,7 +449,7 @@ test('state A: the line Ticket sentence shows only while queue_tickets is on', (
   const noDaily = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: false, freeTryDaily: false }));
   assert.doesNotMatch(noDaily.line, /free try/i, 'no daily free try switch: no promise of one tomorrow');
   const on = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: true }));
-  assert.match(on.line, /Your first wait at a ride earns a Ticket\./);
+  assert.match(on.line, /10 minutes in a ride line earns a Ticket\./);
   assert.equal(on.button.label, 'LINEPLAY');
 });
 
@@ -919,7 +919,7 @@ test('Adventure sheet Ticket line: no LinePlay or wait Ticket promise while queu
   assert.equal(off, '2 more Tickets needed. 3 treats at home = 1 Ticket. Tomorrow brings a new free try.');
   assert.doesNotMatch(off, /LinePlay|wait|line/i);
   const on = A.adventureTicketsLine(1, false, true);
-  assert.match(on, /first wait at a ride earns one/);
+  assert.match(on, /10 minutes in a ride line earns one/);
   assert.equal(A.adventureTicketsLine(2, true, false), 'Today\'s free try is ready for this coin.');
   assert.equal(A.adventureTicketsLine(0, false, false), null);
   const sheet = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/AdventureTicketCard.tsx'), 'utf8');

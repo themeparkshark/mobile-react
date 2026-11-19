@@ -345,7 +345,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     case 'need_ticket': {
       const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`];
       if (ctx.freeTryDaily !== false) lines.push('Tomorrow brings a new free try.');
-      if (ctx.queueTicketsOn) lines.push('Your first wait at a ride earns a Ticket.');
+      if (ctx.queueTicketsOn) lines.push('10 minutes in a ride line earns a Ticket.');
       return card({
         kicker: 'NEED A TICKET',
         title: name ? `Next coin: ${name}` : 'Out of Tickets',

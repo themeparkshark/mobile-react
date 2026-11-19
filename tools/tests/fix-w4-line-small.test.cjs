@@ -1,0 +1,49 @@
+'use strict';
+/**
+ * Fix pass w4, lane line-small: LinePlay's first minute, the ride log and the in-line cards.
+ */
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const { loadTs } = require('./helpers/ts-module.cjs');
+
+const root = path.resolve(__dirname, '../..');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+test('T083: the first LinePlay shows one PLAY on the story page; the rail waits for the first round', () => {
+  const L = loadTs('src/services/lineplay/lineLayout.ts');
+  const fresh = new Set();
+  const base = { played: fresh, roundsDone: 0, pageKind: 'chapter_intro', railMode: 'pages' };
+  assert.equal(L.firstLinePlayCalm(base), true, 'a brand-new player on the story page: one call only');
+  assert.equal(L.firstLinePlayCalm({ ...base, roundsDone: 1 }), false, 'after the first round the rail comes back');
+  assert.equal(L.firstLinePlayCalm({ ...base, played: new Set([L.FIRST_LINEPLAY_ROUND]) }), false, 'the next LinePlay opens full');
+  assert.equal(L.firstLinePlayCalm({ ...base, played: new Set(['whack']) }), false, 'played a game before');
+  assert.equal(L.firstLinePlayCalm({ ...base, played: null }), false, 'still loading, or a guest: the usual rail');
+  assert.equal(L.firstLinePlayCalm({ ...base, pageKind: 'minigame' }), false, 'swiped to a game page: the rail is needed');
+  assert.equal(L.firstLinePlayCalm({ ...base, railMode: 'back' }), false, 'Details open on a small phone keeps Show games');
+
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /\{firstCalm \? <View style=\{styles\.railCalm\}/, 'the calm page keeps the rail footprint, empty');
+  assert.match(screen, /notePlayedGames\(player\.id, \[FIRST_LINEPLAY_ROUND\]\)/, 'the first round is remembered');
+  // The 1 2 3 bubbles are progress, never a second button beside PLAY.
+  const card = read('src/screens/LinePlay/components/ChapterCard.tsx');
+  assert.doesNotMatch(card, /accessibilityLabel=\{`\$\{complete \? 'Replay' : 'Open'\} \$\{name\}`\}/);
+  assert.doesNotMatch(card, /onPress=\{\(\) => choose\(missionIds\[index\]\)\}/);
+});
+
+test('T084: the line Ticket fills over its 10 minutes near the ride, and the copy says 10 minutes', () => {
+  const L = loadTs('src/services/lineplay/lineLayout.ts');
+  assert.deepEqual({ ...L.lineTicketProgress(0, 600) }, { progress: 0, full: false, minutesLeft: 10 });
+  assert.deepEqual({ ...L.lineTicketProgress(300, 600) }, { progress: 0.5, full: false, minutesLeft: 5 });
+  assert.deepEqual({ ...L.lineTicketProgress(610, 600) }, { progress: 1, full: true, minutesLeft: 0 });
+  assert.equal(L.lineTicketProgress(NaN, NaN).progress, 0);
+  const card = read('src/screens/LinePlay/components/WaitCard.tsx');
+  assert.match(card, /queueTicketsOn && rewardTrackingAvailable && ticketAvailable === true && !completed && \(\n\s+<LineTicketFill/);
+  for (const file of ['src/services/guide/guideCopy.ts', 'src/services/guide/freeTickets.ts', 'src/screens/StoreScreen/SuppliesShop.tsx',
+    'src/components/RedeemRedeemableModal.tsx', 'src/screens/ExploreScreen/adventureTicketPresentation.ts', 'src/services/help/glossary.ts']) {
+    const src = read(file);
+    assert.doesNotMatch(src, /'[^']*Your first wait at a ride earns/, `${file} never hides the 10 minutes`);
+    assert.match(src, /10 minutes in a ride line earns/, file);
+  }
+});
