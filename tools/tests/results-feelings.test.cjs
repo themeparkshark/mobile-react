@@ -201,7 +201,7 @@ test('every wait opens with a showpiece (Whack or Sharky); Current Quest v1 is n
 test('the shell never ends on a dark screen: fallback timer, shared card, no-star runs still count', () => {
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /RESULTS_FALLBACK_MS = 600/);
-  assert.match(shell, /showSharedCard = !rideLoss && phase === 'results' && \(!renderResults \|\| !effectiveResult \|\| \(gameResults == null && \(resultsSafe \|\| resultsSafeRef\.current \|\| wrap != null\)\)\)/);
+  assert.match(shell, /showSharedCard = !rideLoss && !rideWin && phase === 'results' && \(!renderResults \|\| !effectiveResult \|\| \(gameResults == null && \(resultsSafe \|\| resultsSafeRef\.current \|\| wrap != null\)\)\)/);
   // The safety net snaps only the fade; the settle spring keeps its own scale (no pop at 600 ms).
   assert.match(shell, /resultsSafe \|\| reducedMotion \? styles\.resultsShown : resultsFadeStyle/);
   assert.match(shell, /resultsShown: \{ opacity: 1 \}/);

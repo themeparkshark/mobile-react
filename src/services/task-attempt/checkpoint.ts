@@ -17,6 +17,52 @@ export interface TaskAttemptCheckpoint {
   retryOf?: number | null;
   /** "Picture games only" was on when this try started: never trivia. */
   pictureOnly?: boolean;
+  /**
+   * The coin this try is for, as its card shows it (fix W3 T033): if the win's answer is lost and the card closes,
+   * the map can open this coin's win card again from the checkpoint alone, even after the coin has left the map.
+   */
+  card?: CheckpointCard;
+}
+
+export interface CheckpointCard {
+  readonly name: string;
+  readonly coin_url?: string | null;
+  readonly coins?: number;
+  readonly experience?: number;
+}
+
+function cleanCard(card: unknown): CheckpointCard | null {
+  const c = card as Partial<CheckpointCard> | null | undefined;
+  if (!c || typeof c.name !== 'string' || !c.name.trim() || c.name.length > 200) return null;
+  return {
+    name: c.name,
+    ...(typeof c.coin_url === 'string' && c.coin_url.length < 2000 ? { coin_url: c.coin_url } : {}),
+    ...(Number.isFinite(c.coins) ? { coins: c.coins } : {}),
+    ...(Number.isFinite(c.experience) ? { experience: c.experience } : {}),
+  };
+}
+
+const KEY_PATTERN = /^task_attempt_checkpoint_v1_(\d+)_(task|secret_task)_(\d+)$/;
+
+/** The player, coin type and coin id a checkpoint key names, or null for any other key. */
+export function parseTaskAttemptCheckpointKey(key: string): { playerId: number; taskType: TaskAttemptCheckpoint['taskType']; taskId: number } | null {
+  const m = KEY_PATTERN.exec(key);
+  if (!m) return null;
+  return { playerId: Number(m[1]), taskType: m[2] as TaskAttemptCheckpoint['taskType'], taskId: Number(m[3]) };
+}
+
+/** Every saved try of this player (any coin), newest first. A broken one is skipped. */
+export async function listTaskAttemptCheckpoints(playerId: number, nowMs = Date.now()): Promise<TaskAttemptCheckpoint[]> {
+  const keys = (await AsyncStorage.getAllKeys()).filter(key => parseTaskAttemptCheckpointKey(key)?.playerId === playerId);
+  if (keys.length === 0) return [];
+  const pairs = await AsyncStorage.multiGet(keys);
+  const out: TaskAttemptCheckpoint[] = [];
+  for (const [key, raw] of pairs) {
+    const at = parseTaskAttemptCheckpointKey(key);
+    const value = at ? parseTaskAttemptCheckpoint(raw, at.playerId, at.taskType, at.taskId, nowMs) : null;
+    if (value) out.push(value);
+  }
+  return out.sort((a, b) => b.savedAt - a.savedAt);
 }
 
 export function taskAttemptCheckpointKey(
@@ -45,11 +91,13 @@ export function parseTaskAttemptCheckpoint(
       !Number.isFinite(value.savedAt) || value.savedAt > nowMs + 60_000 ||
       nowMs - value.savedAt > MAX_AGE_MS) return null;
     // Optional extras: a broken one is dropped, never the paid request itself.
-    const { retryOf, pictureOnly, ...paid } = value;
+    const { retryOf, pictureOnly, card, ...paid } = value;
+    const coinCard = cleanCard(card);
     return {
       ...paid,
       ...(Number.isInteger(retryOf) && (retryOf as number) > 0 ? { retryOf } : {}),
       ...(pictureOnly === true ? { pictureOnly: true } : {}),
+      ...(coinCard ? { card: coinCard } : {}),
     };
   } catch {
     return null;

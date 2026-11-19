@@ -36,6 +36,14 @@ export function costWords(cost: Pick<JoinCost, 'energy' | 'ticket' | 'energyAfte
   return `Costs ${t}${cost.energy} Energy \u00b7 You'll have ${cost.energyAfter} left`;
 }
 
+/**
+ * The line under FIGHT! (fix W3 T067): the button's pill already shows the cost, so the line says only what is left
+ * after it ("You'll have 110 Energy left"), never the cost a second time.
+ */
+export function afterWords(cost: Pick<JoinCost, 'energyAfter'>): string {
+  return `You'll have ${cost.energyAfter} Energy left`;
+}
+
 /** What this player gets if the team wins: home-only fighters get the remote rate and no Ride Parts. */
 export function rewardPreview(raid: Pick<BossRaid, 'remote' | 'you'> & { rewards?: Partial<RewardPreview> | null }, remote: boolean): RewardPreview {
   const base = { ...DEFAULT_WIN_REWARDS, ...(raid.rewards ?? {}) };

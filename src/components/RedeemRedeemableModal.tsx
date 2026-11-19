@@ -43,7 +43,8 @@ import { adventureLineStoryNext, partsProgress, weekLine } from './rewards/postW
 import { getTripGoal } from '../api/endpoints/me/trip-goal';
 import { withNumberFont } from '../ui/numberText';
 import TicketGift from './rewards/TicketGift';
-import { markTeamOffered, teamOffered, wantsTeamStep, whenTeamStepShown, type WinFlyWhen } from './rewards/teamOffer';
+import { markTeamOffered, teamOffered, whenTeamStepShown, type WinFlyWhen } from './rewards/teamOffer';
+import { wantsWinTeamStep } from './rewards/winTeamModel';
 import type { ClaimSource } from '../services/guide/freeTickets';
 import { guide, type GuideTarget } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
@@ -75,6 +76,16 @@ import { storeAvailable } from '../services/purchases';
 import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
+import { lossNext } from './rewards/lossNext';
+import { holdBroadcasts } from '../api/broadcastFilter';
+import { reconcileDelayMs } from '../services/task-attempt/reconcileDelay';
+import { markWinShown } from '../services/task-attempt/pendingWins';
+import { needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
+import { markCoinCardSeen } from './rewards/coinCardSeen';
+import { NeedTicketOfferSlot } from './rewards/offerSlots';
+import { taskHasLine } from '../services/lineplay/rideLines';
+import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
+import TicketClaimFlight from './rewards/TicketClaimFlight';
 
 
 // Ticket cost by ride importance tier
@@ -135,6 +146,8 @@ export default function RedeemRedeemableModal({
   onPress,
   onTaskCompleted,
   previewOnly = false,
+  quickStart = false,
+  onPractice,
 }: {
   readonly close: () => void;
   readonly open?: boolean;
@@ -144,6 +157,13 @@ export default function RedeemRedeemableModal({
   readonly onTaskFailed?: (taskId: number) => void;
   readonly onTaskCompleted?: (taskId: number, isSecretTask: boolean) => void;
   readonly previewOnly?: boolean;
+  /**
+   * One press to play (fix W3 T047): the player has Tickets and has seen this coin's card before, so the
+   * map's PLAY! starts the game at once (the card shows only its One moment while the Ticket is spent).
+   */
+  readonly quickStart?: boolean;
+  /** Out of Tickets: a free practice game (no coin), opened from the map once this card has gone (T031). */
+  readonly onPractice?: () => void;
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const { player, refreshPlayer } = useContext(AuthContext);
@@ -153,7 +173,7 @@ export default function RedeemRedeemableModal({
   const doubleXP = !!player?.is_subscribed;
   const doubleCoins = !!player?.is_subscribed;
   const { currencies } = useContext(CurrencyContext);
-  const { getTarget } = useCurrencyFly();
+  const { getTarget, triggerFly } = useCurrencyFly();
   // Rewards on the challenge card follow the unlock ladder (blueprint 4.4): Shark Coins first,
   // Parts and Energy with coin levels (rung 3), XP with Daily 3 (rung 4).
   const coinLevelsOpen = useRung('coin_levels').open;
@@ -176,6 +196,13 @@ export default function RedeemRedeemableModal({
 
   // Keep ref in sync so callbacks always have current flowState
   useEffect(() => { flowStateRef.current = flowState; }, [flowState]);
+  // Server news waits while the game plays and the win card is up (fix W3 T068): no toast behind the card.
+  const holdNews = open === true && (flowState === 'spinning' || flowState === 'minigame' || flowState === 'postwin' || flowState === 'claim-error');
+  useEffect(() => {
+    if (!holdNews) return undefined;
+    holdBroadcasts(true);
+    return () => holdBroadcasts(false);
+  }, [holdNews]);
   // From rung 3, a coin already on the shelf shows its Parts ring on the card (blueprint 5.3, scope 3).
   const ownedAssetId = open === true && coinLevelsOpen && redeemable?.type === 'task'
     && ((redeemable.model as TaskType).times_completed ?? 0) > 0 ? (redeemable.model as TaskType).asset_id ?? null : null;
@@ -191,16 +218,19 @@ export default function RedeemRedeemableModal({
   // Read only while the win card is up: the map re-resolves on every GPS step while the player
   // walks, and this card (and its hidden win card) must not re-render with each one.
   const [guideTarget, setGuideTarget] = useState<GuideTarget | null>(null);
-  const watchGuide = open === true && flowState === 'postwin';
+  // The loss card names the next coin too (fix W3 T029), so it watches the guide while it is up.
+  const watchGuide = open === true && (flowState === 'postwin' || flowState === 'lost');
   useEffect(() => {
     if (!watchGuide) return undefined;
     setGuideTarget(guide.current());
     return guide.subscribe(() => setGuideTarget(guide.current()));
   }, [watchGuide]);
 
-  // Safe close: only allows closing during preview state
+  // Safe close: only allows closing during preview state, and never while PLAY! is spending the Ticket (fix W3:
+  // a stray tap beside the card during One moment closed it while the game started, so the Ticket was spent with
+  // no game on screen).
   const safeClose = useCallback(() => {
-    if (flowStateRef.current === 'preview') {
+    if (flowStateRef.current === 'preview' && !spendingRef.current) {
       close();
     }
   }, [close]);
@@ -233,9 +263,15 @@ export default function RedeemRedeemableModal({
   const [startError, setStartError] = useState<string | null>(null);
   const [rescueUnavailable, setRescueUnavailable] = useState(false);
   const [proofRejected, setProofRejected] = useState(false);
+  // Bumped after each reconcile read that got no answer (T033), so the next one is scheduled.
+  const [reconcileBeat, setReconcileBeat] = useState(0);
   // Out of Tickets: earned Tickets waiting in the Stamp Book are claimed right here, first (blueprint 4.1).
   const [claimable, setClaimable] = useState<ClaimSource[] | null>(null);
   const [claiming, setClaiming] = useState(false);
+  // The finished claim (T142): its Tickets fly into the card's count, which counts up.
+  const [claimedFlight, setClaimedFlight] = useState<{ id: number; amount: number } | null>(null);
+  // Where the player stood when the server said "move closer" (T055): moving clears it.
+  const startErrorAt = useRef<{ latitude: number; longitude: number } | null>(null);
   // How the lost try went, from the game (one loss card: "8 of 13 bonks.").
   const [rideTry, setRideTry] = useState<RideTrySummary | null>(null);
   // "1 coin this week" (Standings count) for the win card.
@@ -297,7 +333,7 @@ export default function RedeemRedeemableModal({
   // first win brings. A ride's Energy is spent on the coin card, so it never sits here; a secret coin's
   // first win is the one Energy promise on this card (5.13). XP joins at rung 4.
   const cardParts = cardCoin && coinLevelsOpen ? partsProgress(cardCoin, player?.energy ?? null, 0) : null;
-  const previewRideRewards = rideRewardTask ? [
+  const previewRideRewardsAll = rideRewardTask ? [
     // The ride's own Shark Coins; a member's double coins show on the win card as their own "+N VIP" chip.
     { label: 'SHARK COINS', amount: rideRewardTask.coins, icon: 'coins' as const, show: rideRewardTask.coins > 0 },
     { label: 'RIDE PARTS', amount: rideRewardTask.ride_parts_reward ?? (taskType === 'secret_task' ? 2 : 1), icon: 'parts' as const,
@@ -307,6 +343,9 @@ export default function RedeemRedeemableModal({
       show: coinLevelsOpen && !cardParts && taskType === 'secret_task' },
     { label: 'XP', amount: doubleXP ? rideRewardTask.experience * 2 : rideRewardTask.experience, icon: 'xp' as const, show: dailyOpen },
   ].filter(reward => reward.show && reward.amount > 0) : [];
+  // One consistent preview for a coin (fix W3 T035): the same tiles on every visit, whatever the ladder has opened
+  // since. The win card shows everything the server granted; the card before PLAY promises the Shark Coins.
+  const previewRideRewards = previewRewardTiles(previewRideRewardsAll, taskType);
 
   const backgrounds = {
     task: '#0788e4',
@@ -354,7 +393,9 @@ export default function RedeemRedeemableModal({
       setRideTry(null);
       setWeekWins(null);
       retryOfRef.current = null;
-      rideCoinsBeforeRef.current = typeof player?.ride_coins_collected === 'number' ? player.ride_coins_collected : null;
+      // /me has no ride_coins_collected on every server: the completed coin count stands in (fix W3 T034, T037).
+      rideCoinsBeforeRef.current = typeof player?.ride_coins_collected === 'number' ? player.ride_coins_collected
+        : typeof player?.completed_tasks_count === 'number' ? player.completed_tasks_count : null;
       void loadPlayFlags();
       attemptRef.current = null;
       savedAttemptIdRef.current = null;
@@ -436,6 +477,8 @@ export default function RedeemRedeemableModal({
       onTaskCompleted?.(attempt.task_id, attempt.task_type === 'secret_task');
       markStandingsStale();
       setWeekWins(weekLine((attempt.rewards as { standings?: unknown }).standings));
+      // This win's card is showing now: the map's pending-win look never opens it a second time (T033).
+      markWinShown(attempt.id);
       // Shark Coins, Tickets and the rest fly to where they live as the win card closes (PostWinRewardsModal).
       setFlowState('postwin');
     } else if (attempt.status === 'lost') {
@@ -544,6 +587,9 @@ export default function RedeemRedeemableModal({
       // TRY AGAIN after a loss: the same game (the server honors it after be-core-loop deploys).
       ...((saved?.retryOf ?? retryOfRef.current) ? { retryOf: saved?.retryOf ?? retryOfRef.current } : {}),
       ...(pictureOnly ? { pictureOnly: true } : {}),
+      // The coin's card rides along (T033): a win whose answer was lost can still show its card from the map.
+      card: { name: taskName, coin_url: (redeemable?.model as TaskType | undefined)?.coin_url ?? null,
+        coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience },
     };
     try {
       await writeTaskAttemptCheckpoint(checkpoint);
@@ -586,6 +632,7 @@ export default function RedeemRedeemableModal({
           }
           setStartError((retryError as any)?.response?.data?.message ||
             'This ride challenge is unavailable right now. Check your location and Tickets.');
+          startErrorAt.current = startLocation;
           try {
             await clearAttemptCheckpoint();
             attemptRef.current = null;
@@ -604,7 +651,7 @@ export default function RedeemRedeemableModal({
     } finally {
       spendingRef.current = false;
     }
-  }, [location, redeemable, player?.id, taskType, taskId, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint]);
+  }, [location, redeemable, player?.id, taskType, taskId, taskName, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint]);
 
   const handleCheckRideAccess = useCallback(async () => {
     setStartError(null);
@@ -667,6 +714,30 @@ export default function RedeemRedeemableModal({
       claimingRef.current = false;
     }
   }, [applyAttemptState]);
+
+  // T033: a lost answer is asked again by itself while "Checking your score" is up (2, 4, 8, then every 15 s), so a
+  // win the server granted turns into its win card the moment the signal is back, with no tap needed.
+  const reconcileTry = useRef(0);
+  useEffect(() => {
+    if (!open || flowState !== 'claim-error' || proofRejected) { reconcileTry.current = 0; return undefined; }
+    const id = attemptRef.current?.id;
+    if (!id) return undefined;
+    let alive = true;
+    const delay = reconcileDelayMs(reconcileTry.current);
+    const timer = setTimeout(() => {
+      reconcileTry.current += 1;
+      void getTaskAttempt(id).then(async result => {
+        if (!alive || attemptRef.current?.id !== id) return;
+        // The server never got the result (it timed out or failed): send it again with the same proof.
+        if (result.attempt.status === 'started' && outcomeRef.current) await resolveAttempt(outcomeRef.current);
+        else applyAttemptState(result.attempt);
+      }).catch(() => undefined).finally(() => {
+        // Whatever this look found, the next one is scheduled; a card that moved on (win, loss) cancels it.
+        if (alive) setReconcileBeat(beat => beat + 1);
+      });
+    }, delay);
+    return () => { alive = false; clearTimeout(timer); };
+  }, [open, flowState, proofRejected, reconcileBeat]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGameWin = useCallback(async (proof?: TaskGameProof) => {
     await resolveAttempt('win', proof);
@@ -775,11 +846,69 @@ export default function RedeemRedeemableModal({
       if (source.kind !== 'stamp' || typeof source.id !== 'number') continue;
       try { await claimStampReward(source.id); } catch { failed = true; }
     }
-    try { await refreshPlayer?.(); } catch { failed = true; }
+    const before = player?.tickets ?? 0;
+    let after = before;
+    try { after = (await refreshPlayer?.())?.tickets ?? before; } catch { failed = true; }
     setClaimable(null);
     setClaiming(false);
+    const got = Math.max(0, after - before);
+    if (got > 0) {
+      setClaimedFlight({ id: Date.now(), amount: got });
+      // The header's Ticket pill holds its number until these land, then counts up (CurrencyFlyProvider).
+      const { width, height } = Dimensions.get('window');
+      triggerFly?.({ imageSource: require('../../assets/images/ticket-icon.png'), amount: Math.min(5, got),
+        startX: width / 2, startY: height * 0.62, targetPosition: 'tickets' });
+    }
     if (failed) setStartError('Some Tickets did not claim. Check your internet and try again.');
-  }, [claiming, claimable, refreshPlayer]);
+  }, [claiming, claimable, refreshPlayer, player?.tickets, triggerFly]);
+
+  // T055: "Move closer" was true where PLAY! was pressed; once the player moves, the card asks again.
+  useEffect(() => {
+    if (!startError || !rangeErrorCleared(startErrorAt.current, location ?? null)) return;
+    startErrorAt.current = null;
+    setStartError(null);
+  }, [location?.latitude, location?.longitude, startError]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The loss card's way on at 0 Tickets names earned Tickets waiting in the Stamp Book (T029).
+  useEffect(() => {
+    if (!open || !isTaskType || flowState !== 'lost' || hasEnoughTickets || claimable !== null || previewOnly) return;
+    let alive = true;
+    void getStamps().then(response => {
+      if (alive) setClaimable(stampClaimSources(Object.values(response.stamps).flat()));
+    }).catch(() => { if (alive) setClaimable([]); });
+    return () => { alive = false; };
+  }, [open, isTaskType, flowState, hasEnoughTickets, claimable, previewOnly]);
+
+  // A card seen once plays in one press next time (T047). It counts as seen once its preview is up.
+  useEffect(() => {
+    if (open && flowState === 'preview' && taskType && taskId && !previewOnly) void markCoinCardSeen(player?.id, taskType, taskId);
+  }, [open, flowState, taskType, taskId, player?.id, previewOnly]);
+
+  /**
+   * Back to this coin's card from a loss at 0 Tickets (T029, T030): the finished try is cleared and the card
+   * shows the free ways in their fixed order (claim, free try, extra tries, the line, a practice game).
+   */
+  const backToCard = useCallback(() => {
+    clearFinishedTry('Could not clear resolved ride challenge:');
+    attemptRef.current = null;
+    savedAttemptIdRef.current = null;
+    requestIdRef.current = null;
+    outcomeRef.current = null;
+    proofRef.current = null;
+    setSelectedGame(null);
+    setSelectedGameData(null);
+    setFirstCoinTicketReturned(false);
+    setRescueRetryAvailable(false);
+    setUsedRescuePass(false);
+    setRideTry(null);
+    setClaimable(null);
+    setStartError(null);
+    refreshPlayer?.();
+    // The map reads this coin again, so the card's free and extra tries are today's, not the ones from before the loss.
+    onPress();
+    cardShownAt.current = Date.now();
+    setFlowState('preview');
+  }, [clearFinishedTry, refreshPlayer, onPress]);
 
   // The first coin has one fixed order (blueprint 4.3 rule 3): the win card, then (first coin ever,
   // no team yet) the team offer as its own one-tap step, then the map with nothing else.
@@ -790,13 +919,19 @@ export default function RedeemRedeemableModal({
   const teamStepReady = useRef<Promise<boolean>>(Promise.resolve(false));
   const postWinOpen = open === true && flowState === 'postwin';
   const needsTeamNow = !!(rideControl as { needs_team?: boolean } | null)?.needs_team;
+  // T034: the team offer is a step inside this win card (never a screen that arrives late, mid-walk), on a new coin
+  // for a player with no team, once per player: not only on the first coin ever.
+  const [teamInCard, setTeamInCard] = useState(false);
   useEffect(() => {
-    if (!postWinOpen) { teamStepReady.current = Promise.resolve(false); return; }
+    teamStepReady.current = Promise.resolve(false);
+    if (!postWinOpen) { setTeamInCard(false); return undefined; }
+    let alive = true;
     const isNewCoin = coinTimesCollected === 1;
-    teamStepReady.current = (needsTeamNow ? teamOffered(player?.id) : Promise.resolve(true))
-      .then(offeredBefore => wantsTeamStep({ needsTeam: needsTeamNow, isNewCoin, firstCoinEver, offeredBefore }))
-      .catch(() => false);
-  }, [postWinOpen, needsTeamNow, player?.id, coinTimesCollected, firstCoinEver]);
+    void (needsTeamNow ? teamOffered(player?.id) : Promise.resolve(true))
+      .then(offeredBefore => { if (alive) setTeamInCard(wantsWinTeamStep({ needsTeam: needsTeamNow, isNewCoin, offeredBefore })); })
+      .catch(() => undefined);
+    return () => { alive = false; };
+  }, [postWinOpen, needsTeamNow, player?.id, coinTimesCollected]);
   // One way out of the win card per win: a second tap while it fades does nothing.
   const leavingWinRef = useRef(false);
   // The win card's rewards fly to the map's pills: now, or once the first coin's team step has closed
@@ -884,6 +1019,8 @@ export default function RedeemRedeemableModal({
   const challengeLayer = useNativeModalLayer(open === true && !!redeemable, 'wait', CHALLENGE_PATIENCE_MS);
   const reducedMotion = useReducedGameMotion();
   const winHidden = useRef<(() => void) | null>(null);
+  const afterDismissRef = useRef<(() => void) | null>(null);
+  const runAfterDismiss = () => { const next = afterDismissRef.current; afterDismissRef.current = null; next?.(); };
   // The win card's rewards fly when its sheet has gone, or at once if PLAY! brought the sheet back before that.
   const winLeaving = useRef(false);
   const winOut = () => {
@@ -904,15 +1041,54 @@ export default function RedeemRedeemableModal({
     safeClose();
   }, [safeClose]);
 
+  // One press (T047): the coin's card was read before and a Ticket is in hand, so PLAY! on the map starts it.
+  const quickStarted = useRef(false);
+  useEffect(() => { if (!open) quickStarted.current = false; }, [open]);
+  useEffect(() => {
+    if (!open || !quickStart || quickStarted.current || flowState !== 'preview' || !isTaskType || !hasEnoughTickets || !location || previewOnly) return;
+    quickStarted.current = true;
+    setStarting(true);
+    void handleStartWheel().finally(() => setStarting(false));
+  }, [open, quickStart, flowState, isTaskType, hasEnoughTickets, location, previewOnly]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!redeemable) return null;
 
+  // NEED A TICKET (T030, T031): the big button always plays something. LinePlay at a ride with a line while
+  // the line Ticket is on, otherwise a free practice game; the map is the small second button.
+  const lineRide = taskType === 'task' && taskId != null && taskHasLine(taskId);
+  const needMain = needTicketMain({ queueTicketsOn, rideHasLine: lineRide, practice: !!onPractice && !previewOnly });
+  const openLinePlay = () => {
+    const ride = { rideId: 0, rideName: taskName, parkId: park.id, postedWaitMinutes: null, imageUrl: null };
+    close();
+    void storyWithin(resolveQueueStoryContext(park.id, 0, taskName, taskId ?? 0), ride)
+      .then(found => RootNavigation.navigate('LinePlay', { ride: found }));
+  };
+  // The practice games open from the map once this card's native sheet is really gone (never a sheet into a leaving one).
+  const openPractice = () => {
+    afterDismissRef.current = onPractice ?? null;
+    close();
+  };
+  // The loss card's one way on (T029): TRY AGAIN while Tickets or a free try remain, the free ways at 0 Tickets.
+  const lossTarget = guideTarget && guideTarget.taskId !== taskId ? guideTarget : null;
+  const lossPlan = lossNext({
+    freeRetry: firstCoinTicketReturned || rescueRetryAvailable, vipRetry: canOfferRetry,
+    tickets: playerTickets, ticketCost, claimableTickets: (claimable ?? []).reduce((sum, source) => sum + source.tickets, 0),
+    nextCoin: lossTarget ? { name: lossTarget.name, meters: lossTarget.meters } : null,
+  });
+  const lossPress = lossPlan.kind === 'vip_retry' ? () => { void handleVipRetry(); }
+    : lossPlan.kind === 'ways' ? backToCard : () => { void handleProtectedRetry(); };
   const ticketTarget = flowState === 'lost' && firstCoinTicketReturned ? getTarget?.('tickets') ?? null : null;
   const freeBadge = freeStep?.kind === 'free_try' ? 'free' : freeStep?.kind === 'extra_try' ? 'extra' : null;
-  const buttonLabel = !stepReady || starting ? 'One moment' : claiming ? 'Claiming...' : needTicket ? NEED_TICKET_BUTTON : challengeButtonLabel(freeStep, ticketCost);
+  const needLabel = needMain === 'lineplay' ? 'LinePlay' : needMain === 'practice' ? 'Practice Game' : NEED_TICKET_BUTTON;
+  const buttonLabel = !stepReady || starting ? 'One moment' : claiming ? 'Claiming...' : needTicket ? needLabel : challengeButtonLabel(freeStep, ticketCost);
   const pressChallenge = () => {
     if (previewOnly || !stepReady || claiming) return;
     if (freeStep?.kind === 'claim') { void handleClaimTickets(); return; }
-    if (needTicket) { safeClose(); return; }
+    if (needTicket) {
+      if (needMain === 'lineplay') openLinePlay();
+      else if (needMain === 'practice') openPractice();
+      else safeClose();
+      return;
+    }
     setStarting(true);
     void handleStartWheel().finally(() => setStarting(false));
   };
@@ -929,10 +1105,10 @@ export default function RedeemRedeemableModal({
         onWillShow={() => { cardShownAt.current = Date.now(); }}
         onHide={() => {
           // iOS: the door reports the real dismiss (onDismiss). Android has no such event.
-          if (Platform.OS !== 'ios') challengeLayer.onHidden();
+          if (Platform.OS !== 'ios') { challengeLayer.onHidden(); runAfterDismiss(); }
           winOut();
         }}
-        onDismiss={challengeLayer.onDismissed}
+        onDismiss={() => { challengeLayer.onDismissed(); runAfterDismiss(); }}
         onBackdropPress={closeFromScrim}
         onBackButtonPress={flowState === 'postwin' ? () => { void handlePostWinClose(); } : safeClose}
         onPresentLost={close}
@@ -969,6 +1145,14 @@ export default function RedeemRedeemableModal({
               <View pointerEvents="box-none"
                 style={{ width: Dimensions.get('window').width - 40, position: 'relative', zIndex: 10, alignItems: 'center' }}>
                 <Ribbon text={isTaskType ? title : 'Congratulations'} />
+                {/* A small X like every other sheet (T047); the backdrop tap still closes it too. */}
+                {!previewOnly && <Pressable onPress={() => {
+                  if (Date.now() - cardShownAt.current < SCRIM_GRACE_MS) return;
+                  playSound(require('../../assets/sounds/redeem_modal_close.mp3'));
+                  safeClose();
+                }} hitSlop={12} style={styles.cardClose} accessibilityRole="button" accessibilityLabel="Close">
+                  <GameIcon name="close" size={34} />
+                </Pressable>}
                 <View style={{
                   backgroundColor: backgrounds[redeemable.type as keyof typeof backgrounds],
                   borderRadius: 16, marginTop: '-10%', width: '85%', zIndex: 10,
@@ -1061,6 +1245,7 @@ export default function RedeemRedeemableModal({
                         {playsNow && outOfTickets && challengeStepLine(freeStep) && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         {freeStep?.kind === 'claim' && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         <YellowButton
+                          hitSlop={MAIN_BUTTON_HIT_SLOP}
                           text={buttonLabel}
                           disabled={!stepReady || claiming || starting || (playsNow && !needTicket && freeStep?.kind !== 'claim' && !location)}
                           onPress={pressChallenge}
@@ -1070,19 +1255,33 @@ export default function RedeemRedeemableModal({
                             <GameIcon name="ticket" size={26} />
                             <Text style={styles.ticketHelpTitle}>{needCopy.title}</Text>
                           </View>
-                          {freeSteps.filter(step => step.kind === 'line_ticket' || step.kind === 'treats').map(step => (
-                            <View key={step.kind} style={styles.wayRow}>
-                              {/* The pocket watch means Wait Times only (ledger 37): the line Ticket wears the ride picture. */}
-                              {step.kind === 'line_ticket' ? <GameIcon name="ride" size={22} />
-                                : <Image source={TREAT_ART} style={styles.treatArt} contentFit="contain" />}
-                              <Text style={styles.ticketHelpCopy}>{withNumberFont(step.kind === 'line_ticket'
-                                ? 'Your first wait at a ride earns a Ticket.' : '3 treats at home = 1 Ticket.')}</Text>
+                          {/* The free ways as pictures (T030): treats at home, tomorrow's free try, the line. A kid reads none of it. */}
+                          <View style={styles.wayTiles}>
+                            <View style={styles.wayTile} accessible accessibilityLabel={`${TREATS_PER_TICKET} treats at home make 1 Ticket.`}>
+                              <View style={styles.treatStack}>
+                                {Array.from({ length: TREATS_PER_TICKET }, (_, i) => <Image key={i} source={TREAT_ART} style={styles.treatArt} contentFit="contain" />)}
+                              </View>
+                              <Text style={styles.wayEquals}>=</Text>
+                              <GameIcon name="ticket" size={24} />
                             </View>
-                          ))}
-                          {!!redeemable.rescue_pass_used_today && <View style={styles.wayRow}>
-                            <GameIcon name="gift" size={22} />
-                            <Text style={styles.ticketHelpCopy}>Tomorrow brings a new free try.</Text>
-                          </View>}
+                            {!!redeemable.rescue_pass_used_today && <View style={styles.wayTile} accessible accessibilityLabel="Tomorrow brings a new free try.">
+                              <GameIcon name="moon" size={26} />
+                              <Text style={styles.wayEquals}>=</Text>
+                              <GameIcon name="gift" size={24} />
+                            </View>}
+                            {freeSteps.some(step => step.kind === 'line_ticket') && <View style={styles.wayTile} accessible accessibilityLabel="Your first wait at a ride earns a Ticket.">
+                              <GameIcon name="line" size={26} />
+                              <Text style={styles.wayEquals}>=</Text>
+                              <GameIcon name="ticket" size={24} />
+                            </View>}
+                          </View>
+                          {needMain === 'lineplay' && !!onPractice && <Pressable onPress={openPractice} accessibilityRole="button"
+                            accessibilityLabel="Play a practice game. No coin, just fun."
+                            style={({ pressed }) => [styles.shopRow, pressed && { opacity: 0.7 }]}>
+                            <GameIcon name="play" size={20} />
+                            <Text style={styles.shopRowText} numberOfLines={1} adjustsFontSizeToFit>Practice game</Text>
+                            <GameIcon name="arrow" size={14} />
+                          </Pressable>}
                           {/* The grown-up shop comes last, under every free way: one small row that opens Supplies on
                               Tickets, where every purchase sits behind the grown-up gate. No price inside the card. */}
                           {storeAvailable() && !previewOnly && (
@@ -1094,12 +1293,16 @@ export default function RedeemRedeemableModal({
                               <GameIcon name="arrow" size={14} />
                             </Pressable>
                           )}
+                          {/* One optional row (a calm offer) lands here in a later step; nothing until then. */}
+                          {!previewOnly && <NeedTicketOfferSlot placement="need_ticket" taskId={taskId} closeCard={close} />}
                         </View>}
+                        {needTicket && <Pressable onPress={safeClose} accessibilityRole="button" accessibilityLabel={BACK_TO_MAP}
+                          style={({ pressed }) => [styles.mapLink, pressed && { opacity: 0.7 }]} hitSlop={8}>
+                          <GameIcon name="map" size={20} />
+                          <Text style={styles.mapLinkText}>{BACK_TO_MAP}</Text>
+                        </Pressable>}
                         {startError && <Text style={styles.ticketError}>{startError}</Text>}
-                        <View style={styles.ticketCountRow} accessible accessibilityLabel={`You have ${playerTickets} ticket${playerTickets === 1 ? '' : 's'}`}>
-                          <GameIcon name="ticket" size={24} />
-                          <Text style={styles.ticketCount}>{playerTickets} {playerTickets === 1 ? 'Ticket' : 'Tickets'}</Text>
-                        </View>
+                        <TicketClaimFlight tickets={playerTickets} claimed={claimedFlight} reduced={reducedMotion} />
                       </>
                     ) : (
                       <YellowButton
@@ -1189,14 +1392,13 @@ export default function RedeemRedeemableModal({
               came back) and one way on. A member's VIP try lives inside TRY AGAIN; nobody else sees a VIP line. */}
           {flowState === 'lost' && <ChallengeStatusCard title={lostCopy.title} art="soClose"
             message={vipNote ?? (vipOutToday ? VIP_TRY_TOMORROW : lostCopy.message)} ticket={lostCopy.ticket} line={rideTry?.line ?? null} ticketFlyTo={ticketTarget}
-            primary={firstCoinTicketReturned || rescueRetryAvailable
-              ? { label: location ? 'Try Again' : 'Finding You', icons: ['retry'], onPress: handleProtectedRetry, disabled: !location }
-              : canOfferRetry
-              ? { ...VIP_RETRY_ACTION, icons: [...VIP_RETRY_ACTION.icons], label: adBusy ? 'One Moment' : VIP_RETRY_ACTION.label,
-                onPress: () => { void handleVipRetry(); }, disabled: adBusy || !location }
-              : { label: BACK_TO_MAP, onPress: handleLostClose }}
-            quiet={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry ? { label: BACK_TO_MAP, onPress: handleLostClose } : undefined}
-            guardRetry={firstCoinTicketReturned || rescueRetryAvailable || canOfferRetry} />}
+            pips={rideTry?.need ? { have: rideTry.have ?? 0, need: rideTry.need } : null}
+            primary={{ label: lossPlan.kind === 'vip_retry' && adBusy ? 'One Moment' : location || lossPlan.kind === 'ways' ? lossPlan.label : 'Finding You',
+              icons: [...lossPlan.icons], note: lossPlan.note, a11yLabel: lossPlan.a11yLabel, onPress: lossPress,
+              disabled: lossPlan.kind !== 'ways' && (!location || adBusy) }}
+            quiet={{ label: BACK_TO_MAP, onPress: handleLostClose }}
+            footnotes={lossPlan.footnotes}
+            guardRetry={lossPlan.kind !== 'ways'} />}
 
           {/* MINIGAME STATE - rendered inside the same modal */}
           {/* The game stays under the win card until the card covers it, so a win never shows a dim map. */}
@@ -1271,6 +1473,9 @@ export default function RedeemRedeemableModal({
         flyWhen={() => flyWhenRef.current}
         onClose={handlePostWinClose}
         starRide={redeemable?.type === 'task' && starRides.has((redeemable.model as TaskType)?.id)}
+        fullReveal={firstCoinEver}
+        teamStep={teamInCard}
+        onTeamShown={() => { void markTeamOffered(player?.id); }}
         attemptId={attemptRef.current?.status === 'won' ? attemptRef.current.id : null}
       />
           </View>
@@ -1280,7 +1485,21 @@ export default function RedeemRedeemableModal({
   );
 }
 
+/** The card's big button takes taps a little past its art on every side (T062: a tap on its lower edge was lost). */
+export const MAIN_BUTTON_HIT_SLOP = { top: 6, bottom: 14, left: 12, right: 12 } as const;
+
 const styles = StyleSheet.create({
+  // Inside the card's top right corner, under the ribbon (never on the ribbon's words).
+  cardClose: { position: 'absolute', top: 70, right: '9.5%', zIndex: 30 },
+  wayTiles: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, marginTop: 8 },
+  // The same chip as the win card's reward row (cream, white rim, blue lip), never a thin-bordered box.
+  wayTile: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e4', borderRadius: 14, borderWidth: 2,
+    borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9', paddingHorizontal: 8, paddingVertical: 4 },
+  wayEquals: { fontFamily: 'Shark', fontSize: 18, color: '#075b9b' },
+  treatStack: { flexDirection: 'row', marginRight: -2 },
+  mapLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8, paddingVertical: 4 },
+  mapLinkText: { color: '#ffffff', fontFamily: 'Shark', fontSize: 16, textShadowColor: '#05346e',
+    textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0.1 },
   howStrip: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 40, marginTop: -6, marginBottom: 6 },
   howCoin: { width: 30, height: 30 },
   rewardTile: { minWidth: 82, paddingHorizontal: 4, alignItems: 'center' },

@@ -1,7 +1,7 @@
 import { leavingSheetTap, modalLayers } from '../ui/modalLayers';
 import { createPressQueue } from './guide/playPressQueue';
 import { useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Text, View, type TextStyle, type ViewStyle } from 'react-native';
+import { Animated, AppState, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { AuthContext } from '../context/AuthProvider';
@@ -29,6 +29,10 @@ import YellowButton from './YellowButton';
 import { TaskType } from '../models/task-type';
 import { BRAND, GameIcon } from '../ui';
 import { useCoverArt } from './map/mapCover';
+import HomeArcade from './HomeArcade';
+import { coinCardSeenNow, warmCoinCardsSeen } from './rewards/coinCardSeen';
+import { playPillState } from './rewards/playPill';
+import { findPendingWin, pendingWinRedeemable } from '../services/task-attempt/pendingWins';
 
 /**
  * PLAY!'s wrapper sits 50 pt below the map's bottom edge (ExploreScreen); the group rests 120 pt
@@ -80,6 +84,10 @@ export default function RedeemModal({
 }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const [modalVisible, setModalVisible] = useState<boolean>(false);
+  // One press to play (fix W3 T047): set at the PLAY! press, read by the card when it opens.
+  const [quickStart, setQuickStart] = useState(false);
+  // Out of Tickets, the card's Practice game opens the free practice games from here (T031).
+  const [practiceOpen, setPracticeOpen] = useState(false);
   // Nearby opportunities can refresh or disappear as soon as a win is confirmed.
   // The opened challenge owns its snapshot until the player closes its reward flow.
   const [openedRedeemable, setOpenedRedeemable] = useState<CurrentRedeemableType | null>(null);
@@ -95,6 +103,34 @@ export default function RedeemModal({
   useEffect(() => () => openChange.current?.(false), []);
   const task = redeemable?.type === 'task' ? redeemable.model as TaskType : null;
   const { player } = useContext(AuthContext);
+  useEffect(() => { warmCoinCardsSeen(player?.id); }, [player?.id]);
+  // A server-granted win always shows its win card (fix W3 T033): a won try whose card never showed (its answer was
+  // lost, the card closed, the app was shut) opens as its win card here, on the map, as soon as the server says so.
+  // Looked at when the map opens, when the app comes back, after a challenge card closes, and again a little later
+  // while a saved try could not be read.
+  const [pendingLook, setPendingLook] = useState(0);
+  const pendingBusy = useRef(false);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', state => { if (state === 'active') setPendingLook(n => n + 1); });
+    return () => sub.remove();
+  }, []);
+  useEffect(() => {
+    if (modalVisible || !player?.id || pendingBusy.current) return undefined;
+    let alive = true;
+    let again: ReturnType<typeof setTimeout> | null = null;
+    pendingBusy.current = true;
+    void findPendingWin(player.id).then(({ win, unsure }) => {
+      if (!alive) return;
+      if (win) {
+        setQuickStart(false);
+        setOpenedRedeemable(pendingWinRedeemable(win) as unknown as CurrentRedeemableType);
+        setModalVisible(true);
+      } else if (unsure) {
+        again = setTimeout(() => setPendingLook(n => n + 1), 15000);
+      }
+    }).catch(() => undefined).finally(() => { pendingBusy.current = false; });
+    return () => { alive = false; if (again) clearTimeout(again); };
+  }, [modalVisible, player?.id, pendingLook]);
   // Secret coins arrive with coin levels (rung 3, blueprint 5.13): before that a secret spot offers nothing.
   const coinLevels = useRung('coin_levels');
   const secretLocked = redeemable?.type === 'secret_task' && !coinLevels.open;
@@ -104,7 +140,8 @@ export default function RedeemModal({
   // Out of Tickets, PLAY! never vanishes: the daily free try wears a gift, a held extra try a ticket-gift.
   // Earned Tickets waiting in the Stamp Book come first (the card claims them in place), so while any wait
   // PLAY! wears no gift: the button and the card always agree. Looked up once per Ticket count, only at 0.
-  const short = !!coin && (player?.tickets ?? 0) < Math.max(1, coin.ticket_cost ?? 1) && redeemable?.rescue_pass_available === true;
+  // Looked up at 0 Tickets with or without a free try: with none, an empty book is what dims PLAY! (T030).
+  const short = !!coin && (player?.tickets ?? 0) < Math.max(1, coin.ticket_cost ?? 1);
   const [claimWaiting, setClaimWaiting] = useState<{ tickets: number; count: number } | null>(null);
   const ticketsNow = player?.tickets ?? 0;
   useEffect(() => {
@@ -116,6 +153,13 @@ export default function RedeemModal({
     }).catch(() => { if (alive) setClaimWaiting({ tickets: ticketsNow, count: 0 }); });
     return () => { alive = false; };
   }, [short, ticketsNow, claimWaiting?.tickets, claimableTickets]);
+  // While the card is open, a fresher answer for the same coin replaces its snapshot (fix W3: after a loss the
+  // card shows today's free and extra tries, never the ones the map knew before the try).
+  useEffect(() => {
+    if (!modalVisible || !redeemable || !openedRedeemable) return;
+    if (redeemable === openedRedeemable || redeemable.type !== openedRedeemable.type || redeemable.model.id !== openedRedeemable.model.id) return;
+    setOpenedRedeemable(redeemable);
+  }, [modalVisible, redeemable]); // eslint-disable-line react-hooks/exhaustive-deps
   const ownClaimable = short && claimWaiting?.tickets !== ticketsNow ? 1 : claimWaiting?.count ?? 0;
   const badge: PlayBadge = coin ? playBadge({
     tickets: ticketsNow, ticketCost: coin.ticket_cost ?? 1,
@@ -131,7 +175,7 @@ export default function RedeemModal({
   // even while the challenge card waits its turn behind a sheet that is still sliding away.
   const press = useRef(new Animated.Value(1)).current;
   // A press that lands on a sheet still on its way out, right over PLAY!, is PLAY!'s press (ui/modalLayers.ts).
-  const pill = useRef<View>(null);
+  const pillRef = useRef<View>(null);
   const pressPlayRef = useRef<() => void>(() => undefined);
   const pressNow = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
@@ -198,7 +242,7 @@ export default function RedeemModal({
   useEffect(() => {
     if (!playDrawn) return undefined;
     return leavingSheetTap.listen((x, y) => {
-      pill.current?.measureInWindow((px, py, width, height) => {
+      pillRef.current?.measureInWindow((px, py, width, height) => {
         if (x >= px - PLAY_HOLD_SLOP && x <= px + width + PLAY_HOLD_SLOP && y >= py - PLAY_HOLD_SLOP && y <= py + height + PLAY_HOLD_SLOP) pressPlayRef.current();
       });
     });
@@ -217,6 +261,9 @@ export default function RedeemModal({
   openRef.current = () => {
     if (!redeemable) return;   // walked off while the press waited: nothing to open
     setOpenedRedeemable(redeemable);
+    // A coin whose card was read before, with a Ticket in hand: PLAY! is the one press (the card starts at once).
+    setQuickStart(!!coin && (player?.tickets ?? 0) >= Math.max(1, coin.ticket_cost ?? 1)
+      && coinCardSeenNow(player?.id, redeemable?.type ?? '', coin.id));
     setModalVisible(true);
   };
   pressPlayRef.current = () => {
@@ -224,6 +271,11 @@ export default function RedeemModal({
     const how = pressQueue.press(() => openRef.current());
     if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[press] PLAY! ${identity} ${how} modalVisible=${modalVisible} t=${Date.now()}`);
   };
+  // Out of Tickets with no free way to play right now (T030): PLAY! dims and wears a ticket, so it never looks
+  // like a free press; it still opens the card, whose big button plays the line or a practice game.
+  const pill = playPillState({ isCoin: !!coin, tickets: ticketsNow, ticketCost: coin?.ticket_cost ?? 1, badge,
+    claimable: claimableTickets === undefined ? (claimWaiting?.tickets === ticketsNow ? claimWaiting.count : null) : claimableTickets,
+    rescueAvailable: redeemable?.rescue_pass_available === true });
   // The guide card's body says "Tap PLAY!": a tap there is PLAY!'s own press, only while PLAY! is shown.
   const seenPlayRequest = useRef(playRequest);
   useEffect(() => {
@@ -243,7 +295,7 @@ export default function RedeemModal({
     <>
       {redeemable && available && (
         <Animated.View style={entrance}>
-          <Animated.View ref={pill} collapsable={false} style={{ transform: [{ scale: press }] }}
+          <Animated.View ref={pillRef} collapsable={false} style={{ transform: [{ scale: press }], opacity: pill.dim ? 0.62 : 1 }}
             onTouchStart={() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[press] touch t=${Date.now()}`); }}>
             <YellowButton
               onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
@@ -255,6 +307,9 @@ export default function RedeemModal({
             {badge && <View pointerEvents="none" style={styles.badge} accessible
               accessibilityLabel={badge === 'free_try' ? 'Free try today' : 'Extra try'}>
               {badge === 'free_try' ? <GameIcon name="gift" size={30} /> : <TicketGift size={30} />}
+            </View>}
+            {pill.needTicket && <View pointerEvents="none" style={styles.badge} accessible accessibilityLabel="You need a Ticket">
+              <GameIcon name="ticket" size={28} />
             </View>}
           </Animated.View>
           {coin && <View pointerEvents="none" style={styles.caption} accessible
@@ -321,10 +376,13 @@ export default function RedeemModal({
               onPress={() => onPress()}
               onTaskFailed={onTaskFailed}
               onTaskCompleted={onTaskCompleted}
+              quickStart={quickStart}
+              onPractice={() => setPracticeOpen(true)}
             />
           )}
         </>
       )}
+      <HomeArcade visible={practiceOpen} onClose={() => setPracticeOpen(false)} />
     </>
   );
 }

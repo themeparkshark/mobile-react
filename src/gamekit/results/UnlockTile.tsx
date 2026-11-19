@@ -8,8 +8,8 @@
  * Reduce Motion shows it in place.
  */
 
-import React, { useEffect } from 'react';
-import { Image, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, View, type ImageSourcePropType } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { GameAudio } from '../audio/GameAudio';
 import { Haptic } from '../Haptics';
@@ -17,7 +17,7 @@ import { Haptic } from '../Haptics';
 /** The tile's size (pt): compact, so a tall win still leaves room for the peeking shark on a 874 pt phone. */
 export const UNLOCK_TILE_PT = 72;
 
-export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain', caption }: {
+export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain', caption, detail }: {
   source: ImageSourcePropType;
   /** Spoken only, e.g. "New Finn unlocked: pirate finn". */
   label: string;
@@ -32,7 +32,13 @@ export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain'
    * "NEW: Prize Boxes" label that looked tappable).
    */
   caption?: string;
+  /**
+   * What the unlock does, in a few words (fix W3 T069): the picture is a gift box a kid will tap, so a tap
+   * swaps the caption for this line and gives the tile a little hop. Never a dead tap.
+   */
+  detail?: string;
 }) {
+  const [told, setTold] = useState(false);
   const pop = useSharedValue(reducedMotion ? 1 : 0);
   const tag = useSharedValue(reducedMotion ? 1 : 0);
   useEffect(() => {
@@ -48,8 +54,16 @@ export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain'
   }, [reducedMotion, pop, tag, atMs]);
   const popSt = useAnimatedStyle(() => ({ opacity: pop.value > 0.02 ? 1 : 0, transform: [{ scale: pop.value }, { rotateZ: '-3deg' }] }));
   const tagSt = useAnimatedStyle(() => ({ opacity: tag.value > 0.02 ? 1 : 0, transform: [{ scale: tag.value }, { rotateZ: '8deg' }] }));
+  const tell = () => {
+    if (!detail) return;
+    setTold(true);
+    Haptic.tapLight?.();
+    if (!reducedMotion) pop.value = withSequence(withTiming(1.12, { duration: 110 }), withSpring(1, { damping: 9, stiffness: 260 }));
+  };
+  const Row = detail ? Pressable : View;
   return (
-    <View style={styles.row} accessible accessibilityRole="text" accessibilityLabel={label}>
+    <Row style={styles.row} accessible accessibilityRole={detail ? 'button' : 'text'} accessibilityLabel={detail ? `${label}. ${detail}` : label}
+      {...(detail ? { onPress: tell, hitSlop: 8 } : {})}>
       <View style={styles.slot}>
         <Animated.View style={[styles.tile, caption ? styles.tileFlat : null, fit === 'bottom' ? styles.tileFloor : null, popSt]}>
           <Image source={source} style={styles.art} resizeMode="contain" />
@@ -59,8 +73,9 @@ export function UnlockTile({ source, label, atMs, reducedMotion, fit = 'contain'
           <View style={styles.tag}><Text style={styles.tagText}>NEW</Text></View>
         </Animated.View>
       </View>
-      {caption ? <Text style={styles.caption} numberOfLines={1}>{caption}</Text> : null}
-    </View>
+      {told && detail ? <Text style={styles.caption} numberOfLines={2}>{detail}</Text>
+        : caption ? <Text style={styles.caption} numberOfLines={1}>{caption}</Text> : null}
+    </Row>
   );
 }
 

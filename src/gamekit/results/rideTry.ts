@@ -27,6 +27,9 @@ export interface RideTrySummary {
   readonly near: boolean;
   /** One short line, or null when the game said nothing we can trust. */
   readonly line: string | null;
+  /** The same try as numbers for the card's pip row (fix W3 T053): bonks, pairs or right answers got and needed. */
+  readonly have?: number;
+  readonly need?: number;
 }
 
 interface RunLike {
@@ -47,6 +50,7 @@ export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary 
       game: 'trivia',
       near: right === RIDE_TRIVIA_WIN - 1,
       line: `${right} of ${RIDE_TRIVIA_QUESTIONS} right. ${RIDE_TRIVIA_WIN} wins the coin.`,
+      have: right, need: RIDE_TRIVIA_WIN,
     };
   }
   if (meta.game === 'memory') {
@@ -55,9 +59,9 @@ export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary 
     if (pairs === null || !total) return { game: 'memory', near: false, line: null };
     // A ride Ticket has three tries: the line tells the best one, never only a last try that found nothing.
     const best = Math.min(Math.max(pairs, int(meta.bestPairs) ?? 0), total);
-    if (best > pairs) return { game: 'memory', near: best / total >= NEAR_SHARE, line: `Best try: ${best} of ${total} pairs.` };
+    if (best > pairs) return { game: 'memory', near: best / total >= NEAR_SHARE, line: `Best try: ${best} of ${total} pairs.`, have: best, need: total };
     const got = Math.min(pairs, total);
-    return { game: 'memory', near: got / total >= NEAR_SHARE, line: `${got} of ${total} pairs.` };
+    return { game: 'memory', near: got / total >= NEAR_SHARE, line: `${got} of ${total} pairs.`, have: got, need: total };
   }
   if (meta.game === 'tap') {
     // T040: the bonks the meter showed (rules 5 bonk meter); older runs fall back to the percent.
@@ -70,7 +74,7 @@ export function rideTrySummary(run: RunLike | null | undefined): RideTrySummary 
     const pct = int(meta.ridePercent);
     if (pct === null) return { game: 'tap', near: false, line: null };
     const bonks = Math.min(RIDE_WHACK_BONKS, Math.floor((Math.min(100, pct) * RIDE_WHACK_BONKS) / 100));
-    return { game: 'tap', near: pct >= NEAR_SHARE * 100, line: `${bonks} of ${RIDE_WHACK_BONKS} bonks.` };
+    return { game: 'tap', near: pct >= NEAR_SHARE * 100, line: `${bonks} of ${RIDE_WHACK_BONKS} bonks.`, have: bonks, need: RIDE_WHACK_BONKS };
   }
   return null;
 }

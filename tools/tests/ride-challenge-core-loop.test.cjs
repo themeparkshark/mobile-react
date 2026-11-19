@@ -86,7 +86,8 @@ test('the challenge sheet and a standalone win card both join the native modal l
   const challenge = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(challenge, /useNativeModalLayer\(open === true && !!redeemable, 'wait', CHALLENGE_PATIENCE_MS\)/);
   assert.match(challenge, /visible=\{challengeLayer\.present\}/);
-  assert.match(challenge, /onDismiss=\{challengeLayer\.onDismissed\}/);
+  // Fix W3: the native dismiss also runs what waits for the sheet to be gone (the practice games, T031).
+  assert.match(challenge, /onDismiss=\{\(\) => \{ challengeLayer\.onDismissed\(\); runAfterDismiss\(\); \}\}/);
   assert.doesNotMatch(challenge, /react-native-modal/, 'the paid game never lives in react-native-modal');
   const win = read('src/components/PostWinRewardsModal.tsx');
   assert.match(win, /useNativeModalLayer\(visible && !embedded, 'wait'\)/);
@@ -345,8 +346,8 @@ test('one honest line per lost try: right answers lead, so close only at 75%', (
 
 test('a ride loss skips the game\'s own card: one loss card, with TRY AGAIN, the same game and the Ticket flying home', () => {
   const shell = read('src/gamekit/GameShellV2.tsx');
-  assert.match(shell, /const showSharedCard = !rideLoss && phase === 'results'/);
-  assert.match(shell, /const gameResults = rideLoss \|\| isEmptyResultsNode\(ownSurface\) \? null : ownSurface;/);
+  assert.match(shell, /const showSharedCard = !rideLoss && !rideWin && phase === 'results'/);
+  assert.match(shell, /const gameResults = rideLoss \|\| rideWin \|\| isEmptyResultsNode\(ownSurface\) \? null : ownSurface;/);
   const memory = read('src/games/memory/MemoryGame.tsx');
   assert.match(memory, /if \(r\.mode === 'ride' && left <= 0 && rideChallengeRef\.current\) \{/, 'the last Memory try goes straight to the one card');
   assert.match(memory, /if \(rideChallenge && r\?\.mode === 'ride'\) \{\n\s+\/\/ The ride's one loss card says how far this try got \("3 of 8 pairs\."\)\.\n\s+noteRideTry\(/, 'DONE on a try card notes the try too');
@@ -369,7 +370,7 @@ test('a VIP member\'s retry lives inside TRY AGAIN; nobody else sees a VIP or ad
   assert.match(modal, /const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;/);
   assert.doesNotMatch(modal, /AD_RETRY_ACTION|adsAvailable|gameAlert/);
   const buttons = read('src/gamekit/results/ResultButtons.tsx');
-  assert.match(buttons, /\{note \? <View style=\{styles\.note\}><Text style=\{styles\.noteText\} numberOfLines=\{1\}>\{note\}<\/Text><\/View> : null\}/);
+  assert.match(buttons, /\{note \? <View style=\{styles\.note\}><Text style=\{styles\.noteText\} numberOfLines=\{1\}>\{withNumberFont\(note\)\}<\/Text><\/View> : null\}/);
 });
 
 test('the quit warning is the branded dialog, nested in the challenge card\'s own sheet', () => {
@@ -444,12 +445,14 @@ test('the win that reaches a trophy is its moment on the win card (fix round W1 
 test('one reward row on the ladder; a member\'s double coins as one +N VIP chip; every reward flies home', () => {
   const row = input => [...win.winRewardChips(input)].map(c => `${c.label}:${c.amount}:${c.flyTo}`);
   const base = { coins: 10, tickets: 1, parts: 1, energy: 10, xp: 25, coinLevelsOpen: false, dailyOpen: false };
-  assert.deepEqual(row(base), ['Shark Coins:10:coins', 'Ticket:1:tickets', 'saved for growing coins:10:energy']);
+  // Fix W3 T048: the Parts and XP the server granted always show; Energy has a chip once coin levels are open.
+  assert.deepEqual(row(base), ['Shark Coins:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'XP:25:xp']);
+  assert.equal(win.silentEnergy({ energy: 10, coinLevelsOpen: false }), 10, 'it still flies to the Shelf button');
   assert.deepEqual(row({ ...base, vipCoins: 10, coinLevelsOpen: true, dailyOpen: true }),
     ['Shark Coins:10:coins', 'VIP:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'Energy:10:energy', 'XP:25:xp']);
-  assert.deepEqual(row({ ...base, coins: 0, tickets: 0, energy: 0 }), [], 'never a +0');
+  assert.deepEqual(row({ ...base, coins: 0, tickets: 0, energy: 0, parts: 0, xp: 0 }), [], 'never a +0');
   const card = read('src/components/PostWinRewardsModal.tsx');
-  assert.match(card, /if \(!daily && xpEarned > 0\) fly\(FLY_ART\.xp, 2, WIN_FLY_ROUTES\.xp\);/, 'XP flies to the Profile tab before rung 4');
+  assert.match(card, /if \(quietEnergy > 0\) fly\(FLY_ART\.energy, Math\.min\(quietEnergy, 3\), WIN_FLY_ROUTES\.energy\);/, 'chipless Energy still flies home');
   assert.match(card, /if \(earnedStamp\) fly\(FLY_ART\.stamp, 1, WIN_FLY_ROUTES\.stamp\);/, 'the stamp flies to the Rewards button');
   assert.doesNotMatch(card, /NEW STAMP|TAP TO COLLECT|StarterOfferCard|SharkPassBanner|vipWinLine|openMembership|DoubleCoinsOffer|bonus_ads/);
   assert.match(card, /watchForReward\('double_coins', attemptId, true\)/);
@@ -496,18 +499,24 @@ test('the first coin has one fixed order: the win card, the team step (once ever
   await team.markTeamOffered(7);
   assert.equal(await team.teamOffered(7), true);
   assert.equal(await team.teamOffered(8), false, 'per player');
+  // Fix W3 T034: the team step is a step inside the win card itself (never a screen that can arrive late, mid-walk),
+  // on a new coin for a player with no team, once per player (not only the first coin ever).
+  const model = loadTs('src/components/rewards/winTeamModel.ts');
+  assert.equal(model.wantsWinTeamStep({ needsTeam: true, isNewCoin: true, offeredBefore: false }), true);
+  assert.equal(model.wantsWinTeamStep({ needsTeam: true, isNewCoin: false, offeredBefore: false }), false, 'a repeat win never asks');
+  assert.equal(model.wantsWinTeamStep({ needsTeam: true, isNewCoin: true, offeredBefore: true }), false, 'once ever');
+  assert.equal(model.teamJoinOutcome({ response: { data: { current_team: 'shark' } } }, 'shark'), 'joined');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /RootNavigation\.navigate\('TeamSelection', \{ firstCoin: true, \.\.\.\(then \? \{ next: then \} : \{\}\) \}\);/);
-  // Read when the win card opens, so the team step slides in under the fading card (no map frames between).
   assert.match(modal, /const postWinOpen = open === true && flowState === 'postwin';/);
-  assert.match(modal, /teamStepReady\.current = \(needsTeamNow \? teamOffered\(player\?\.id\) : Promise\.resolve\(true\)\)/);
-  const handler = name => modal.slice(modal.indexOf(`const ${name} = useCallback(`), modal.indexOf('}, [', modal.indexOf(`const ${name} = useCallback(`)));
+  assert.match(modal, /teamStep=\{teamInCard\}/);
+  assert.match(modal, /onTeamShown=\{\(\) => \{ void markTeamOffered\(player\?\.id\); \}\}/);
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(card, /\{panel === 'team' && <WinTeamStep reducedMotion=\{reducedMotion\} onDone=\{teamDone\} \/>\}/);
+  assert.match(card, /if \(!throughTeam\(go\)\) go\(\);/, 'NEXT COIN and See my shelf go through the team step first');
   for (const name of ['handlePostWinClose', 'handleNextCoin', 'handleViewCoin']) {
-    const body = handler(name);
-    assert.ok(body.indexOf('openTeamStep(') > 0 && body.indexOf('openTeamStep(') < body.lastIndexOf('close();'), `${name}: the team step opens before the card closes`);
+    const body = modal.slice(modal.indexOf(`const ${name} = useCallback(`), modal.indexOf('}, [', modal.indexOf(`const ${name} = useCallback(`)));
     assert.match(body, /if \(leavingWinRef\.current\) return;\n\s+leavingWinRef\.current = true;/, `${name}: one way out per win`);
   }
-  assert.doesNotMatch(modal, /withTeamStep/, 'never after the card has faded');
 });
 
 /* ---------- Teaching, names and small fixes (blueprint 5.3, 5.13) ---------- */
@@ -540,7 +549,9 @@ test('Parade Beat is the rhythm game\'s one name; Home Defend has its own title 
   assert.match(whack, /const callout = playerCallout\(t\.callout\);/);
   const unlock = read('src/gamekit/results/UnlockTile.tsx');
   assert.match(unlock, /tileFlat: \{ backgroundColor: 'transparent', borderWidth: 0 \}/);
-  assert.match(unlock, /accessibilityRole="text"/);
+  // Fix W3 T069: with a detail line the picture answers a tap (it says what it unlocks); without one it is plain text.
+  assert.match(unlock, /accessibilityRole=\{detail \? 'button' : 'text'\}/);
+  assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /detail=\{UNLOCK_DETAIL\[unlockName\(card\)\.toUpperCase\(\)\]\}/);
   assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /caption=\{`\$\{unlockName\(card\)\} unlocked`\}/);
 });
 
@@ -624,7 +635,8 @@ test('every place a win card reward flies is a name the map registers (blueprint
 
 test('the challenge card reads the guide only while its win card is up, so walking never re-renders it', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /const watchGuide = open === true && flowState === 'postwin';/);
+  // Fix W3 T029: the loss card names the next coin too, so the guide is read while the win or the loss card is up.
+  assert.match(modal, /const watchGuide = open === true && \(flowState === 'postwin' \|\| flowState === 'lost'\);/);
   assert.match(modal, /if \(!watchGuide\) return undefined;\n\s+setGuideTarget\(guide\.current\(\)\);\n\s+return guide\.subscribe\(\(\) => setGuideTarget\(guide\.current\(\)\)\);\n\s+\}, \[watchGuide\]\);/);
   assert.equal((modal.match(/guide\.subscribe\(/g) || []).length, 1, 'one subscription, and only inside that effect');
   assert.doesNotMatch(modal, /useState<GuideTarget \| null>\(\(\) => guide\.current\(\)\)/);
@@ -687,7 +699,8 @@ test('kid test: the Trivia toggle shows a question with a cross, the ball a chec
   assert.ok(fs.existsSync(path.join(root, 'assets/images/screens/community-center-question.png')));
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /const TREAT_ART = require\('\.\.\/\.\.\/assets\/images\/prep-items\/churros\/churro_18\.png'\);/);
-  assert.match(modal, /: <Image source=\{TREAT_ART\} style=\{styles\.treatArt\} contentFit="contain" \/>/);
+  // Fix W3 T030: the treats way is a picture, three churros = a Ticket.
+  assert.match(modal, /<Image key=\{i\} source=\{TREAT_ART\} style=\{styles\.treatArt\} contentFit="contain" \/>/);
   assert.doesNotMatch(modal, /name=\{step\.kind === 'line_ticket' \? 'ride' : 'map'\}/, 'the treats line never wears the compass');
   assert.match(modal, /export const BACK_TO_MAP = 'Back to Map';/);
   assert.match(modal, /export const NEED_TICKET_BUTTON = BACK_TO_MAP;/);
@@ -698,7 +711,8 @@ test('kid test: the Trivia toggle shows a question with a cross, the ball a chec
 test('short lines draw their digits in the number face, so "1" never reads "I"', () => {
   assert.match(read('src/components/PostWinRewardsModal.tsx'), /<Text style=\{styles\.weekText\}>\{withNumberFont\(weekLine\)\}<\/Text>/);
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /withNumberFont\(step\.kind === 'line_ticket'/);
+  // Fix W3 T030: the free ways are pictures now; their words are spoken, never drawn.
+  assert.match(modal, /accessibilityLabel=\{`\$\{TREATS_PER_TICKET\} treats at home make 1 Ticket\.`\}/);
   assert.match(modal, /<Text style=\{styles\.stepLine\}>\{withNumberFont\(challengeStepLine\(freeStep\) \?\? ''\)\}<\/Text>/);
   assert.match(read('src/games/trivia-duel/ui/Card.tsx'), /\{withNumberFont\(roundLabel\)\}/, '"QUESTION 1 OF 3" never reads "I OF 3"');
   // The loss card's try line ("1 of 3 right.") is already in the number face; its message ("1 Ticket used.") now too.
@@ -739,7 +753,8 @@ test('today\'s Adventure coin won: the big button plays its line story, even bef
 test('one phrase back to the map: every card that leads to the map says Back to Map', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.doesNotMatch(modal, /Return to [Mm]ap|label: 'Continue'|label: 'DONE'/);
-  assert.ok((modal.match(/label: BACK_TO_MAP/g) ?? []).length >= 8);
+  // Fix W3 T029: the loss card's map button is its small second button now (quiet), never its only way on.
+  assert.ok((modal.match(/label: BACK_TO_MAP/g) ?? []).length >= 7);
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.doesNotMatch(card, /Back to the Park/);
   assert.match(card, /label: BACK_TO_MAP_LABEL/);

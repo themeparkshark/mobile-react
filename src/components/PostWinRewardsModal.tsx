@@ -33,7 +33,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import {
-  type TrophyMoment, BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, teamSentence, winButtonLabel, winShelfLine,
+  type TrophyMoment, BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, silentEnergy, teamSentence, winButtonLabel, winShelfLine,
   winRewardChips, WIN_FLY_ROUTES,
   type NextCoinButton, type WinCardExit, type WinChip, type WinFlyTarget,
 } from './rewards/postWinModel';
@@ -47,6 +47,8 @@ import type { PerkChipData } from './coin/progressionModel';
 import type { LimitedWindow } from '../models/task-type';
 import PerkChipRow from './coin/PerkChip';
 import { flyAfterTeamStep, type WinFlyWhen } from './rewards/teamOffer';
+import WinTeamStep from './rewards/WinTeamStep';
+import { FirstWinOfferSlot } from './rewards/offerSlots';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 /** Below this height (iPhone SE is 667 pt) the hero coin shrinks so a first-coin card fits with no scroll. */
@@ -129,6 +131,17 @@ interface Props {
   attemptId?: number | null;
   /** Shark Events: the won ride was today's Star Ride (a small x2 badge). */
   starRide?: boolean;
+  /**
+   * The full-screen coin reveal plays only for the player's first coin ever (fix W3 T037); every other win goes
+   * straight to this card, its coin landing in the hero slot.
+   */
+  fullReveal?: boolean;
+  /** This card carries the team step (fix W3 T034): NEXT COIN or See my shelf turns it into the team pick first. */
+  teamStep?: boolean;
+  /** The team step has shown (it is offered once per player). */
+  onTeamShown?: () => void;
+  /** Ride Parts a wait in this coin's line banked on it (fix W3 T070). */
+  lineParts?: number;
 }
 
 /* ─── Count-up number (JS timer, lands exactly on the confirmed amount) ─── */
@@ -189,15 +202,17 @@ function TrophyMomentRow({ trophy, started, reduced }: { trophy: TrophyMoment; s
 }
 
 /* ─── One reward chip in the one reward row; pops in on the shared entrance clock ─── */
-function RewardChip({ chip, index, enter, reduced, started }: {
+function RewardChip({ chip, index, enter, reduced, started, wide = false }: {
   chip: WinChip; index: number; enter: SharedValue<number>; reduced: boolean; started: boolean;
+  /** Five chips sit as a 3 + 2 grid (never four and one lonely chip). */
+  wide?: boolean;
 }) {
   const style = useAnimatedStyle(() => {
     const t = Math.max(0, Math.min(1, (enter.value - 0.35 - index * 0.08) / 0.3));
     return { opacity: t, transform: [{ translateY: (1 - t) * 14 }, { scale: 0.85 + 0.15 * t }] };
   });
   return (
-    <Animated.View style={[styles.chip, chip.quiet && styles.chipQuiet, style]} accessible accessibilityLabel={`${chip.amount} ${chip.label}`}>
+    <Animated.View style={[styles.chip, wide && styles.chipThird, chip.quiet && styles.chipQuiet, style]} accessible accessibilityLabel={`${chip.amount} ${chip.label}`}>
       <GameIcon name={chip.icon} size={22} />
       <View style={{ flexShrink: 1 }}>
         <CountUp value={chip.amount} start={started} reduced={reduced} style={styles.chipAmount} />
@@ -251,6 +266,10 @@ export default function PostWinRewardsModal({
   onClose,
   attemptId = null,
   starRide = false,
+  fullReveal = true,
+  teamStep = false,
+  onTeamShown,
+  lineParts = 0,
 }: Props) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { triggerFly, getTarget } = useCurrencyFly();
@@ -301,15 +320,23 @@ export default function PostWinRewardsModal({
   const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
   const heroRef = useRef<View>(null);
   // Closing keeps the card as it is while the sheet fades; it resets once the sheet is gone (handleHidden).
+  // The reveal is decided once, as the card opens: a late answer never replays it over a card already up.
+  const fullRevealRef = useRef(fullReveal); fullRevealRef.current = fullReveal;
+  const [revealNow, setRevealNow] = useState(fullReveal);
   useEffect(() => {
-    if (visible) { setCaught(!hasCoin); setHandoff(null); }
+    if (visible) { setRevealNow(fullRevealRef.current); setCaught(!hasCoin || !fullRevealRef.current); setHandoff(null); }
   }, [visible, hasCoin]);
+  // The team step inside this card (T034): which panel shows, and where the player was going.
+  const [panel, setPanel] = useState<'win' | 'team'>('win');
+  const teamExit = useRef<(() => void) | null>(null);
+  const teamShownRef = useRef(false);
+  useEffect(() => { if (visible) { setPanel('win'); teamExit.current = null; teamShownRef.current = false; } }, [visible]);
 
   const parts = coinLevels && !isNewCoin ? partsProgress(coinProgress ?? null, playerEnergy, ridePartsEarned) : null;
   const chips = useMemo(() => winRewardChips({
     coins: coinsEarned, tickets: nextRideTicketEarned, parts: ridePartsEarned, energy: energyEarned, xp: xpEarned,
-    vipCoins, coinLevelsOpen: coinLevels, dailyOpen: daily,
-  }), [coinsEarned, nextRideTicketEarned, ridePartsEarned, energyEarned, xpEarned, vipCoins, coinLevels, daily]);
+    vipCoins, coinLevelsOpen: coinLevels, dailyOpen: daily, lineParts,
+  }), [coinsEarned, nextRideTicketEarned, ridePartsEarned, energyEarned, xpEarned, vipCoins, coinLevels, daily, lineParts]);
   const headline = milestoneHeadline(milestones ?? null);
   // The shelf line, or for a limited coin (no park shelf count) its own home: "Limited coin. Yours to keep!"
   const shelf = winShelfLine(milestones ?? null, limited, isNewCoin, parkWins);
@@ -388,8 +415,15 @@ export default function PostWinRewardsModal({
         : kind === 'xp' ? FLY_ART.xp : FLY_ART.energy;
       fly(art, Math.min(chip.amount, kind === 'coins' ? 10 : 3), WIN_FLY_ROUTES[kind]);
     }
-    if (!daily && xpEarned > 0) fly(FLY_ART.xp, 2, WIN_FLY_ROUTES.xp);
+    // Energy before coin levels open has no chip on the card, but it still lands on the Shelf button.
+    const quietEnergy = silentEnergy({ energy: energyEarned, coinLevelsOpen: coinLevels });
+    if (quietEnergy > 0) fly(FLY_ART.energy, Math.min(quietEnergy, 3), WIN_FLY_ROUTES.energy);
     if (earnedStamp) fly(FLY_ART.stamp, 1, WIN_FLY_ROUTES.stamp);
+    // T143: the won coin itself arcs to the Shelf button (it bumps as the coin lands), so a kid sees where it went.
+    if (hasCoin && taskCoinUrl && !coinArtFailed) {
+      const shelf = flyTargetFor(WIN_FLY_ROUTES.coinToShelf, getTarget);
+      if (shelf) triggerFly({ imageUrl: taskCoinUrl, amount: 1, startX: x, startY: SH * 0.3, targetPosition: shelf });
+    }
   };
 
   // The win card waits its turn among the native modal layers (blueprint 4.3 rule 10): it presents
@@ -431,12 +465,32 @@ export default function PostWinRewardsModal({
     setLeaving(exit);
     go();
   };
+  // T034: the first way out of a card with the team step opens the team pick in this card, then goes on.
+  const throughTeam = (go: () => void): boolean => {
+    if (!teamStep || teamShownRef.current || !hasCoin) return false;
+    teamShownRef.current = true;
+    teamExit.current = go;
+    setPanel('team');
+    onTeamShown?.();
+    return true;
+  };
+  const teamDone = () => {
+    const go = teamExit.current;
+    teamExit.current = null;
+    setPanel('win');
+    go?.();
+  };
   const pressPrimary = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    leave('primary', () => {
+    const go = () => leave('primary', () => {
       if (hasCoin && onNextCoin) onNextCoin(primary);
       else onClose();
     });
+    if (!throughTeam(go)) go();
+  };
+  const pressShelf = () => {
+    const go = () => leave('shelf', () => onViewCoin?.(false));
+    if (!throughTeam(go)) go();
   };
   const closeCard = () => leave('close', onClose);
 
@@ -448,12 +502,14 @@ export default function PostWinRewardsModal({
         contentContainerStyle={[styles.container, { paddingTop: Math.max(insets.top, 20) + 4, paddingBottom: 12 }]}
         showsVerticalScrollIndicator={false} testID="post-win-scroll">
         <Animated.View style={[styles.card, cardStyle]}>
-          <Ribbon text={headline?.ribbon ?? (hasCoin ? isNewCoin ? 'Coin Caught!' : 'Coin Added!' : 'You won!')} />
+          <Ribbon text={panel === 'team' ? 'Pick Your Team!' : headline?.ribbon ?? (hasCoin ? isNewCoin ? 'Coin Caught!' : 'Coin Added!' : 'You won!')} />
 
           <View style={styles.content}>
             <Image source={require('../../assets/images/water_background.png')} contentFit="cover"
               style={[StyleSheet.absoluteFill, { opacity: 0.35 }]} />
 
+            {panel === 'team' && <WinTeamStep reducedMotion={reducedMotion} onDone={teamDone} />}
+            {panel === 'win' && <>
             {/* ── Hero coin ── */}
             <View style={styles.heroStage}>
               <View style={styles.rays} pointerEvents="none">
@@ -502,7 +558,7 @@ export default function PostWinRewardsModal({
             {/* ── The one reward row, counting up ── */}
             {(chips.length > 0 || (rush && coinLevels) || starRide) && <View style={styles.chips}>
               {chips.map((chip, index) => <RewardChip key={chip.label} chip={chip} index={index} enter={enter}
-                reduced={reducedMotion} started={caught} />)}
+                reduced={reducedMotion} started={caught} wide={chips.length >= 5} />)}
               {rush && coinLevels && <View style={styles.badge} accessible
                 accessibilityLabel={`Rush: ${rush.bonus_parts} extra Ride Parts for a short wait`}>
                 <GameIcon name="rush" size={20} />
@@ -529,17 +585,20 @@ export default function PostWinRewardsModal({
                 <GameIcon name="crown" size={22} />
                 <Text style={styles.teamText} numberOfLines={2}>{team}</Text>
               </View>}
+              {/* One optional row under the rewards on the first win card (a calm offer, mounted by a later step). */}
+              {revealNow && isNewCoin && <FirstWinOfferSlot placement="first_win" taskId={wonTaskId ?? null} />}
             </Animated.View>
+            </>}
           </View>
         </Animated.View>
       </ScrollView>
       {/* One big button and one quiet one, on a solid plate so they never sit on the dimmed tab bar. */}
-      <Animated.View testID="post-win-footer" style={[styles.footerPlate, { paddingBottom: Math.max(insets.bottom, 10) + 2 }, footerStyle]}>
+      {panel === 'win' && <Animated.View testID="post-win-footer" style={[styles.footerPlate, { paddingBottom: Math.max(insets.bottom, 10) + 2 }, footerStyle]}>
         <View style={[styles.footer, leaving && styles.footerLeaving]} pointerEvents={leaving ? 'none' : 'auto'}>
           {primary.detail && <Text style={styles.nextDetail} numberOfLines={1}>{primary.detail}</Text>}
           <YellowButton text={winButtonLabel(primary, leaving)} onPress={pressPrimary} />
           {hasCoin && onViewCoin && (
-            <TouchableOpacity onPress={() => leave('shelf', () => onViewCoin(false))} accessibilityRole="button"
+            <TouchableOpacity onPress={pressShelf} accessibilityRole="button"
               accessibilityLabel="See my shelf" style={styles.secondary}>
               <Text style={styles.secondaryText}>See my shelf</Text>
             </TouchableOpacity>
@@ -550,9 +609,9 @@ export default function PostWinRewardsModal({
             <Text style={styles.weekText}>{withNumberFont(weekLine)}</Text>
           </View>}
         </View>
-      </Animated.View>
+      </Animated.View>}
       </View>
-      {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName} sight={sight}
+      {visible && hasCoin && !caught && revealNow && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName} sight={sight}
         isNewCoin={isNewCoin} handoff={handoff}
         onDone={() => setCaught(true)} />}
     </>
@@ -612,8 +671,9 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6, marginTop: 10, alignSelf: 'stretch' },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#fff8e4', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
-    paddingVertical: 5, paddingLeft: 5, paddingRight: 6, flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 74, maxWidth: '50%' },
+    paddingVertical: 5, paddingLeft: 5, paddingRight: 6, flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 64, maxWidth: '50%' },
   chipQuiet: { backgroundColor: '#e8f6ff' },
+  chipThird: { flexBasis: '30%', maxWidth: '32%' },
   chipAmount: { fontFamily: 'Shark', fontSize: 18, lineHeight: 20, color: '#05346e', fontVariant: ['tabular-nums'] },
   chipLabel: { fontFamily: 'Knockout', fontSize: 12, color: '#3d5f8c' },
   chipLabelQuiet: { fontSize: 11, lineHeight: 12 },

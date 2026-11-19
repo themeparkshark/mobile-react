@@ -141,6 +141,22 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)rewards\/usePresentWatchdog$/.test(name)) return { usePresentWatchdog: () => ({ key: 0, onShow() {} }) };
       if (/(^|\/)rewards\/postWinModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/postWinModel.ts');
       if (/(^|\/)rewards\/challengeCopy$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/challengeCopy.ts');
+      // Fix W3 flow: the coin card's pure rules run for real; the seen-cards store, the offer slots and the line lookup are quiet.
+      if (/(^|\/)api\/broadcastFilter$/.test(name)) return require('./ts-module.cjs').loadTs('src/api/broadcastFilter.ts');
+      if (/(^|\/)task-attempt\/pendingWins$/.test(name)) return { markWinShown() {}, findPendingWin: async () => ({ win: null, unsure: false }), pendingWinRedeemable() {} };
+      if (/(^|\/)task-attempt\/reconcileDelay$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/task-attempt/reconcileDelay.ts');
+      // Fix W3 T030: PLAY! looks up earned Tickets at 0 Tickets with or without a free try: an empty Stamp Book by default.
+      if (/(^|\/)api\/endpoints\/me\/stamps$/.test(name)) return { getStamps: async () => ({ stamps: {}, newly_earned: [] }), claimStampReward: async () => ({}) };
+      if (/(^|\/)rewards\/playPill$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/playPill.ts');
+      if (/(^|\/)mashGuard$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/mashGuard.ts');
+      if (/(^|\/)tryPipsModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/tryPipsModel.ts');
+      if (/(^|\/)rewards\/coinCardModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/coinCardModel.ts');
+      if (/(^|\/)rewards\/lossNext$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/lossNext.ts');
+      if (/(^|\/)rewards\/winFlow$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/winFlow.ts');
+      if (/(^|\/)rewards\/coinCardSeen$/.test(name)) return { markCoinCardSeen: async () => undefined, coinCardSeenNow: () => false, warmCoinCardsSeen() {} };
+      if (/(^|\/)rewards\/offerSlots$/.test(name)) return { NeedTicketOfferSlot: 'NeedTicketOfferSlot', FirstWinOfferSlot: 'FirstWinOfferSlot' };
+      if (/(^|\/)services\/guide\/freeTickets$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/guide/freeTickets.ts');
+      if (/(^|\/)services\/lineplay\/rideLines$/.test(name)) return { taskHasLine: () => false };
       // Nobody signed in unless a test says so (PLAY! reads the Ticket count for its free-try badge).
       if (/(^|\/)context\/AuthProvider$/.test(name)) return { AuthContext: { value: { player: null } } };
       if (/(^|\/)context\/CurrencyFlyProvider$/.test(name)) return { useCurrencyFly: () => ({ triggerFly() {}, getTarget: () => null, registerTarget() {} }) };

@@ -2,7 +2,7 @@ import { AxiosError, AxiosResponse } from 'axios';
 import { isStandalonePreviewMode } from '../utils/standalonePreview';
 import { useContext, useEffect, useRef } from 'react';
 import client from '../api/client';
-import { QUIET_COIN_BROADCAST, visibleBroadcasts } from '../api/broadcastFilter';
+import { QUIET_COIN_BROADCAST, routeBroadcasts, visibleBroadcasts } from '../api/broadcastFilter';
 
 /** Reward banners fold into the header pills' +N (core loop, guide-map lane). */
 export const REWARD_BANNERS_FOLDED = true;
@@ -53,7 +53,8 @@ export const useAxiosSetup = () => {
           // Core loop (BLUEPRINT row 329): every coin and Ticket reward flies into its header pill with +N, so the
           // server's "You earned N coins!" and "You earned N Tickets!" banners never show; server news still does.
           const shown = visibleBroadcasts<string>(response.data.broadcasts, REWARD_BANNERS_FOLDED || Boolean(cfg?.[QUIET_COIN_BROADCAST]));
-          if (shown.length > 0) enqueueRef.current(shown);
+          // A ride challenge holds server news while its game and win card are up (fix W3 T068).
+          routeBroadcasts(shown, messages => enqueueRef.current(messages));
         }
         return response;
       },

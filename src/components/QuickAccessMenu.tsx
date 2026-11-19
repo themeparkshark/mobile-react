@@ -72,6 +72,11 @@ export const MENU_ITEMS: readonly MenuItem[] = [
  * Stamp Book, Shark Shop, How to Play and Settings. The shelf stays on the Shelf button and the
  * guide card's PLAN, so the menu needs no third door to it. Pure.
  */
+/** T031: the home menu offers Practice games once a first coin is won, or from the 2nd home visit. */
+export function practiceInMenu(homeDays: number, coinsWon: number): boolean {
+  return (Number(coinsWon) || 0) > 0 || (Number(homeDays) || 0) >= 2;
+}
+
 export function homeMenuItems(input: { readonly practice: boolean; readonly waitTimesPark: number | null }): readonly MenuItem[] {
   const out: MenuItem[] = [MENU_ITEMS[0]];
   if (input.practice) out.push({ id: 'practice', label: 'Practice games', icon: 'play', round: 'purple', screen: '', action: 'arcade' });
@@ -134,9 +139,10 @@ export default function QuickAccessMenu(_props: Props) {
   const { player } = useContext(AuthContext);
   const { location } = useContext(LocationContext);
   const rewardWaiting = useRewardWaiting(open, player?.id, location ?? null);
-  // Practice games join the menu from the 2nd home visit (core loop 4.4 "Place").
+  // Practice games (Parade Beat among them) join the menu from day 1 once the first coin is won, or from the 2nd
+  // home visit (fix W3 T031: a veteran at home on day 1 always has something free to play).
   const counters = useLadderCounters();
-  const items = homeMenuItems({ practice: counters.homeDays >= 2,
+  const items = homeMenuItems({ practice: practiceInMenu(counters.homeDays, player?.completed_tasks_count ?? player?.ride_coins_collected ?? 0),
     waitTimesPark: player ? (player.current_park_id || DEFAULT_WAIT_PARK) : null });
   const [arcadeOpen, setArcadeOpen] = useState(false);
   // What a row asked for runs once the menu's native sheet is gone (never a sheet into a leaving sheet).

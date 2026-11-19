@@ -44,11 +44,18 @@ test('a paid retry is the gold button first and ignores taps for the guard windo
   assert.deepEqual(calls, ['retry']);
 });
 
-test('cards without a paid retry keep their layout and a live primary', () => {
+test('cards without a paid retry keep their layout; every button waits out the short input lock (fix W3 T046)', () => {
   const { app } = card({});
   assert.deepEqual(order(app.tree), ['TRY AGAIN', 'RETURN TO MAP']);
-  assert.equal(app.find(node => node.type === 'ResultPrimaryButton').props.disabled, false);
-  assert.equal(app.timers.size, 0);
+  const primary = () => app.find(node => node.type === 'ResultPrimaryButton');
+  const quiet = () => app.find(node => node.type === 'ResultSecondaryButton');
+  assert.equal(primary().props.disabled, true, 'a late game tap never presses the card');
+  assert.equal(quiet().props.onPress, undefined, 'the map button waits too');
+  assert.equal(app.timers.size, 1);
+  assert.equal([...app.delays.values()][0], 600);
+  const [[, arm]] = app.timers; arm(); app.render();
+  assert.equal(primary().props.disabled, false);
+  assert.equal(typeof quiet().props.onPress, 'function');
 });
 
 test('the try card shows what the try cost as a ticket picture', () => {
@@ -62,7 +69,8 @@ test('the try card shows what the try cost as a ticket picture', () => {
 
 test('every lost or expired card with a retry turns the guard on', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/components/RedeemRedeemableModal.tsx'), 'utf8');
-  assert.match(src, /guardRetry=\{firstCoinTicketReturned \|\| rescueRetryAvailable \|\| canOfferRetry\}/);
+  // Fix W3: every loss card retries now (free, VIP or paid); only the "ways to play" button skips the longer guard.
+  assert.match(src, /guardRetry=\{lossPlan\.kind !== 'ways'\}/);
   assert.match(src, /guardRetry=\{rescueRetryAvailable\}/);
   const guard = require('node:fs').readFileSync(path.join(__dirname, '../../src/components/rewards/ChallengeStatusCard.tsx'), 'utf8');
   const ms = Number(guard.match(/RETRY_TAP_GUARD_MS = (\d+)/)[1]);

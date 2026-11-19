@@ -234,13 +234,15 @@ function rowChips(view) {
     if (node.props?.chip && typeof node.props.chip.amount === 'number') chips.push([node.props.chip.label, node.props.chip.amount]); walk(node.props?.children); })(view.tree);
   return chips;
 }
-test('a first coin shows one reward row on the ladder: Shark Coins, and Energy saved for growing coins until rung 3', () => {
+test('a first coin shows one reward row: Shark Coins, the Parts and XP it granted; Energy has no chip until rung 3 (fix W3 T048)', () => {
   let opened = null;
   const rewards = rewardView(true); rewards.change({ onViewCoin(open) { opened = open; }, coinProgress: {
     current_level:1,max_level:5,is_unlocked:true,parts_to_next_level:2,available_parts:4,energy_to_next_level:10 }, playerEnergy:40 });
   rewards.find(node => node.type === './CoinCatchReveal').props.onDone(); rewards.render();
   // Parts wait for coin levels (rung 3) and XP for Daily 3 (rung 4); nothing is lost, it all still flies home.
-  assert.deepEqual(rowChips(rewards), [['Shark Coins', 10], ['saved for growing coins', 40]]);
+  const chips = rowChips(rewards);
+  assert.equal(chips[0][0], 'Shark Coins');
+  assert.ok(!chips.some(([label]) => /saved for growing coins|Energy/.test(label)), 'no Energy riddle before rung 3: it flies to the Shelf button');
   assert.equal(rewards.find(node => node.props?.accessibilityLabel?.startsWith('Reward receipt')), undefined);
   assert.equal(rewards.find(node => node.type === './YellowButton').props.text, 'Back to Map', 'no guide target: never a nameless NEXT COIN');
   rewards.find(node => node.props?.accessibilityLabel === 'See my shelf').props.onPress(); assert.equal(opened, false);
@@ -294,7 +296,7 @@ test('after rung 3 a repeat win shows its Parts as one line, ready to level up; 
   view.find(n=>n.type==='./CoinCatchReveal').props.onDone();view.render();
   assert.equal(view.motions.length,0);
   assert.ok(view.find(n=>n.props?.children==='Ready to level up'));
-  assert.deepEqual(rowChips(view), [['Shark Coins', 10], ['Ride Parts', 2], ['Energy', 40]]);
+  assert.deepEqual(rowChips(view), [['Shark Coins', 10], ['Ride Parts', 2], ['Energy', 40], ['XP', 25]], 'fix W3 T048: the XP granted shows too');
   assert.equal(view.find(n=>n.type==='./YellowButton').props.text,'NEXT COIN');
   view.find(n=>n.props?.accessibilityLabel==='See my shelf').props.onPress(); assert.equal(opened,false);
 });

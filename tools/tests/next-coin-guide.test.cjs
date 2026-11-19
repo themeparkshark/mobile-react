@@ -629,7 +629,9 @@ test('home: two doors to the shelf (Shelf button and PLAN), Practice games from 
   const fn = menu.slice(menu.indexOf('export function homeMenuItems'), menu.indexOf('\n}\n', menu.indexOf('export function homeMenuItems')) + 2);
   assert.match(fn, /if \(input\.practice\) out\.push\(\{ id: 'practice', label: 'Practice games'/);
   assert.match(fn, /label: 'Wait Times', icon: 'timer', round: 'blue', screen: 'QueueTimes', params: \{ park: input\.waitTimesPark \}, image: POCKET_WATCH/);
-  assert.match(menu, /practice: counters\.homeDays >= 2/, 'from the 2nd home visit');
+  // Fix W3 T031: from the 2nd home visit, or from day 1 once the first coin is won.
+  assert.match(menu, /practice: practiceInMenu\(counters\.homeDays,/, 'from the 2nd home visit or the first coin');
+  assert.match(menu, /return \(Number\(coinsWon\) \|\| 0\) > 0 \|\| \(Number\(homeDays\) \|\| 0\) >= 2;/);
   assert.doesNotMatch(menu, /My shelf/, 'no third door to the shelf');
   assert.match(menu, /afterDismiss\.current = \(\) => setArcadeOpen\(true\);/, 'the practice sheet opens after the menu sheet is gone');
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
