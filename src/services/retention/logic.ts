@@ -52,6 +52,19 @@ export function rowSchedule(rows: readonly RewardRow[], beat = 460, hold = 450, 
   return out;
 }
 
+/* Fix pass w4 T104: the reveal's rows area is sized to its prizes. */
+/** Laid-out heights of a prize row and a hero card (the rows area is sized to the prizes, never a tall empty panel). */
+const ROW_H = 46;
+const ROW_H_COMPACT = 42;
+const HERO_H = 104;
+const ROWS_GAP = 6;
+/** How tall the rows area is for these prizes: sized to them, scrolling only past the cap. */
+export function rowsAreaHeight(rows: readonly { readonly kind: RewardKind }[], compact: boolean, cap: number): number {
+  if (!rows.length) return 64;
+  const h = rows.reduce((n, r) => n + (isBigReward(r.kind) ? HERO_H : compact ? ROW_H_COMPACT : ROW_H), 0) + ROWS_GAP * (rows.length - 1) + 8;
+  return Math.min(cap, h);
+}
+
 /** What the server actually paid, as reveal rows (zeros skipped). */
 export function rewardRows(paid: PaidRewards): RewardRow[] {
   const rows: RewardRow[] = [];

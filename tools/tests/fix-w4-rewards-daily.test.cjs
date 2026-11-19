@@ -80,3 +80,20 @@ test('T110 (B06): a chest that started over says why, once, kindly; absent field
   // The flame says the same kind thing in Rewards (fix round w3).
   assert.equal(model.flameNote({ flame: 0, best: 4, done: 0, total: 3, claimable: false, claimed: false }), 'Welcome back! Finish Daily 3 to light a new flame');
 });
+
+test('T104: the chest card is sized to its prizes, the lid pops on the phone, prizes land together, no white oval', () => {
+  const L = loadTs('src/services/retention/logic.ts');
+  const four = [{ kind: 'xp' }, { kind: 'energy' }, { kind: 'coins' }, { kind: 'tickets' }];
+  assert.equal(L.rowsAreaHeight(four, false, 300), 4 * 46 + 3 * 6 + 8, 'four prizes: a tight area, not 300');
+  assert.equal(L.rowsAreaHeight([], false, 300), 64, 'nothing known yet: a short line, never a tall empty panel');
+  assert.equal(L.rowsAreaHeight([...four, { kind: 'item' }, { kind: 'mystery_boxes' }], false, 300), 300, 'capped, then it scrolls');
+  const quick = L.rowSchedule(four, 110, 380, 80);
+  assert.ok(quick[3] - quick[0] <= 330, `prizes land together (${quick.join(',')})`);
+  const reveal = read('src/components/retention/RewardReveal.tsx');
+  assert.match(reveal, /const lid = setTimeout\(\(\) => \{ cancelAnimation\(shake\); shake\.value = 0; popLid\(\); \}, reducedMotion \? 0 : LOCAL_POP_MS\);/);
+  assert.match(reveal, /!revealed && popped && previewRows\.length \? previewRows\.map/, 'the held prizes wait inside, dim');
+  assert.doesNotMatch(reveal, /styles\.flash|useCountUp/, 'no white flash oval, no count-up');
+  assert.match(reveal, /colors=\{GOLD_BURST\}/, 'a gold burst');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /preview=\{chestPreview\(r\.src, daily, chests\.find\(c => c\.level === r\.level\) \?\? null\)\}/);
+});

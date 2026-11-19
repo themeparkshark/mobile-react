@@ -9,7 +9,7 @@ import { haptic } from '../../gamekit/Haptics';
 import { playSfx } from '../../gamekit/SFX';
 import { playChestOpen } from '../../gamekit/audio/loopSound';
 import { useCaptureMark } from '../../dev/captureMark';
-import { doneDelay, isBigReward, rewardRows, rowSchedule, type RewardRow } from '../../services/retention/logic';
+import { doneDelay, isBigReward, rewardRows, rowSchedule, rowsAreaHeight, type RewardRow } from '../../services/retention/logic';
 import { BRAND, GameIcon } from '../../ui';
 import RewardBurst from '../RewardBurst';
 import { useAmbient } from './power';
@@ -19,23 +19,38 @@ const FREEZE = require('../../../assets/images/retention/freeze.png');
 
 /** After this long the shake settles into a calm "Still opening..." (the request has its own 6 s timeout). */
 const STALL_MS = 6000;
+/**
+ * Fix pass w4 T104: the lid pops on the phone after this much shake, whether or not the server has answered, so a
+ * slow server never leaves a closed chest over an empty panel. The prizes it holds wait inside, dim, then land.
+ */
+const LOCAL_POP_MS = 560;
+/** The gold burst from the chest (a tinted RewardBurst, never a white flash). */
+const GOLD_BURST = [BRAND.gold, '#ffe38a', '#fff3c4', BRAND.goldLip];
+
 
 /**
  * A chest you open yourself.
  * - Tap: the shake builds (three rising ticks), the server pays.
- * - Pop: squash, a white flash hides the art swap, overshoot, a burst from the chest itself.
+ * - Pop: squash, the art swaps at its low point, overshoot, a gold burst from the chest itself. A slow server
+ *   never holds it shut: the lid pops after the shake and the prizes wait inside, dim, until they are paid (T104).
  * - Prizes: every row is laid out at once (nothing jumps) and fades in on its beat with a
  *   tick and a count-up; gear and Mystery Boxes wait a held beat, then slam in as hero cards.
  * - The button appears only after the last prize lands, under a line that points at what is next.
  * Shows only what the server paid.
  */
 export default function RewardReveal({ subtitle, closedArt, openArt, rewards, opening, onOpen, onDone, onWear, onPins,
-  reducedMotion, doneLabel, footer, dropIn = false, wearBusy = false, energySaved = false, pinBoxes = true }: {
+  reducedMotion, doneLabel, footer, dropIn = false, wearBusy = false, energySaved = false, pinBoxes = true, preview = null }: {
   readonly subtitle: string;
   readonly closedArt: ImageSource | number;
   readonly openArt: ImageSource | number;
   /** Null until the server answers. */
   readonly rewards: PaidRewards | null;
+  /**
+   * What this chest holds before it opens (the Daily 3 chest's reward, a level chest's preview, the Weekly Box's
+   * reward), so the card is sized to its prizes from the first frame and they wait in the open chest, dim, while the
+   * server pays. Null: the card sizes to what was paid.
+   */
+  readonly preview?: PaidRewards | null;
   readonly opening: boolean;
   readonly onOpen: () => void;
   readonly onDone: () => void;
@@ -62,12 +77,11 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const size = Math.min(width * 0.44, height * (compact ? 0.17 : 0.21), 190);
   // Rows get a fixed area (scrolls only on small phones), so the card never changes height.
   // Sized so the ribbon always clears the Dynamic Island on a Pro and gear plus four rows fit whole.
-  const rowsHeight = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(300, height - size - 380));
+  const rowsCap = compact ? Math.max(200, height - size - 300) : Math.max(200, Math.min(300, height - size - 380));
   const bob = useSharedValue(0);
   const shake = useSharedValue(0);
   const pop = useSharedValue(1);
   const squash = useSharedValue(1);
-  const flash = useSharedValue(0);
   const glow = useSharedValue(0);
   const burst = useSharedValue(0);
   const drop = useSharedValue(dropIn && !reducedMotion ? 1 : 0);
@@ -82,11 +96,18 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const [replay, setReplay] = useState(0);
   const openedAt = useRef(0);
   const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
-  const rows = (rewards ? rewardRows(rewards) : [])
+  const shape = (list: RewardRow[]) => list
     .filter(r => pinBoxes || r.kind !== 'mystery_boxes')
     // Fix w3 T125: Energy is called Energy everywhere (the reward row's own label), never a second name.
     .map(r => (energySaved && r.kind === 'energy' ? { ...r, label: 'Energy' } : r));
+  const rows = shape(rewards ? rewardRows(rewards) : []);
+  const previewRows = shape(preview ? rewardRows(preview) : []);
   const revealed = !!rewards;
+  // T104: the rows area fits the prizes (the preview's until the server pays, then whichever is taller), so the card
+  // is tight from the first frame and never grows under the player.
+  const rowsHeight = rowsAreaHeight(rows.length >= previewRows.length ? rows : previewRows, compact, rowsCap);
+  /** The lid is open (on the phone after the shake, or at the server's answer, whichever comes first). */
+  const [popped, setPopped] = useState(false);
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scroll = useRef<ScrollView>(null);
   const later = (fn: () => void, ms: number) => { timers.current.push(setTimeout(fn, ms)); };
@@ -125,18 +146,42 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       [0, 200, 400].forEach((ms, i) => later(() => { haptic(i < 2 ? 'tickSelection' : 'hitMedium'); playSfx('ui.button', 0.5 + i * 0.2); }, ms));
     }
     playSfx('fx.redeemOpen', 0.8);
-    return () => { clearTimeout(stall); cancelAnimation(shake); shake.value = 0; };
+    // T104: a slow server never holds the lid shut: it pops here and the prizes wait inside until they are paid.
+    const lid = setTimeout(() => { cancelAnimation(shake); shake.value = 0; popLid(); }, reducedMotion ? 0 : LOCAL_POP_MS);
+    return () => { clearTimeout(stall); clearTimeout(lid); cancelAnimation(shake); shake.value = 0; };
   }, [opening, revealed, reducedMotion, shake]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The pop, then one row per beat (held beats before the big ones).
+  /** The lid pops once: squash, the art swaps at the squash's low point, overshoot, a gold burst from the chest. */
+  const poppedRef = useRef(false);
+  const popLid = () => {
+    if (poppedRef.current) return;
+    poppedRef.current = true;
+    setPopped(true);
+    if (reducedMotion) { setSwapped(true); haptic('success'); playSfx('fx.reward'); return; }
+    squash.value = withSequence(withTiming(0.82, { duration: 90, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 6, stiffness: 240 }));
+    glow.value = withDelay(80, withSequence(withTiming(1.6, { duration: 120 }), withTiming(1, { duration: 320 })));
+    later(() => setSwapped(true), 90);
+    pop.value = withDelay(110, withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 })));
+    burst.value = 0;
+    burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
+    // Studio sound (approved Oct 24): the chest pops with its own sound and shaped buzz (wave 5); off: today's. Round 2:
+    // the pop's short form (lid pop, heavy land on the lid's peak), since the reward rows buzz from 420 ms on. It starts
+    // at 100 ms, on the squash, so its heavy (120 ms later) lands on the lid's peak at 220.
+    later(() => { if (!playChestOpen({ rowsFollow: true })) { haptic('success'); playSfx('fx.reward'); } }, 100);
+  };
+
+  // The pop (if the lid is still shut), then the prizes land together, a quick beat apart (held beats before the big ones).
   useEffect(() => {
-    if (!revealed) { setLanded(0); setSwapped(false); setButtonReady(false); return; }
+    if (!revealed) { setLanded(0); setButtonReady(false); if (!opening) { poppedRef.current = false; setPopped(false); setSwapped(false); } return; }
     openedAt.current = Date.now();
     cancelAnimation(shake); shake.value = 0;
+    const wasOpen = poppedRef.current;
     timers.current.forEach(clearTimeout); timers.current = [];
+    if (wasOpen) setSwapped(true);
     if (reducedMotion) {
       setSwapped(true);
-      haptic('success'); playSfx('fx.reward');
+      if (!wasOpen) { haptic('success'); playSfx('fx.reward'); }
+      poppedRef.current = true; setPopped(true);
       rows.forEach((row, i) => later(() => {
         setLanded(n => Math.max(n, i + 1));
         haptic(isBigReward(row.kind) ? 'comboHeavy' : 'tickSelection');
@@ -145,19 +190,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       later(() => setButtonReady(true), 120 * rows.length + 300);
       return;
     }
-    // Squash, flash, swap behind the flash, overshoot.
-    squash.value = withSequence(withTiming(0.82, { duration: 90, easing: Easing.in(Easing.quad) }), withSpring(1, { damping: 6, stiffness: 240 }));
-    flash.value = withDelay(80, withSequence(withTiming(1, { duration: 60 }), withTiming(0, { duration: 260 })));
-    later(() => setSwapped(true), 120);
-    pop.value = withDelay(110, withSequence(withTiming(1.18, { duration: 110 }), withSpring(1, { damping: 7, stiffness: 180 })));
-    burst.value = 0;
-    burst.value = withDelay(120, withTiming(1, { duration: 1100, easing: Easing.out(Easing.quad) }));
-    // Studio sound (approved Oct 24): the chest pops with its own sound and shaped buzz (wave 5); off: today's. Round 2:
-    // the pop's short form (lid pop, heavy land on the lid's peak), since the reward rows buzz from 420 ms on. It starts
-    // at 100 ms, on the flash, so its heavy (120 ms later) lands on the lid's peak at 220 (the w5r2 capture measured
-    // the heavy 33 ms after the peak when it started at 120).
-    later(() => { if (!playChestOpen({ rowsFollow: true })) { haptic('success'); playSfx('fx.reward'); } }, 100);
-    const schedule = rowSchedule(rows);
+    popLid();
+    // T104: the prizes land together (a quick 110 ms apart; a hero card still gets its held beat). A lid that already
+    // popped while the server paid lands them at once.
+    const schedule = rowSchedule(rows, 110, 380, wasOpen ? 80 : 420);
     later(() => setButtonReady(true), (schedule[schedule.length - 1] ?? 400) + doneDelay(rows));
     schedule.forEach((ms, i) => later(() => {
       setLanded(n => Math.max(n, i + 1));
@@ -179,7 +215,6 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       { scaleY: squash.value }],
   }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: 0.35 + glow.value * 0.4, transform: [{ scale: 0.92 + glow.value * 0.08 }] }));
-  const flashStyle = useAnimatedStyle(() => ({ opacity: flash.value }));
   const allIn = revealed && landed >= rows.length && buttonReady;
   const skip = () => {
     // The first 350 ms after the lid pops ignore taps (a quick double tap never skips the show).
@@ -202,15 +237,17 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         <Animated.View style={[styles.glow, { width: size * 0.98, height: size * 0.98, borderRadius: size }, glowStyle]} />
         <Animated.View style={chestStyle}>
           <Image source={swapped ? openArt : closedArt} style={{ width: size, height: size }} contentFit="contain" />
-          <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.flash, { borderRadius: size / 2 }, flashStyle]} />
         </Animated.View>
       </Pressable>
       <Pressable onPress={skip} disabled={!revealed || allIn} accessible={false} style={{ alignSelf: 'stretch' }}>
         <ScrollView ref={scroll} style={{ height: rowsHeight }} contentContainerStyle={styles.rows} scrollEnabled={revealed}
           showsVerticalScrollIndicator={false}>
-          {!revealed ? (
+          {!revealed && popped && previewRows.length ? previewRows.map(row => (
+            // T104: the lid is open and the server is paying: what the chest holds waits inside, dim, then lands.
+            <View key={row.kind} style={styles.waiting}><Row row={row} shown reducedMotion compact={compact} /></View>
+          )) : !revealed ? (
             <View style={[styles.hintBox, { height: rowsHeight - 8 }]}>
-              <Text style={styles.hint}>{stalled ? 'Still opening...' : opening ? 'Opening...' : 'Tap to open!'}</Text>
+              <Text style={styles.hint}>{opening ? 'Opening...' : 'Tap to open!'}</Text>
             </View>
           ) : rows.map((row, i) => (
             <Row key={row.kind} row={row} shown={i < landed} reducedMotion={reducedMotion} compact={compact}
@@ -221,9 +258,10 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
         </ScrollView>
       </Pressable>
       <View style={styles.bottom}>
-        {allIn ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={onDone} reducedMotion={reducedMotion} /> : null}
+        {allIn ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={onDone} reducedMotion={reducedMotion} />
+          : opening && !revealed && popped ? <Text style={styles.paying}>{stalled ? 'Still opening...' : 'Opening...'}</Text> : null}
       </View>
-      {stage && <RewardBurst progress={burst} x={stage.x} y={stage.y} />}
+      {stage && <RewardBurst progress={burst} x={stage.x} y={stage.y} colors={GOLD_BURST} />}
     </View>
   );
 }
@@ -260,25 +298,6 @@ function rowIcon(row: RewardRow) {
   }
 }
 
-/** Counts a number up once it is shown (instant when motion is reduced). */
-function useCountUp(target: number, run: boolean, instant: boolean): number {
-  const [n, setN] = useState(instant ? target : 0);
-  useEffect(() => {
-    if (!run) return;
-    if (instant || target <= 1) { setN(target); return; }
-    const frames = 14;
-    let f = 0;
-    const id = setInterval(() => {
-      f += 1;
-      const t = 1 - Math.pow(1 - f / frames, 3);
-      setN(f >= frames ? target : Math.max(1, Math.round(target * t)));
-      if (f >= frames) clearInterval(id);
-    }, 32);
-    return () => clearInterval(id);
-  }, [run, target, instant]);
-  return n;
-}
-
 function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamKey = 0, onLand, wearBusy = false }: {
   readonly row: RewardRow; readonly shown: boolean; readonly reducedMotion: boolean; readonly compact?: boolean;
   readonly slamKey?: number; readonly onLand?: () => void;
@@ -308,7 +327,8 @@ function Row({ row, shown, reducedMotion, onWear, onPins, compact = false, slamK
       : [{ translateY: (1 - t.value) * -18 }, { scale: 0.7 + t.value * 0.3 }],
   }));
   const beamStyle = useAnimatedStyle(() => ({ opacity: beam.value }));
-  const amount = useCountUp(row.amount, shown, reducedMotion);
+  // T104: the number lands whole with its row (never counting +13 then +20 under the player).
+  const amount = row.amount;
   return (
     // Laid out from the start (no jump); the face is a plain View (iOS clips a scaled bordered background).
     <Animated.View style={style}>
@@ -344,11 +364,12 @@ const styles = StyleSheet.create({
   subtitle: { fontFamily: 'Knockout', fontSize: 17, color: '#e4f7ff', textAlign: 'center', minHeight: 22 },
   stage: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   glow: { position: 'absolute', backgroundColor: 'rgba(255, 244, 196, 0.55)' },
-  flash: { backgroundColor: BRAND.white },
   // Few prizes sit in the middle of the rows area, not at the top of an empty panel.
   rows: { gap: 6, paddingVertical: 4, flexGrow: 1, justifyContent: 'center' },
   hintBox: { alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, textAlign: 'center' },
+  waiting: { opacity: 0.4 },
+  paying: { fontFamily: 'Shark', fontSize: 16, color: BRAND.gold, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,
     paddingHorizontal: 10, paddingVertical: 2 },
   rowCompact: { minHeight: 0, paddingVertical: 0 },

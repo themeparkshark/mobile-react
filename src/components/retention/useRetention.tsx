@@ -833,6 +833,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       ) : null;
     content = (
       <RewardReveal reducedMotion={reducedMotion} rewards={r.rewards} opening={r.opening} footer={footer} dropIn={r.src === 'level'}
+        preview={chestPreview(r.src, daily, chests.find(c => c.level === r.level) ?? null)}
         energySaved={!coinLevelsOpen} pinBoxes={flagOn(flags, 'pin_mystery_boxes')}
         subtitle={r.src === 'level' ? `You reached Level ${r.level}! Tap your chest.`
           : r.src === 'weekly' ? 'A whole week of flames. Tap the box!' : 'All three goals done. Tap your chest!'}
@@ -960,6 +961,25 @@ function stampsToClaim(r: { stamps: Record<string, readonly { id: number; is_ear
     }
   }
   return out;
+}
+
+/**
+ * What a chest holds before it opens (fix pass w4, T104), from the numbers the server already sent: the Daily 3
+ * chest's reward (plus a milestone's gear or boxes), the Weekly Box's reward, a level chest's preview.
+ */
+export function chestPreview(src: 'daily' | 'weekly' | 'level', d: DailyThreeState | null, chest: LevelChest | null): PaidRewards | null {
+  const gear = { id: 0, name: 'New gear', image: null, rarity: null };
+  if (src === 'level') {
+    const p = chest?.preview;
+    return p ? { coins: p.coins, bonus_coins: p.bonus_coins, tickets: p.tickets, energy: p.energy, mystery_boxes: p.mystery_boxes, item: p.item ? gear : null } : null;
+  }
+  if (!d) return null;
+  if (src === 'weekly') {
+    const w = d.week.reward;
+    return { coins: w.coins, bonus_coins: w.bonus_coins, tickets: w.tickets, freezes: w.freezes, mystery_boxes: w.mystery_boxes };
+  }
+  const m = d.claimable_milestone;
+  return { ...d.reward, mystery_boxes: m?.mystery_boxes ?? 0, item: m?.gear ? gear : null };
 }
 
 /** Today's daily chest (the Daily 3 day) is already open on this phone. */
