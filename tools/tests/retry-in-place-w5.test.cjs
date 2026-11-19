@@ -149,7 +149,10 @@ test('w5 N04: the kept board is live while the deal travels; only GO waits for i
   assert.match(modal, /const boardHeld = flowState === 'spinning' \|\| flowState === 'lost';/);
   assert.match(modal, /const boardDealt = flowState !== 'replay';/);
   assert.match(modal, /dealt=\{boardDealt\}/);
-  assert.match(modal, /pointerEvents=\{boardHeld \|\| boardHidden \? 'none' : 'auto'\}/);
+  assert.match(modal, /pointerEvents=\{boardHeld \? 'none' : 'auto'\}/);
+  // The shell takes no touch in the render that brings a new try number, until its reset has run.
+  assert.match(shell, /const retryResetPending = retryRound !== retryRoundSeen\.current;\n\s+const gameContent = \(\n\s+<View style=\{styles\.root\} pointerEvents=\{retryResetPending \? 'none' : 'auto'\}>/);
+  assert.match(shell, /retryRoundSeen\.current = retryRound;\n\s+setRetrySeen\(retryRound\);/);
   assert.match(selector, /<StageDealtContext\.Provider value=\{dealt\}>/);
   assert.match(ctx, /export const StageDealtContext = createContext<boolean>\(true\);/);
   assert.match(shell, /if \(!stageDealtRef\.current\) \{\n\s+playWaitsDealRef\.current = true;/);

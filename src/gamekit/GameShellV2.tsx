@@ -95,7 +95,7 @@ import { CountdownStage } from './fx/CountdownStage';
 import { FinalSeconds } from './fx/FinalSeconds';
 import { COACH_EXIT_MS, COACH_LEAD_MS, COUNT_END_MS, COUNT_WATCHDOG_MS, advanceCountClock, GO_AT_MS, GO_SPARKLES, type CountStep, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countStartsOf, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
 import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
-import { pressTrace } from '../ui/pressTrace';
+import { pressTrace, pressTraceOn } from '../ui/pressTrace';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 
 /** Dev capture only: hold the drawn count on this clock time (ms) for 6 s. Never set in release. */
@@ -922,9 +922,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // (2-1-GO, no how-to line). Never on the first mount.
     const retryRound = useContext(RetryRoundContext);
     const retryRoundSeen = useRef(retryRound);
+    // The render after the reset below (so the touch guard on the root lifts even when no other state changed).
+    const [, setRetrySeen] = useState(retryRound);
     useEffect(() => {
       if (retryRound === retryRoundSeen.current) return;
       retryRoundSeen.current = retryRound;
+      setRetrySeen(retryRound);
       clearCountdown();
       stopCountStage();
       clearCelebration();
@@ -1517,8 +1520,11 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // button), and the card is the only way on.
     const xGone = showSharedCard && SCREEN_H < SHORT_PHONE_PT;
 
+    // w5 N04: the render that brings a new try number still draws the last try (its results, its board) until the
+    // reset above runs; nothing in it takes a touch. The ride card lets the kept board take touches from TRY AGAIN.
+    const retryResetPending = retryRound !== retryRoundSeen.current;
     const gameContent = (
-        <View style={styles.root}>
+        <View style={styles.root} pointerEvents={retryResetPending ? 'none' : 'auto'}>
           {/* Header */}
           {/* While results are up the card is the only thing to read: the
               game's title and score step back and the close X dims (it still
@@ -1607,6 +1613,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {phase === 'countdown' ? (
             <Pressable
               style={styles.cdTouch}
+              onPressIn={pressTraceOn ? () => pressTrace('shell.pressin', () => phase) : undefined}
               onPress={skipCountdown}
               accessibilityRole="button"
               accessibilityLabel={`${objective ? `${objective} ` : ""}Starting in ${countText}. Tap to skip.`}

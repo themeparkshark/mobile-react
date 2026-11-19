@@ -33,7 +33,7 @@ test('T036: the game mounts hidden under the punch and becomes visible when it h
   assert.match(modal, /const boardHeld = flowState === 'spinning' \|\| flowState === 'lost';/);
   assert.match(modal, /visible=\{!boardHeld\}/);
   assert.match(modal, /prewarm=\{boardHeld\}/);
-  assert.match(modal, /pointerEvents=\{boardHeld \|\| boardHidden \? 'none' : 'auto'\}/);
+  assert.match(modal, /pointerEvents=\{boardHeld \? 'none' : 'auto'\}/);
   assert.match(selector, /if \(!visible && !\(prewarm && preferredGame\)\) \{/);
 });
 

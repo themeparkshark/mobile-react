@@ -80,7 +80,7 @@ import { CHALLENGE_GAME_COLORS } from '../constants/coinTiers';
 import { storeAvailable } from '../services/purchases';
 import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
-import { pressTrace } from '../ui/pressTrace';
+import { pressTrace, pressTraceOn } from '../ui/pressTrace';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { lossNext } from './rewards/lossNext';
 import { foldHeldXp, holdBroadcasts } from '../api/broadcastFilter';
@@ -1312,7 +1312,9 @@ export default function RedeemRedeemableModal({
   const boardOutset = fullBleed ? null : { top: -sheetMargin, left: -sheetMargin, right: -sheetMargin, bottom: -sheetMargin };
   const boardHidden = flowState === 'spinning' || flowState === 'lost' || (flowState === 'replay' && !replayShown);
   // w5 N04: in 'replay' the kept board is live (it counts and takes taps) while the deal travels; only GO waits
-  // for the deal (dealt below), so input never waits on the server.
+  // for the deal (dealt below), so input never waits on the server. It takes touches from the TRY AGAIN commit on,
+  // even in the moment before its reset is drawn (the shell takes none until its reset has run): a tap is never
+  // dropped behind a card-level render.
   const boardHeld = flowState === 'spinning' || flowState === 'lost';
   const boardDealt = flowState !== 'replay';
 
@@ -1642,7 +1644,8 @@ export default function RedeemRedeemableModal({
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
           {selectedGame && ((flowState === 'spinning' && (punchCard || earlyGameRef.current === selectedGame)) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered) || boardKept) && (
             <View style={[styles.minigameContainer, boardOutset, boardHidden && styles.prewarm]}
-              pointerEvents={boardHeld || boardHidden ? 'none' : 'auto'}>
+              onTouchStart={pressTraceOn ? () => pressTrace('board.touch', () => flowStateRef.current) : undefined}
+              pointerEvents={boardHeld ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>
               <MiniGameSelector
                 visible={!boardHeld}
