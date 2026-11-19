@@ -105,6 +105,8 @@ const MAGIC_KINGDOM_LANDS: Readonly<Record<string, string>> = {
   'main street vehicles': 'Main Street, U.S.A.',
   'meet mickey at town square theater': 'Main Street, U.S.A.',
   'walt disney world railroad main street u s a': 'Main Street, U.S.A.',
+  'walt disney world railroad fantasyland': 'Fantasyland',
+  'walt disney world railroad frontierland': 'Frontierland',
 };
 
 const keyed = (table: Readonly<Record<string, string>>): Readonly<Record<string, string>> =>

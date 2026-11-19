@@ -86,6 +86,7 @@ test('T077: lands are per park (Haunted Mansion is Liberty Square at Magic Kingd
   assert.equal(rideLands.rideLand(2, 'Tiana\'s Bayou Adventure'), 'Frontierland');
   assert.equal(rideLands.rideLand(8, 'Tiana\'s Bayou Adventure'), 'Bayou Country');
   assert.equal(rideLands.rideLand(1, 'Jurassic World The Ride'), null);
+  assert.equal(rideLands.rideLand(2, 'Walt Disney World Railroad - Fantasyland'), 'Fantasyland');
   const mine = chapters.getLinePlayChapter(2, 'seven-dwarfs-mine-train-2', 'Seven Dwarfs Mine Train', 1, 292);
   assert.equal(mine.parkLabel, 'FANTASYLAND');
   const thunder = chapters.getLinePlayChapter(2, 'big-thunder-mountain-railroad-2', 'Big Thunder Mountain Railroad', 2, 295);
