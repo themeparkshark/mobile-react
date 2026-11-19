@@ -76,3 +76,17 @@ test('an island shows its chip only in the last ten minutes, as LEAVES SOON', ()
   assert.match(marker, /const showTimer = !resting && expiresAt !== null && expiresAt > Date\.now\(\) && !rush && timerUrgent;/);
   assert.match(marker, /const timerUrgent = !resting && stay === 'Leaves soon';/);
 });
+
+test('T006 hold: no minutes chip on a Rush island, and a placed chip never floats off its leader line', () => {
+  const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  assert.doesNotMatch(marker, /RUSH \{live\?\.wait \?\? rush\.wait\} MIN/, 'RUSH 15 MIN read as a clock');
+  assert.match(marker, /<Text style=\{styles\.rushText\}>SHORT LINE<\/Text>/);
+  // Every chip text a park island can wear: none carries a number of minutes.
+  const chipTexts = [...marker.matchAll(/<Text style=\{styles\.(rushText|adventureText|goalText|limitedText|timerText)[^>]*>([^<]*)<\/Text>/g)].map(m => m[2]);
+  assert.ok(chipTexts.length >= 3);
+  for (const t of chipTexts) assert.doesNotMatch(t, /MIN|min\b/, `chip text ${t}`);
+  // The standing lift only moves a chip with no solver slot. The solver already keeps chips off the shark
+  // (tagObstacleOnly), so lifting a placed chip again left it 46 pt above its leader line (int1-25).
+  assert.match(marker, /<View style=\{playable && placement\.tag === undefined \? styles\.standingLift : null\}>/);
+  assert.doesNotMatch(marker, /<View style=\{playable \? styles\.standingLift : null\}>/);
+});

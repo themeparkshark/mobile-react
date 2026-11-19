@@ -335,6 +335,7 @@ test('iPhone SE: the one-time Map spin hint rises above the button so it never c
 
 test('standing at a ride, its timer chip and gift rise clear of the shark and its view cone', () => {
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/TaskMarker.tsx'), 'utf8');
-  assert.match(src, /<View style=\{playable \? styles\.standingLift : null\}>/);
+  // Only the fallback spot lifts: a solver slot already steps off the shark (T006 hold).
+  assert.match(src, /<View style=\{playable && placement\.tag === undefined \? styles\.standingLift : null\}>/);
   assert.match(src, /standingLift: \{ transform: \[\{ translateY: -STANDING_LIFT \}\] \}/);
 });

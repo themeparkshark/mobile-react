@@ -565,12 +565,15 @@ function IslandArt({
       ) : tagKind && tagSize ? (
           <TagSlot tag={placement.tag} anchor={RIDE_BOX.anchor} width={tagSize.w} height={tagSize.h}
             fallback={{ x: -tagSize.w / 2, y: RIDE_BODY.y - tagSize.h - 3 }}>
-            {/* Standing here, the shark and its view cone sit on the island: the chip rises clear of them. */}
-            <View style={playable ? styles.standingLift : null}>
+            {/* Standing here, the shark and its view cone sit on the island: with no solver slot the chip rises
+                clear of them. A solver slot already steps off the shark (a tag obstacle), so lifting it again
+                left the chip floating 46 pt above its leader line, away from any island (T006 hold). */}
+            <View style={playable && placement.tag === undefined ? styles.standingLift : null}>
+            {/* A short line right now, in words: a minutes number on the map read as a clock (T006 hold). */}
             {tagKind === 'rush' && rush && (
-              <View style={styles.rushBadge} accessibilityLabel={`Rush: ${live?.wait ?? rush.wait} minute wait`}>
+              <View style={styles.rushBadge} accessibilityLabel={`Rush: a short line right now, ${live?.wait ?? rush.wait} minute wait`}>
                 <GameIcon name="rush" size={14} />
-                <Text style={styles.rushText}>RUSH {live?.wait ?? rush.wait} MIN</Text>
+                <Text style={styles.rushText}>SHORT LINE</Text>
               </View>
             )}
             {tagKind === 'adventure' && <View style={styles.adventureBadge}><GameIcon name="ticket" size={13} /><Text style={styles.adventureText}>ADVENTURE</Text></View>}
