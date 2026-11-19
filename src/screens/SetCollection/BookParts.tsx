@@ -33,15 +33,6 @@ import {
 } from './dexModel';
 import { BEAT } from './bookClock';
 import { useRung } from '../../services/reveal/revealLadder';
-
-/**
- * Fix w4 T097: Energy is the coin levels idea (rung 3). Before it opens, a set's prizes name the Tickets, coins and
- * XP only (the server still pays the Energy, it just is not a fourth word on day one). The crown is the title ribbon's.
- */
-function useShownPrizes(reward: DexReward) {
-  const levelsOpen = useRung('coin_levels').open;
-  return prizeChips(reward).filter(chip => chip.icon !== 'crown' && (levelsOpen || chip.icon !== 'energy'));
-}
 import type { EventCard } from './eventCards';
 
 export const BOOK_BG = require('../../../assets/images/screens/leaderboard/standings-bg.png');
@@ -944,3 +935,12 @@ const styles = StyleSheet.create({
   rarityHint: { fontFamily: 'Knockout', fontSize: 16, color: BRAND.navySoft, flexShrink: 1 },
   rarityCount: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
 });
+
+/**
+ * Fix w4 T097: Energy is the coin levels idea (rung 3). Before it opens, a set's prizes name the Tickets, coins and
+ * XP only (the server still pays the Energy, it just is not a fourth word on day one). The crown is the title ribbon's.
+ */
+function useShownPrizes(reward: DexReward) {
+  const levelsOpen = useRung('coin_levels').open;
+  return prizeChips(reward).filter(chip => chip.icon !== 'crown' && (levelsOpen || chip.icon !== 'energy'));
+}

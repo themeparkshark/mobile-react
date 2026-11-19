@@ -11,11 +11,7 @@
  * The ring is a static SVG (no animated SVG props: the reanimated 3.16.7 RNSVG onLayout crash).
  */
 import { Image } from 'expo-image';
-import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSequence, withSpring } from 'react-native-reanimated';
-import { SPRING } from '../../ui/motion';
-import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import Svg, { Circle } from 'react-native-svg';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
@@ -93,45 +89,24 @@ export function rewardsLabel(model: RewardsButtonModel): string {
   return parts.join(', ');
 }
 
-/** How long the "Box ready!" label stays beside the button after a Trail Box finishes walking. */
-export const TRAIL_READY_LABEL_MS = 2400;
-
-/** Pure (fix w4 T114): a Trail Box finished walking since the last look, so the button pulses once. */
+/** Pure (fix w4 T114): a Trail Box finished walking since the last look, so the button pulses once (TrailReadyPulse). */
 export function trailBoxJustReady(previous: number | null, ready: number, trailOpen: boolean): boolean {
   return trailOpen && previous !== null && Number.isFinite(ready) && ready > previous;
 }
 
-export default function RewardsButton({ model, onPress, isNew = false, pulseKey = 0 }: {
+export default function RewardsButton({ model, onPress, isNew = false }: {
   readonly model: RewardsButtonModel; readonly onPress: () => void;
   /** The flame (rung 4) or the Trail ring (rung 6) just unlocked: the button wears NEW until tapped. */
   readonly isNew?: boolean;
-  /** Fix w4 T114: bumps when a Trail Box finishes walking: one spring pulse and a short "Box ready!" label. */
-  readonly pulseKey?: number;
 }) {
-  const reduced = useUiReducedMotion();
-  const pulse = useSharedValue(1);
-  const [label, setLabel] = useState(false);
-  const shown = useRef(pulseKey);
-  useEffect(() => {
-    if (!pulseKey || pulseKey === shown.current) return undefined;
-    shown.current = pulseKey;
-    // A spring pop on the UI thread (no linear easing); Reduce Motion keeps only the label.
-    if (!reduced) pulse.value = withSequence(withSpring(1.18, SPRING.pop), withSpring(1, SPRING.settle));
-    setLabel(true);
-    haptic('tapLight');
-    const timer = setTimeout(() => setLabel(false), TRAIL_READY_LABEL_MS);
-    return () => clearTimeout(timer);
-  }, [pulseKey, reduced, pulse]);
-  const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
   const r = (SIZE + RING) / 2 - RING / 2;
   const circumference = 2 * Math.PI * r;
   // Stamps and chests fly here (core loop 4.2): the button registers itself as the 'rewards' fly target, so the
   // first coin's stamp lands on it instead of the fallback spot.
   const anchor = useFlyAnchor('rewards');
   return (
-    <Animated.View style={pulseStyle}>
     <Pressable ref={anchor.ref as React.RefObject<View>} onLayout={anchor.onLayout} onPress={() => { haptic('tapLight'); onPress(); }} accessibilityRole="button"
-      accessibilityLabel={`${isNew ? 'New. ' : ''}${label ? 'Trail Box ready. ' : ''}${rewardsLabel(model)}`} hitSlop={6} testID="map-rewards-button"
+      accessibilityLabel={`${isNew ? 'New. ' : ''}${rewardsLabel(model)}`} hitSlop={6} testID="map-rewards-button"
       style={({ pressed }) => [styles.button, pressed && styles.pressed]}>
       {model.trail !== null && <View style={styles.ring} pointerEvents="none">
         <Svg width={SIZE + RING} height={SIZE + RING}>
@@ -150,10 +125,6 @@ export default function RewardsButton({ model, onPress, isNew = false, pulseKey 
         <Text style={styles.flameText}>{model.flame}</Text>
       </View>}
     </Pressable>
-    {label && <View style={styles.readyLabel} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Text style={styles.readyText} numberOfLines={1}>Box ready!</Text>
-    </View>}
-    </Animated.View>
   );
 }
 
@@ -170,8 +141,4 @@ const styles = StyleSheet.create({
     borderRadius: 10, paddingRight: 5, paddingLeft: 1, borderWidth: 2, borderColor: BRAND.blueBright },
   newTag: { top: -8, left: -10 },
   flameText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 11 },
-  // The count badge's own look (gold, white rim, navy Shark type), set beside the button to its left.
-  readyLabel: { position: 'absolute', right: SIZE + 8, top: SIZE / 2 - 14, height: 28, paddingHorizontal: 10, borderRadius: 14,
-    backgroundColor: BRAND.gold, borderWidth: 2.5, borderColor: BRAND.white, justifyContent: 'center', ...SHADOW.card },
-  readyText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 13 },
 });

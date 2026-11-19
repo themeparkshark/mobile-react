@@ -143,7 +143,7 @@ test('T068 a win\'s Ride Parts banner folds (the card shows it) and server news 
   assert.deepEqual(shown, ['Level up!'], 'shows once the card has closed');
   b.routeBroadcasts(['News'], m => shown.push(...m));
   assert.deepEqual(shown, ['Level up!', 'News']);
-  assert.match(read('src/hooks/useAxiosSetup.ts'), /routeBroadcasts\(shown, messages => enqueueRef\.current\(messages\)\)/);
+  assert.match(read('src/hooks/useAxiosSetup.ts'), /routeBroadcasts\(shown, messages => \{ const banners = takeLevelUps\(messages\); if \(banners\.length\) enqueueRef\.current\(banners\); \}\)/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /flowState === 'minigame' \|\| flowState === 'postwin'/);
 });
 

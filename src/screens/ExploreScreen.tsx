@@ -85,6 +85,7 @@ import type { FrightMapInput } from '../components/map/fright';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
 import TicketGrantMoment from '../components/rewards/TicketGrantMoment';
+import TrailReadyPulse from '../components/map/TrailReadyPulse';
 import LiveEventsPill from '../components/LiveEventsPill';
 import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
@@ -1444,8 +1445,9 @@ export function ExploreScreenBody() {
     if (rewardsNewKey.includes('trail')) trailRung.markSeen();
     openRewards();
   }, [rewardsNewKey, dailyRung, trailRung, openRewards]);
-  const mapControls = mapControlsCount > 0 ? <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew}
-    pulseKey={trailPulse} /> : null;
+  const mapControls = mapControlsCount > 0 ? <TrailReadyPulse pulseKey={trailPulse}>
+    <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} />
+  </TrailReadyPulse> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,

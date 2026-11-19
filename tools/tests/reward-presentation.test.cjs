@@ -195,6 +195,7 @@ test('a lost park-shelf upgrade response reads back the confirmed level before o
   const before = { id: 13, current_level: 1, ride_name: 'Forbidden Journey' };
   let reads = 0, spends = 0; const patched = [];
   const view = runtime('src/components/TaskCoinModal.tsx', {
+  '../services/reveal/revealLadder':{useRung:()=>({open:true,isNew:false,markSeen(){}}),rungState:()=>({open:true,isNew:false}),recordProgress(){}},/* fix w4 T097: coin levels open */
     '../context/AuthProvider': { AuthContext: { value: { player: { id: 5, energy: 160 }, refreshPlayer: async () => {} } } },
     '../helpers/haptics': { impactAsync() {}, ImpactFeedbackStyle: {} },
     '../constants/coinTiers': coinTiers,
@@ -210,6 +211,7 @@ test('a lost park-shelf upgrade response reads back the confirmed level before o
 test('a task payload without asset_id still finds its coin through the coin image', async () => {
   const reads = [];
   const view = runtime('src/components/TaskCoinModal.tsx', {
+  '../services/reveal/revealLadder':{useRung:()=>({open:true,isNew:false,markSeen(){}}),rungState:()=>({open:true,isNew:false}),recordProgress(){}},/* fix w4 T097: coin levels open */
     '../context/AuthProvider': { AuthContext: { value: { player: { id: 5, energy: 10 }, refreshPlayer: async () => {} } } },
     '../helpers/haptics': { impactAsync() {}, ImpactFeedbackStyle: {} },
     '../constants/coinTiers': coinTiers,
@@ -223,6 +225,7 @@ test('a task payload without asset_id still finds its coin through the coin imag
 });
 test('the owner shelf shows each coin at its real level, never a blanket Level 1', () => {
   const view = runtime('src/components/TaskCoinModal.tsx', {
+  '../services/reveal/revealLadder':{useRung:()=>({open:true,isNew:false,markSeen(){}}),rungState:()=>({open:true,isNew:false}),recordProgress(){}},/* fix w4 T097: coin levels open */
     '../context/AuthProvider': { AuthContext: { value: { player: { id: 5 }, refreshPlayer: async () => {} } } },
     '../helpers/haptics': { impactAsync() {}, ImpactFeedbackStyle: {} },
     '../constants/coinTiers': coinTiers,

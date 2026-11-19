@@ -364,7 +364,7 @@ test('Finn is the only voice in minute one: event chips, park story, live parks 
   assert.match(explore, /eventChip=\{liveEvt\.event\?\.include_home && !finnOwnsMap \?/);
   assert.match(explore, /quiet=\{finnOwnsMap\}/);
   // The recap also waits for its rung and the attention rules (core loop 4.3), and stays away while Finn talks.
-  assert.match(explore, /const recapShown = !!liveEvt\.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsRung\.open && attentionFor\('event_recap'\);/);
+  assert.match(explore, /const recapShown = !!liveEvt\.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsShown && attentionFor\('event_recap'\);/);
   assert.match(explore, /visible=\{recapShown\}/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.match(home, /\{quiet \? null : <HomeLive /);
