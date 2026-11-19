@@ -77,5 +77,92 @@ test('T190: the Community Center poll and the Gym clock run only while their scr
   assert.match(center, /useLivePoll\(fetchCenter, 15000, \{ focused: screenFocused, immediate: false, key: parkId \}\);/);
   const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
   assert.match(gym, /const clockLive = screenFocused && appActive;/);
-  assert.match(gym, /if \(battleSeconds == null \|\| !clockLive\) return;/);
+});
+
+test('T190 hold: no bare interval left on the Gym or Community Center screens (every clock is focus and app gated)', () => {
+  for (const file of ['src/screens/GymBattle/GymBattleScreen.tsx', 'src/screens/CommunityCenterScreen.tsx']) {
+    const src = read(file);
+    assert.doesNotMatch(src, /setInterval\(/, `${file} still runs a setInterval`);
+    assert.doesNotMatch(src, /AppState\.currentState === 'active'/, `${file} gates a poll on app state only`);
+  }
+  const gym = read('src/screens/GymBattle/GymBattleScreen.tsx');
+  assert.match(gym, /useLivePoll\(fetchGym, 30000, \{ focused: screenFocused, immediate: false, key: parkId \}\);/);
+  for (const k of ['attack', 'checkin', 'defend']) {
+    assert.match(gym, new RegExp(`useLiveCountdown\\(gymPlayer\\?\\.seconds_until_${k}, clockLive, refetchGym, gymPlayer\\)`));
+  }
+  const center = read('src/screens/CommunityCenterScreen.tsx');
+  assert.match(center, /const clocksLive = screenFocused && appActive;/);
+  assert.match(center, /useLiveCountdown\(showCooldownModal \? cooldownSeconds : 0, clocksLive, onCooldownModalDone\)/);
+  assert.match(center, /useLiveCountdown\(center\?\.give_cooldown_remaining, clocksLive, onGiveReady, center\)/);
+});
+
+// A tiny hooks harness: enough of React to run useLiveCountdown's effects in order.
+function hookHarness() {
+  const slots = [];
+  let i = 0;
+  let pending = [];
+  const React = {
+    useRef: v => { const k = i++; if (!(k in slots)) slots[k] = { current: v }; return slots[k]; },
+    useState: init => {
+      const k = i++;
+      if (!(k in slots)) slots[k] = { v: typeof init === 'function' ? init() : init };
+      const slot = slots[k];
+      return [slot.v, next => { slot.v = typeof next === 'function' ? next(slot.v) : next; }];
+    },
+    useEffect: (fn, deps) => {
+      const k = i++;
+      const prev = slots[k];
+      const changed = !prev || !deps || deps.some((d, n) => !Object.is(d, prev.deps[n]));
+      if (changed) { pending.push(() => { if (prev && prev.cleanup) prev.cleanup(); const c = fn(); slots[k] = { deps, cleanup: c }; }); }
+      else slots[k] = prev;
+    },
+  };
+  return {
+    React,
+    render(run) { i = 0; pending = []; const out = run(); pending.forEach(f => f()); return out; },
+  };
+}
+
+test('T190 hold: useLiveCountdown never ticks while hidden, reads the clock on return and calls onDone once', () => {
+  const h = hookHarness();
+  let now = 1_000_000;
+  const timers = new Map();
+  let nextId = 1;
+  const clock = {
+    setInterval: (fn, ms) => { const id = nextId++; timers.set(id, { fn, ms }); return id; },
+    clearInterval: id => { timers.delete(id); },
+  };
+  const mod = { exports: {} };
+  vm.runInNewContext(ts.transpileModule(read('src/hooks/useLiveCountdown.ts'), { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText,
+    { module: mod, exports: mod.exports, require: name => (name === 'react' ? h.React : {}), Math, Date: { now: () => now }, ...clock });
+  const useLiveCountdown = mod.exports.default;
+  let done = 0;
+  const onDone = () => { done += 1; };
+  const tick = () => { for (const t of [...timers.values()]) t.fn(); };
+
+  let left = h.render(() => useLiveCountdown(10, true, onDone, 'a'));
+  assert.equal(left, 10);
+  assert.equal(timers.size, 1, 'one clock while live');
+  now += 3000; tick();
+  left = h.render(() => useLiveCountdown(10, true, onDone, 'a'));
+  assert.equal(left, 7);
+
+  h.render(() => useLiveCountdown(10, false, onDone, 'a'));
+  assert.equal(timers.size, 0, 'hidden: no clock at all');
+  now += 20000;
+  assert.equal(done, 0, 'nothing ran while hidden');
+
+  left = h.render(() => useLiveCountdown(10, true, onDone, 'a'));
+  left = h.render(() => useLiveCountdown(10, true, onDone, 'a'));
+  assert.equal(left, 0, 'on return it reads the real time left, no drift');
+  assert.equal(done, 1, 'the expiry while hidden still refreshes once');
+  assert.equal(timers.size, 0, 'a finished countdown keeps no clock');
+  h.render(() => useLiveCountdown(10, true, onDone, 'a'));
+  assert.equal(done, 1, 'onDone only once');
+
+  // A refetch with a new stamp restarts from the server value.
+  left = h.render(() => useLiveCountdown(10, true, onDone, 'b'));
+  left = h.render(() => useLiveCountdown(10, true, onDone, 'b'));
+  assert.equal(left, 10);
+  assert.equal(timers.size, 1);
 });
