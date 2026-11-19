@@ -219,3 +219,13 @@ test('(e) one cue per reward: while the home card names a reward, the rail chest
   assert.match(park, /cardHasIt=\{homeRewardCard && !atParkNow\}/);
   assert.match(park, /onRewardCardChange=\{setHomeRewardCard\}/);
 });
+
+test('(c, h) a hidden find never draws or takes a tap: the catch hand-off style keeps it hidden (root of M1 and M2)', () => {
+  const item = read('src/screens/ExploreScreen/PrepItem.tsx');
+  assert.match(item, /const handOff = useAnimatedStyle\(\(\) => \(\{ opacity: hidden \|\| catchHidePivot\.value === myPivot \? 0 : 1 \}\), \[myPivot, hidden\]\);/);
+  assert.match(item, /style=\{\[styles\.box, hidden && styles\.hidden, handOff\]\}/);
+  const marker = read('src/screens/ExploreScreen/HomeFindMarker.tsx');
+  assert.match(marker, /touchEnabled=\{!hidden\}/);
+  // The group's count never sits under the hand.
+  assert.match(item, /cues\.finger && leftSide && !below && styles\.countBadgeRight/);
+});

@@ -362,7 +362,10 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const myPivot = prepItem.pivot_id ?? -2;
   // The catch layer takes over on the UI thread: this pin hides on the same frame the layer's copy starts
   // moving (after its art has drawn), never a frame before (no blink) or after (no double).
-  const handOff = useAnimatedStyle(() => ({ opacity: catchHidePivot.value === myPivot ? 0 : 1 }), [myPivot]);
+  // A hidden find (folded into a group, under chrome or off screen) stays hidden here too: this style comes last in
+  // the box's style list, so an opacity of 1 here used to override styles.hidden and every hidden find still drew
+  // (critic M1 and M2, Nov 19: grouped treats and edge-cut pills showing).
+  const handOff = useAnimatedStyle(() => ({ opacity: hidden || catchHidePivot.value === myPivot ? 0 : 1 }), [myPivot, hidden]);
   const pulseArt = useAnimatedStyle(() => ({ transform: [{ scale: reduced ? 1 : 1 + 0.35 * pulseV.value },
     { scale: tapPivot.value === myPivot ? 1 - 0.14 * tapSquash.value : 1 }] }), [reduced, myPivot]);
   const pulseRing = useAnimatedStyle(() => ({ opacity: pulseV.value, transform: [{ scale: 0.8 + 0.6 * pulseV.value }] }));
@@ -427,7 +430,8 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         <GameIcon name="camera" size={inRange ? 16 : 12} />
         {inRange && <RarityMark tier={tier} />}
       </View>}
-      {count > 1 && <View style={[styles.countBadge, chromeless && styles.chromeOff]}><Text style={styles.countText}>×{count}</Text></View>}
+      {/* The group's count sits on the side away from the hand, so the hand never covers it (rule h). */}
+      {count > 1 && <View style={[styles.countBadge, cues.finger && leftSide && !below && styles.countBadgeRight, chromeless && styles.chromeOff]}><Text style={styles.countText}>×{count}</Text></View>}
       {cues.newTag && <View style={[styles.newBadge, chromeless && styles.chromeOff]}><Text style={styles.newText}>NEW</Text></View>}
       {cues.newDot && <View style={[styles.newDot, chromeless && styles.chromeOff]} />}
       {cues.finger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
@@ -483,6 +487,7 @@ const styles = StyleSheet.create({
   newText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14 },
   countBadge: { position: 'absolute', top: B / 2 - A / 2 - 12, left: B / 2 - A / 2 - 14, backgroundColor: BRAND.navy,
     borderWidth: 2, borderColor: BRAND.white, borderRadius: 10, paddingHorizontal: 6 },
+  countBadgeRight: { left: undefined, right: B / 2 - A / 2 - 14 },
   countText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 15 },
   // The fingertip (bottom centre of the 34 x 43 art, turned 28 degrees) lands on the find itself, 6 pt
   // from its centre on the side away from the player, never on the NEW tag or the badges.

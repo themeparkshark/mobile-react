@@ -42,7 +42,8 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
   const press = useCallback(() => { squashFind(item.pivot_id); onTap(item, distance, inRange); }, [onTap, item, distance, inRange]);
   return (
     // Kids press and hold: a long-press is the same as a tap (no report dialog here).
-    <Marker coordinate={coordinate} anchor={PREP_MARKER_ANCHOR} onPress={press} onLongPress={press}
+    // A hidden find takes no touches (the same Pressable stays mounted): a tap there reaches the marker that shows.
+    <Marker coordinate={coordinate} anchor={PREP_MARKER_ANCHOR} onPress={press} onLongPress={press} touchEnabled={!hidden}
       accessibilityLabel={findLabel(item, distance, inRange)}>
       <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} distance={distance} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} showFinger={showFinger} pulseKey={pulseKey} plainDistance={plainDistance} idleBob={idleBob} />
     </Marker>
