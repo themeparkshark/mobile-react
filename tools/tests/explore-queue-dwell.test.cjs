@@ -119,3 +119,37 @@ test('core loop 4.1: "In line?" needs the player nearly still for 90 s, and neve
   assert.equal(D.dwellShows(dwell, { still: true, endedRideId: 80, endedAt: 0, now: D.WAIT_ENDED_QUIET_MS }), true);
   assert.equal(D.dwellShows(dwell, { still: true, endedRideId: 81, endedAt: 0, now: 1 }), true, 'another ride\'s line still asks');
 });
+
+test('T074 hold: after standing at Submarine Voyage, Autopia\'s line is Autopia at once, never the old line held for a minute', () => {
+  const m = service(), s = m.default;
+  // Disneyland rows from the scratch catalog: Autopia's queue point is inside Submarine Voyage's 60 m zone.
+  s.setRides([
+    { id: 571, name: 'Autopia', type: 'attraction', park_id: 8, lat: 33.8124087, lng: -117.9165033, radius: 60 },
+    { id: 579, name: 'Finding Nemo Submarine Voyage', type: 'attraction', park_id: 8, lat: 33.8126180, lng: -117.9169470, radius: 60 },
+  ]);
+  const D = loadTs('src/screens/ExploreScreen/useQueueDwell.ts', { react: {}, '../../services/RideDetectionService': { currentRideDwell: () => null } });
+  const realNow = Date.now;
+  let now = 50_000_000; Date.now = () => now;
+  try {
+    // Six minutes at Submarine Voyage's island (its coin game, a win card).
+    for (let i = 0; i < 36; i++) { s.processLocation(33.812618 + (i % 2) * 0.00002, -117.916947); now += 10_000; }
+    assert.equal(s.currentDwell(90_000, now)?.rideId, 579);
+    let shown = D.nextDwell(null, { rideId: 579, rideName: 'x', parkId: 8 }, true, { now, lastShownAt: now, endedRideId: null, endedAt: null, still: true });
+    const lastShownAt = now;
+    // The walk over to Autopia's queue, 47 m south east, then standing in it with 4 m jitter.
+    const from = [33.812618, -117.916947], to = [33.8122, -117.9166];
+    for (let k = 1; k <= 12; k++) {
+      s.processLocation(from[0] + (to[0] - from[0]) * k / 12, from[1] + (to[1] - from[1]) * k / 12); now += 3_000;
+    }
+    const named = [];
+    for (let i = 0; i < 30; i++) {
+      s.processLocation(to[0] + ((i * 7) % 5 - 2) * 0.000015, to[1] + ((i * 3) % 5 - 2) * 0.000015); now += 3_000;
+      const d = s.currentDwell(90_000, now);
+      named.push(d?.rideId ?? null);
+      shown = D.nextDwell(shown, d ? { rideId: d.rideId, rideName: d.rideName, parkId: d.parkId } : null, false,
+        { now, lastShownAt, endedRideId: null, endedAt: null, still: false });
+      assert.notEqual(shown?.rideId, 579, `standing in Autopia's line, the card never says Submarine Voyage (${i})`);
+    }
+    assert.ok(named.every(id => id === 571), `the detector names Autopia every time: ${named.join(',')}`);
+  } finally { Date.now = realNow; }
+});

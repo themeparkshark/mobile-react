@@ -63,6 +63,8 @@ export const QUEUE_DWELL_STALE_MS = 5 * 60_000;
  * Spotlight while the guest stood on Space Mountain, 15 m away).
  */
 const QUEUE_WEIGHT_HALF_LIFE_MS = 60_000;
+/** A line clearly the nearest at one fix and no other fix for this long is the line (one jitter fix toward a neighbour, then back, never is). */
+export const CLEAR_LINE_HOLD_MS = 20_000;
 /**
  * LinePlay proves which line the guest is in. Its ride gets the same reach the
  * server allows a queue heartbeat (LinePlaySessionController::isNearRide:
@@ -326,6 +328,16 @@ class RideDetectionService {
     lastSeenAt: number; nearestId: number | null; candidates: Map<number, QueueCandidate>;
     /** At the last fix a show, a walk-through or a show-like attraction was clearly nearer than any line. */
     seatNearer: boolean;
+    /**
+     * The line that was clearly the nearest at every clear fix since `clearSince` (the margin closeVisit uses;
+     * a fix where two lines are about as near changes nothing), and at `clearFixes` fixes in a row. Two fixes in
+     * a row, or CLEAR_LINE_HOLD_MS with no other fix (iOS goes quiet in a line), and it is the line, whatever
+     * time the lines around it gathered before (T074 hold: after standing at Submarine Voyage, the card said
+     * "In line for Finding Nemo Submarine Voyage?" for a minute in Autopia's line, 32 m closer).
+     */
+    clearId: number | null;
+    clearSince: number;
+    clearFixes: number;
   } | null = null;
   private rides: RideType[] = [];
   private running = false;
@@ -786,7 +798,7 @@ class RideDetectionService {
       .sort((a, b) => a.distance - b.distance || a.ride.id - b.ride.id);
     if (queueRides.length === 0) { this.queueArea = null; return; }
     if (!this.queueArea || now - this.queueArea.lastSeenAt > QUEUE_DWELL_STALE_MS) {
-      this.queueArea = { lastSeenAt: now, nearestId: null, candidates: new Map(), seatNearer: false };
+      this.queueArea = { lastSeenAt: now, nearestId: null, candidates: new Map(), seatNearer: false, clearId: null, clearSince: now, clearFixes: 0 };
     }
     const area = this.queueArea;
     const inside = new Set(queueRides.map(entry => entry.ride.id));
@@ -799,6 +811,15 @@ class RideDetectionService {
     }
     area.lastSeenAt = now;
     area.nearestId = queueRides[0].ride.id;
+    let clear = queueRides.length === 1;
+    if (!clear) {
+      const [first, second] = queueRides;
+      const gap = haversineDistance(first.ride.lat!, first.ride.lng!, second.ride.lat!, second.ride.lng!);
+      const lead = second.distance - first.distance;
+      clear = lead > 0 && lead >= Math.min(AMBIGUOUS_DISTANCE_MARGIN, gap / 2);
+    }
+    if (clear && area.clearId !== area.nearestId) { area.clearId = area.nearestId; area.clearSince = now; area.clearFixes = 1; }
+    else if (clear) area.clearFixes += 1;
     // The same unambiguous-nearest rule closeVisit uses: a seat (the Piano Player, the Tiki Room's show) that is
     // clearly closer than the nearest line means the guest is watching, not queuing.
     const seat = ranked.find(entry => !hasLine(entry.ride));
@@ -930,7 +951,11 @@ class RideDetectionService {
     // Time since the last fix counts for the ride the guest stood closest to:
     // iOS sends nothing while a guest stands still in line.
     let leader: QueueCandidate | null = null, leaderWeight = -1;
-    for (const candidate of area.candidates.values()) {
+    // A clearly nearest line is the line: time gathered at a neighbour before the walk over never outranks it.
+    const nearest = area.clearId != null && (area.clearFixes >= 2 || now - area.clearSince >= CLEAR_LINE_HOLD_MS)
+      ? area.candidates.get(area.clearId) ?? null : null;
+    if (nearest) leader = nearest;
+    else for (const candidate of area.candidates.values()) {
       const weight = queueWeight(candidate, area, now);
       if (!leader || weight > leaderWeight || (weight === leaderWeight &&
           (candidate.ride.id === area.nearestId || (leader.ride.id !== area.nearestId && candidate.since < leader.since)))) {
