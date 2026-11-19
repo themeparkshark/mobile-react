@@ -270,17 +270,18 @@ test('r6 follow-up: a held podium week gets a "being checked" card, never a priz
 });
 
 test('critic M4 (Nov 19): a short board puts your card under its last row; a row under the compass is not seen', () => {
-  // SE, a board of 4: the podium header plus one row ends above the nav, so the card follows row 4 (and scrolls).
-  assert.equal(model.youInlineTop(330, 420), 330, 'every row clear: the card follows the last row');
-  assert.equal(model.youInlineTop(400, 420), null, 'the last row under the compass: dock');
-  assert.equal(model.youInlineTop(900, 520), null, 'a long board docks the card at the bottom');
-  assert.equal(model.youInlineTop(330, 0), null, 'not laid out yet');
+  // A board of 4 on a 17 Pro: the podium header plus one row leaves room, so the card follows row 4.
+  const room = 22 + 72 + 8 + model.NAV_RISE;
+  assert.equal(model.youInlineTop(330, 620, room), 330, 'room for the card: it follows the last row');
+  assert.equal(model.youInlineTop(330, 420, room), null, 'no room (SE): it docks, and the last row scrolls up from under it');
+  assert.equal(model.youInlineTop(900, 520, room), null, 'a long board docks the card at the bottom');
+  assert.equal(model.youInlineTop(330, 0, room), null, 'not laid out yet');
   // 17 Pro All-Time top: row 8 half under the raised Map compass is not clear, so the dock shows.
   assert.equal(model.rowOnScreen(560, 64, 0, 620), true, '60% inside the list');
   assert.equal(model.rowClear(560, 64, 0, 620), false, 'but under the compass: the dock shows');
   assert.equal(model.rowClear(400, 64, 0, 620), true, 'fully clear');
   const src = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
-  assert.match(src, /const inlineAt = youInlineTop\(rowsEnd, listBox\.height\);/);
+  assert.match(src, /const inlineAt = youInlineTop\(rowsEnd, listBox\.height, 22 \+ YOU_CARD_HEIGHT \+ 8 \+ NAV_RISE\);/);
   assert.match(src, /- \(inlineTop != null && scrollY \? scrollY\.value : 0\)/, 'an inline card scrolls with its rows');
   assert.match(src, /<YouRow inlineTop=\{inlineTop\}/);
   assert.match(src, /inlineAt != null \? listBox\.height - rowsEnd : 0\) \}\} \/>\}/, 'cream runs to the nav under an inline card');

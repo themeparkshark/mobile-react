@@ -696,13 +696,13 @@ export function rowClear(rowTop: number, rowHeight: number, scrollTop: number, v
 }
 
 /**
- * Where your card goes (critic M4): when every row sits clear above the nav's raised compass (a short board), the
- * card joins the flow right after the last row and scrolls with it (returns that row end); otherwise null and it
- * docks at the bottom. A short board never covers its own last row. Pure.
+ * Where your card goes (critic M4): when every row fits with the card's own room under the last one (the card and
+ * the nav's raised compass), the card joins the flow right after the last row (returns that row end); otherwise
+ * null and it docks at the bottom, and the list keeps room to scroll its last row up from under it. Pure.
  */
-export function youInlineTop(rowsEnd: number, viewport: number, clearBottom = NAV_RISE): number | null {
+export function youInlineTop(rowsEnd: number, viewport: number, cardRoom: number): number | null {
   if (!(viewport > 0) || !(rowsEnd > 0)) return null;
-  return rowsEnd <= viewport - clearBottom ? rowsEnd : null;
+  return rowsEnd + cardRoom <= viewport ? rowsEnd : null;
 }
 
 /**

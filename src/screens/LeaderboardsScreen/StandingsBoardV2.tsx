@@ -50,7 +50,7 @@ import {
 import { prefetchLayers } from './faceLayers';
 import { faceLayerSources, facePoints, wearsOwnLook } from './StandingsShark';
 import {
-  boardMatches, DIVIDER_HEIGHT, dockLabel, expectedWeekEnd, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowClear, youInlineTop, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  boardMatches, DIVIDER_HEIGHT, dockLabel, expectedWeekEnd, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, NAV_RISE, rowClear, youInlineTop, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, shouldPrefetch, unitWord, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -1038,12 +1038,12 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
 
   // A hidden tab keeps its card down, so activating it can never flash a duplicate of your row.
   const hideYou = !active || (!climbing && (myRowVisible || (meOnPodium && podiumOnScreen)));
-  // A short board (every row sits clear above the nav): the card joins the flow right under the last row and scrolls
-  // with the list, instead of docking over that row (critic M4: SE, a board of 4, the join card covered row 4). The
-  // footer keeps room so the card always scrolls fully clear of the nav.
+  // A short board (every row fits with the card under it, clear of the nav's raised compass): the card joins the flow
+  // right under the last row instead of docking over it (critic M4). Where the screen has no room for both (an SE
+  // with the podium and four players), the card docks and the footer's room lets the last row scroll up from under it.
   const lastLayout = layouts[layouts.length - 1];
   const rowsEnd = HEADER_HEIGHT + (lastLayout ? lastLayout.offset + lastLayout.length : 0);
-  const inlineAt = youInlineTop(rowsEnd, listBox.height);
+  const inlineAt = youInlineTop(rowsEnd, listBox.height, 22 + YOU_CARD_HEIGHT + 8 + NAV_RISE);
   const inlineTop = inlineAt != null ? listBox.y + inlineAt : null;
 
   return (
