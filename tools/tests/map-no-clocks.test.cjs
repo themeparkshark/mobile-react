@@ -90,3 +90,30 @@ test('T006 hold: no minutes chip on a Rush island, and a placed chip never float
   assert.match(marker, /<View style=\{playable && placement\.tag === undefined \? styles\.standingLift : null\}>/);
   assert.doesNotMatch(marker, /<View style=\{playable \? styles\.standingLift : null\}>/);
 });
+
+test('T006 hold: standing at a timed island, its Leaves soon chip never sits under the coin chip beside the shark', () => {
+  const map = read('src/components/Map.tsx');
+  // The obstacle is the drawn chip: styles.underChip (left 80, top 34, a 46 pt disc) in the shark box grounded at (50, 100).
+  assert.match(map, /const SHARK_GROUND = \{ x: 50, y: 100 \} as const;/);
+  assert.match(map, /underChip: \{ position: 'absolute', left: 80, top: 34, zIndex: 3 \},/);
+  assert.match(map, /underChipDisc: \{ width: 46, height: 46,/);
+  assert.match(map, /export const UNDER_CHIP_BODY = \{ x: 80 - 50 - 3, y: 34 - 100 - 3, w: 46 \+ 6, h: 46 \+ 6 \} as const;/);
+  assert.match(map, /\.\.\.\(underShark \? \[\{ id: 'player-chip', latitude: location\.latitude, longitude: location\.longitude, priority: 0,\n\s+tagObstacleOnly: true, body: UNDER_CHIP_BODY \}\] : \[\]\)/);
+  // The solver keeps a ride's timer chip off it (Mad Tea Party, device shot h1-41: the chip read "...ves soon").
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const S = loadTs('src/components/map/declutter/solver.ts');
+  const L = loadTs('src/screens/ExploreScreen/parkMapLayout.ts');
+  const f = { latitude: 33.8135, longitude: -117.9184, zoom: 18, bearing: 0, width: 402, height: 874 };
+  const ride = { id: 'ride:120', latitude: 33.8135, longitude: -117.9184, priority: 300, body: L.RIDE_BODY, group: 'ride',
+    tag: L.rideTagSize('timer') };
+  const chip = { x: 80 - 50 - 3, y: 34 - 100 - 3, w: 52, h: 52 };
+  const items = [ride, { id: 'player', latitude: 33.8135, longitude: -117.9184, priority: 0, tagObstacleOnly: true, body: { x: -38, y: -96, w: 76, h: 102 } },
+    { id: 'player-chip', latitude: 33.8135, longitude: -117.9184, priority: 0, tagObstacleOnly: true, body: chip }];
+  const out = S.solveLayout(items, f);
+  const p = S.project(ride.latitude, ride.longitude, f);
+  const tag = out.get('ride:120').tag;
+  assert.ok(tag, 'the chip still shows');
+  const r = { x: p.x + tag.x, y: p.y + tag.y, w: ride.tag.w, h: ride.tag.h };
+  const c = { x: p.x + chip.x, y: p.y + chip.y, w: chip.w, h: chip.h };
+  assert.ok(!(r.x < c.x + c.w && c.x < r.x + r.w && r.y < c.y + c.h && c.y < r.y + r.h), `clear of the coin chip: ${JSON.stringify(r)}`);
+});
