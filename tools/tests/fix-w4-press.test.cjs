@@ -175,3 +175,11 @@ test('the gate is presented with no UIKit animation and fades on the UI thread (
   assert.match(gate, /fade\.value = withTiming\(0, \{ duration: reduced \? 0 : GATE_FADE_OUT_MS \}, done => \{ if \(done\) runOnJS\(closeAfterFade\)\(ok\); \}\);/);
   assert.match(gate, /setTimeout\(\(\) => closeAfterFade\(ok\), GATE_FADE_OUT_MS \+ 250\)/, 'a fade that never reports still closes');
 });
+
+test('a sheet asked for but not reported up is nudged with a harmless prop change, never hidden', () => {
+  const door = src('src/ui/DoorModal.tsx');
+  assert.match(door, /if \(\(phase !== 'presenting' && phase !== 'lost'\) \|\| !wants\) return undefined;/);
+  assert.match(door, /hardwareAccelerated=\{props\.hardwareAccelerated \?\? nudge % 2 === 1\}/);
+  assert.match(door, /export const DOOR_NUDGE_MS = 600;/);
+  assert.doesNotMatch(door.slice(door.indexOf('const [nudge, setNudge]'), door.indexOf('}, [phase, wants]);')), /setBlink|visible/, 'the nudge never hides the sheet');
+});

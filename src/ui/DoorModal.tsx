@@ -57,6 +57,9 @@ export interface DoorModalProps {
 }
 
 const respond = () => true;
+/** How often, and how many times, a sheet not yet reported up is nudged (see the nudge in DoorModal). */
+export const DOOR_NUDGE_MS = 600;
+export const DOOR_NUDGES = 12;
 /** The renderer's fiber behind a host view (React Native's own public-instance field, read as the inspector does). */
 function internalHandle(host: unknown): ChainNode | null {
   const h = host as { __internalInstanceHandle?: ChainNode; _internalInstanceHandle?: ChainNode };
@@ -105,6 +108,23 @@ export default function DoorModal(props: DoorModalProps) {
   }, [phase, wants, nested]);
 
   useEffect(() => { if (blink) setBlink(false); }, [blink]);
+  // A sheet asked for but not yet reported up gets a harmless prop change every DOOR_NUDGE_MS (fix pass w4, N02).
+  // Read off the phase log: some sheets (the grown-up gate inside the coin card) drew only about 4.5 s later, right
+  // after an unrelated re-render of their host, or never: React Native's host presents on a props update, so a
+  // present it skipped waited for the next one. The nudge is that update. It never hides the sheet, so it can never
+  // dismiss one mid-present; on a sheet already up React Native's host does nothing with it.
+  const [nudge, setNudge] = useState(0);
+  useEffect(() => {
+    if ((phase !== 'presenting' && phase !== 'lost') || !wants) return undefined;
+    let count = 0;
+    const timer = setInterval(() => {
+      count += 1;
+      if (count > DOOR_NUDGES) { clearInterval(timer); return; }
+      pressTrace('door.nudge', () => `id=${id.current} n=${count}`);
+      setNudge(n => n + 1);
+    }, DOOR_NUDGE_MS);
+    return () => clearInterval(timer);
+  }, [phase, wants]);
   // A top-level sheet just left the screen: the first tap that landed on it while it was leaving now reaches the
   // screen under it (ui/tapThrough.ts). This effect runs after the commit that took the sheet out of the tree.
   const lastPhase = useRef<DoorPhase>('off');
@@ -180,7 +200,8 @@ export default function DoorModal(props: DoorModalProps) {
       animationType={props.animationType ?? 'none'}
       presentationStyle={presentationStyle}
       transparent={props.transparent}
-      hardwareAccelerated={props.hardwareAccelerated}
+      // Android only (ignored on iOS): the nudge's prop change when the caller did not set it.
+      hardwareAccelerated={props.hardwareAccelerated ?? nudge % 2 === 1}
       onRequestClose={props.onRequestClose}
       onShow={(event: unknown) => {
         pressTrace('door.nativeShow', () => `id=${id.current} phase=${now.current.phase}`);
