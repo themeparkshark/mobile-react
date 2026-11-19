@@ -79,14 +79,19 @@ export const WALK_METERS = 15;
 export const WALK_WINDOW_MS = 30_000;
 
 /**
- * Pure: the player is walking right now. The last two fixes are both more than WALK_METERS from the oldest fix of
- * the last WALK_WINDOW_MS (a line moves a few meters at a time; one GPS jump and back is not a walk).
+ * Pure: the player is walking right now. The last two fixes are both more than WALK_METERS from where the player
+ * was WALK_WINDOW_MS ago (a line moves a few meters at a time; one GPS jump and back is not a walk).
  */
 export function walkingNow(samples: readonly Sample[], now: number): boolean {
-  const recent = samples.filter(s => now - s.at <= WALK_WINDOW_MS);
-  if (recent.length < 3) return false;
-  const first = recent[0];
-  return recent.slice(-2).every(s => meters(first, s) > WALK_METERS);
+  if (samples.length < 3) return false;
+  // Where the player was WALK_WINDOW_MS ago: the last fix at or before then (iOS sends none while standing), else
+  // the oldest fix inside the window.
+  let ref = -1;
+  for (let i = 0; i < samples.length; i++) if (now - samples[i].at >= WALK_WINDOW_MS) ref = i;
+  if (ref < 0) ref = 0;
+  const after = samples.slice(ref + 1);
+  if (after.length < 2) return false;
+  return after.slice(-2).every(s => meters(samples[ref], s) > WALK_METERS);
 }
 
 let waitEnded: { rideId: number; at: number } | null = null;
@@ -110,7 +115,12 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
   useEffect(() => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
     const now = Date.now();
-    samples.current = [...samples.current.filter(s => now - s.at <= DWELL_STILL_MS), { at: now, latitude: lat, longitude: lng }];
+    // The last fix older than the still window stays too: where a player who stood still (iOS sends nothing) started
+    // walking from. nearlyStill reads only the window.
+    const older = samples.current.filter(s => now - s.at > DWELL_STILL_MS).slice(-1);
+    samples.current = [...older, ...samples.current.filter(s => now - s.at <= DWELL_STILL_MS), { at: now, latitude: lat, longitude: lng }];
+    // Walking off ends a shown offer at this fix, not at the next 10 s check.
+    if (walkingNow(samples.current, now)) setDwell(previous => (previous ? null : previous));
   }, [lat, lng]);
   useEffect(() => {
     if (!enabled || !parkId) { setDwell(null); return; }
@@ -121,6 +131,8 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
         still: nearlyStill(samples.current, at), endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null, now: at,
       });
       const walkedOff = walkingNow(samples.current, at);
+      // Dev builds only: lane walks read the in-line decisions (never in a store bundle).
+      if (__DEV__) console.log(`[dwell] seen=${now?.rideId ?? '-'} shows=${shows} walking=${walkedOff} still=${nearlyStill(samples.current, at)} fixes=${samples.current.length} t=${at}`);
       if (now && shows && !walkedOff) lastShownAt.current = at;
       setDwell(previous => nextDwell(previous,
         now && now.parkId === parkId ? { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId } : null, shows,

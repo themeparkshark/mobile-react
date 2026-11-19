@@ -169,6 +169,9 @@ test('T074 hold: an offer shown at Matterhorn goes the moment the player walks o
   const walk = [0, 10, 20, 30].map((m, i) => at(33.813453, lng(m), i * 8300));
   assert.equal(D.walkingNow(walk, 25_000), true, 'known within 30 m of the walk');
   assert.equal(D.walkingNow(walk.slice(0, 2), 9_000), false, 'one step is not yet a walk');
+  // The device trace: the last fix while standing came 60 s before the walk; the walk's fixes every 10 m.
+  const trace = [at(33.813453, lng(0), 0), ...[10, 20, 30].map((m, i) => at(33.813453, lng(m), 60_000 + (i + 1) * 9_500))];
+  assert.equal(D.walkingNow(trace, 60_000 + 3 * 9_500), true, 'measured from where the player stood, not the first step');
   const matter = { rideId: 584, rideName: 'Matterhorn Bobsleds', parkId: 8 };
   const base = { endedRideId: null, endedAt: null, lastShownAt: 0 };
   // The detector still names Matterhorn from the time gathered there, the walk is 20 s old: walked off wins.
@@ -177,6 +180,7 @@ test('T074 hold: an offer shown at Matterhorn goes the moment the player walks o
   assert.equal(D.nextDwell(matter, null, false, { ...base, now: 20_000, still: true, walkedOff: false }), matter);
   const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/useQueueDwell.ts'), 'utf8');
   assert.match(hook, /const walkedOff = walkingNow\(samples\.current, at\);/);
+  assert.match(hook, /if \(walkingNow\(samples\.current, now\)\) setDwell\(previous => \(previous \? null : previous\)\);/);
   assert.match(hook, /const shows = !!now && now\.parkId === parkId && !walkingNow\(samples\.current, at\) && dwellShows\(/);
   assert.match(hook, /still: nearlyStill\(samples\.current, at\), walkedOff \}\)\);/);
 });
