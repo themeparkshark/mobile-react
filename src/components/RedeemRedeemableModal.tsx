@@ -677,7 +677,7 @@ export default function RedeemRedeemableModal({
       taskType,
       taskId,
       requestId,
-      attemptId: saved?.attemptId ?? attemptRef.current?.id ?? savedAttemptIdRef.current,
+      attemptId: redealStartRef.current ? null : saved?.attemptId ?? attemptRef.current?.id ?? savedAttemptIdRef.current,
       latitude: startLocation.latitude,
       longitude: startLocation.longitude,
       savedAt: saved?.savedAt ?? Date.now(),
@@ -689,6 +689,7 @@ export default function RedeemRedeemableModal({
       card: { name: taskName, coin_url: (redeemable?.model as TaskType | undefined)?.coin_url ?? null,
         coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience },
     };
+    redealStartRef.current = false;
     try {
       await writeTaskAttemptCheckpoint(checkpoint);
       pressTrace('card.saved');
@@ -771,6 +772,8 @@ export default function RedeemRedeemableModal({
   // a started trivia round and adds the kid rules, no new Ticket), so the first round is never reading-only.
   const play = usePlayPrefs(player?.id ?? null);
   const redealing = useRef(false);
+  /** w5 T038: the next start is the picture re-deal: it posts (never reads the trivia attempt back by its id). */
+  const redealStartRef = useRef(false);
   useEffect(() => {
     if (!open || !shouldRedealPicture({ flowState, pictureOnlyNow: play.prefs.pictureOnly, pictureOnlyTry: pictureOnlyRef.current,
       attempt: attemptRef.current, busy: redealing.current || spendingRef.current })) return;
@@ -780,14 +783,18 @@ export default function RedeemRedeemableModal({
       try {
         const saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
         if (!saved) return;
-        await writeTaskAttemptCheckpoint({ ...saved, pictureOnly: true,
+        // w5 T038: the re-deal must reach the server as a new start (picture_only, a new request id). With the
+        // trivia attempt's id kept, recovery only read that attempt back (GET), so the round stayed trivia on device.
+        await writeTaskAttemptCheckpoint({ ...saved, attemptId: null, pictureOnly: true,
           requestId: `tps-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` });
         requestIdRef.current = null;
+        redealStartRef.current = true;
         setRedealt(true);
         await handleStartWheel();
       } catch (error) {
         console.warn('Could not switch to a picture game:', error);
       } finally {
+        redealStartRef.current = false;
         redealing.current = false;
       }
     })();
