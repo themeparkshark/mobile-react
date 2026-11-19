@@ -52,6 +52,7 @@ import RewardReveal from './RewardReveal';
 import RewardsSheet from './RewardsSheet';
 import CalmModal, { calmFace } from './CalmModal';
 import { GrownUpGateSlot } from '../GrownUpGate';
+import CalmOffer from '../money/CalmOffer';
 import DailyGiftModal from '../DailyGiftModal';
 import { tryAgainLine } from '../../services/connectionCopy';
 
@@ -784,7 +785,6 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
         onReminders={on => { void toggleReminders(on); }}
-        onLeaveSheet={() => setView(null)}
         onClaim={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }}
         onClaimWeekly={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); }}
         onBuyFreeze={() => setView({ k: 'freeze' })} />
@@ -801,9 +801,14 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         </View>
       )
       : daily ? (
-        <View style={styles.nextRow}>
-          <GameIcon name="streak" size={26} />
-          <Text style={styles.nextText}>{tomorrowLine(daily)}</Text>
+        <View style={{ alignSelf: 'stretch', alignItems: 'center' }}>
+          <View style={styles.nextRow}>
+            <GameIcon name="streak" size={26} />
+            <Text style={styles.nextText}>{tomorrowLine(daily)}</Text>
+          </View>
+          {/* The one natural high point (T220): today's Daily 3 chest just opened. One slim Shark Pass row for
+              grown-ups; CalmOffer keeps every rule (served switch, never on a kid path, once a day, Not now kept). */}
+          {!!r.rewards && <CalmOffer placement="high_point" compact style={styles.passOffer} beforeLeave={() => setView(null)} />}
         </View>
       ) : null;
     content = (
@@ -968,6 +973,7 @@ function XpBar({ pct, reducedMotion }: { readonly pct: number; readonly reducedM
 }
 
 const styles = StyleSheet.create({
+  passOffer: { marginTop: 8 },
   wrap: { alignItems: 'center' },
   // A new card mounting under the one still shown, until its art is drawn.
   pendingFace: { position: 'absolute', left: 0, right: 0, top: 0, opacity: 0 },

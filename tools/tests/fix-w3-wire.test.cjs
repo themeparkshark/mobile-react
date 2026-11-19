@@ -71,10 +71,12 @@ test('T230 CalmOffer: a win_vip line with nothing to say stays away; the door cl
   assert.doesNotMatch(card, /\.price\b|prices\[/);
 });
 
-test('T220 high_point: the Shark Pass card on the Daily 3 sheet once the chest is open, only while the row is for sale', () => {
-  const sheet = strip(read('src/components/retention/Daily3Sheet.tsx'));
-  assert.match(sheet, /\{state\.claimed && <CalmOffer placement="high_point" style=\{styles\.offer\} beforeLeave=\{onLeaveSheet\} \/>\}/);
-  assert.match(strip(read('src/components/retention/useRetention.tsx')), /onLeaveSheet=\{\(\) => setView\(null\)\}/);
+test('T220 high_point: one slim Shark Pass row as today\'s Daily 3 chest opens, only while the row is for sale', () => {
+  const retention = strip(read('src/components/retention/useRetention.tsx'));
+  // In the daily reveal's footer, only once the chest has opened (its rewards are in), and the sheet closes before the page opens.
+  assert.match(retention, /\{!!r\.rewards && <CalmOffer placement="high_point" compact style=\{styles\.passOffer\} beforeLeave=\{\(\) => setView\(null\)\} \/>\}/);
+  assert.equal((retention.match(/placement="high_point"/g) || []).length, 1, 'one high point');
+  assert.doesNotMatch(read('src/components/retention/Daily3Sheet.tsx'), /CalmOffer/);
   assert.equal(offers.passOfferReady({ enabled: true, season: { on_sale: true, product_id: 'pass.s1' }, progress: { premium: false } }), true);
   assert.equal(offers.passOfferReady({ enabled: true, season: { on_sale: true, product_id: 'pass.s1' }, progress: { premium: true } }), false, 'owned');
   assert.equal(offers.passOfferReady({ enabled: true, season: { on_sale: false, product_id: 'pass.s1' } }), false, 'not on sale yet');
