@@ -47,6 +47,8 @@ import { guide } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
 import { openingTab } from '../services/collection/shelfModel';
+import { glowTaskId, loadNewestCoin, markNewestSeen, type NewestCoin } from '../services/collection/newestCoin';
+import NewCoinGlow from '../components/collection/NewCoinGlow';
 import Reanimated, { FadeIn } from 'react-native-reanimated';
 import SharkLoader from '../ui/SharkLoader';
 import { quietRetry } from '../api/quietRetry';
@@ -380,13 +382,27 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   // Fix w3 T128: on its first paint for this park the shelf opens on the tab that holds your coins (a
   // sights-only shelf opens on Sights, not "Rides 0 of 25"). A coin link or a landing coin picks its own tab.
   const openedTabFor = useRef<string | null>(null);
+  // Hold-fix 3 (T128): the newest coin won on this phone (undefined while it is read). Own shelf only.
+  const [newest, setNewest] = useState<NewestCoin | null | undefined>(canChooseGoal ? undefined : null);
   useEffect(() => {
-    if (loading || !currentPark || focusSlot || requestKey || openedTabFor.current === String(park)) return;
+    if (!canChooseGoal) { setNewest(null); return undefined; }
+    let live = true;
+    setNewest(undefined);
+    void loadNewestCoin(Number(player), Number(park)).then(record => { if (live) setNewest(record); });
+    return () => { live = false; };
+  }, [canChooseGoal, player, park]);
+  const ownedNormal = useMemo(() => new Set(completedTasks.map(task => task.id)), [completedTasks]);
+  const glowId = newest && !requestKey && !focusSlot ? glowTaskId(newest, ownedNormal) : null;
+  const seeNewest = useCallback((taskId: number) => {
+    setNewest(n => (n && n.taskId === taskId ? { ...n, seen: true } : n));
+    void markNewestSeen(Number(player), Number(park), taskId);
+  }, [player, park]);
+  useEffect(() => {
+    if (loading || !currentPark || focusSlot || requestKey || newest === undefined || openedTabFor.current === String(park)) return;
     openedTabFor.current = String(park);
-    const owned = new Set(completedTasks.map(task => task.id));
-    const first = openingTab(split, limitedShelf, owned, tabs);
+    const first = openingTab(split, limitedShelf, ownedNormal, tabs, glowTaskId(newest, ownedNormal));
     if (first !== 'rides') setTab(first);
-  }, [loading, currentPark, focusSlot, requestKey, park, completedTasks, split, limitedShelf, tabs]);
+  }, [loading, currentPark, focusSlot, requestKey, park, ownedNormal, split, limitedShelf, tabs, newest]);
   // The story's place is decided when the shelf paints (placedRecap), never after: a story that comes in
   // later sits below the shelf until the next visit, so nothing jumps over the shelf under the thumb.
   // One exception: the map says this park day just ended (park_day_done). The day's story goes on top of
@@ -513,6 +529,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                   onLayout={arriving ? arrival.notifyLayout : undefined}
                   pointerEvents={hidden ? 'none' : 'auto'}
                   style={{ width: coinSize, height: coinSize, opacity: hidden ? 0 : 1 }}>
+                  {/* T128: the newest coin's slot glows until its card is opened. */}
+                  {glowId === task.id && !arriving && section !== 'secret' && <NewCoinGlow size={coinSize} reduced={reducedMotion} />}
                   <TaskCoinModal
                     openRequestKey={inspectionKey(section, task.id)}
                     size={coinSize}
@@ -529,12 +547,14 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                       ? () => RootNavigation.navigate('Explore', { focusRide: { parkId: Number(park), task } }) : undefined}
                     timesCompleted={owned.times_completed ?? 0}
                     readOnly={!canChooseGoal}
+                    onOpen={glowId === task.id ? () => seeNewest(task.id) : undefined}
                   />
                 </View>
               ) : section === 'normal' || section === 'limited' ? (
                 <View>
                   <UnfoundCoinModal task={task} size={coinSize} kind={rideKind(task.id)}
                     limited={(task as TaskType).limited}
+                    parkId={Number(park)}
                     isGoal={parkTripGoal?.task_id === task.id || guidePlan === task.id}
                     onPlayInLine={canChooseGoal && inThisPark &&
                       currentPark?.ride_passport_task_ids?.includes(task.id)

@@ -148,7 +148,7 @@ export function gateReasonLines(reason: GateReason | null | undefined): { head: 
     // One line in a parent's words of what the tap gives (T167); the price waits until after the answer.
     case 'money': return { head: 'This costs real money.', line: `It gives ${reason.gets}. The price is next.`, icon: 'money' };
     case 'renews': return { head: 'This costs real money.', line: `${reason.what} is a plan that renews by itself. The price is next.`, icon: 'money' };
-    case 'vip': return { head: 'VIP costs real money.', line: 'It gives bigger rewards at home and at the park. The price is next.', icon: 'money' };
+    case 'vip': return { head: 'VIP costs real money.', line: 'It gives double ride coin wins, a free Ticket every day and a gift every month. The price is next.', icon: 'money' };
     case 'leave': return { head: 'This leaves the game.', line: `It opens ${reason.where}.`, icon: 'arrow' };
     case 'share': return { head: 'This shares outside the game.', line: 'It sends this to another app.', icon: 'arrow' };
   }
@@ -181,7 +181,7 @@ export function gateDetails(reason: GateReason | null | undefined): { head: stri
         'Paid with the Apple ID on this device.',
       ],
     };
-    case 'vip': return reason.prices ? { head: reason.prices, lines: ['For bigger rewards at home and at the park.', 'Plans that renew do so by themselves until you cancel.', 'Paid with the Apple ID on this device.'] } : null;
+    case 'vip': return reason.prices ? { head: reason.prices, lines: ['For double ride coin wins, a free Ticket every day and a gift every month.', 'Plans that renew do so by themselves until you cancel.', 'Paid with the Apple ID on this device.'] } : null;
     default: return null;
   }
 }

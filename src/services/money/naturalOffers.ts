@@ -100,7 +100,7 @@ export function localDay(now: number, timeZone = 'America/Los_Angeles'): string 
  * no-pressure list.
  */
 export const OFFER_COPY = {
-  need_ticket: { kicker: 'For grown-ups', title: 'Today’s Park Day Pack', action: 'Ask a grown-up' },
+  need_ticket: { kicker: 'For grown-ups', title: 'The Park Day Pack', action: 'Ask a grown-up' },
   first_win: { kicker: 'Nice win! For grown-ups', title: 'The Starter Pack', action: 'Ask a grown-up' },
   high_point: { kicker: 'For grown-ups', title: 'The Shark Pass', body: 'More prizes on every step you climb.', action: 'See the Shark Pass' },
   win_vip: { line: 'VIP doubles this' },

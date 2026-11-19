@@ -28,7 +28,7 @@ import {
   buyVip, legalText, loadVipPlans, priceText, restoreVip, savingsText, storeAvailable, trialEndsAt, type VipPlan,
 } from '../services/purchases';
 import { BRAND, FONT, GameButton, GameIcon, SharkLoader, gameAlert, type GameIconName } from '../ui';
-import { perMonthText, vipHeroPerks } from '../services/money/offers';
+import { perMonthText, vipHeroPerks, VIP_PITCH } from '../services/money/offers';
 import MemberStage from '../components/money/MemberStage';
 import MonthlyGiftCard, { VIP_PIN_ART } from '../components/money/MonthlyGiftCard';
 import { getStandings } from '../api/endpoints/me/standings';
@@ -245,7 +245,7 @@ export default function MembershipScreen({ route }: { route: { params?: { intro?
           <MemberStage pin={!member && gift?.pin && VIP_PIN_ART[gift.pin.art] ? { name: gift.pin.name, source: VIP_PIN_ART[gift.pin.art] } : null} />
           <Animated.Text entering={FadeInDown.delay(150)} style={s.title}>{member ? 'YOU’RE VIP' : 'GO VIP'}</Animated.Text>
           <Animated.Text entering={FadeInDown.delay(220)} style={s.sub}>
-            {member ? 'Here’s everything you get.' : 'Double ride coin wins, a free Ticket every day and a gift every month.'}
+            {member ? 'Here’s everything you get.' : VIP_PITCH}
           </Animated.Text>
 
           {!member && hero.hero.length > 0 ? (

@@ -11,10 +11,16 @@ export interface RideFact {
   readonly land: string;
   /** One short fan note, under 70 letters. */
   readonly note: string;
+  /**
+   * A note about the coin's own face, for a face that reads like a typo to a first-time player (hold-fix 3,
+   * T137: "O2H"). Shown wherever the face is first seen: the WIN card and the shelf slot's sheet.
+   */
+  readonly face?: string;
 }
 
 const DISNEYLAND: Readonly<Record<string, RideFact>> = {
-  'Jungle Cruise': { land: 'Adventureland', note: 'O2H is water backwards: the skippers’ “backside of water” joke.' },
+  'Jungle Cruise': { land: 'Adventureland', note: 'O2H is water backwards: the skippers’ “backside of water” joke.',
+    face: 'O2H is water backwards: the backside of water!' },
   'Enchanted Tiki Room': { land: 'Adventureland', note: 'Opened in 1963, the first show with talking, singing birds.' },
   'Indiana Jones Adventure': { land: 'Adventureland', note: 'Opened in 1995. No two trips through the temple are quite the same.' },
   'Adventureland Treehouse': { land: 'Adventureland', note: 'Opened in 2023, high in the same big tree.' },
@@ -71,4 +77,9 @@ export function rideFact(name: string | null | undefined, parkId?: number | null
   if (!plain) return null;
   const key = rideNameKey(plain);
   return BY_KEY.get(key) ?? (Number(parkId) === 8 ? SIGHTS_8.get(key) ?? null : null);
+}
+
+/** The note for a coin face that needs one ("O2H"), or null (T137). */
+export function coinFaceNote(name: string | null | undefined, parkId?: number | null): string | null {
+  return rideFact(name, parkId)?.face ?? null;
 }

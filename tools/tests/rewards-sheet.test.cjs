@@ -129,11 +129,14 @@ test('Rewards sheet: one list of what is ready, ready first, one number', () => 
     events: { chests: 1 },
   };
   const rows = plain(model.rewardsRows(input));
-  assert.deepEqual(rows.map(r => r.key), ['daily_chest', 'level_chest', 'weekly_box', 'trail', 'stamps', 'events', 'daily3']);
+  // Hold-fix 3 (T118): while today's chest is ready, the level chest and the Weekly Box wait for the next open.
+  assert.deepEqual(rows.map(r => r.key), ['daily_chest', 'trail', 'stamps', 'events', 'daily3']);
   assert.equal(rows[0].line, 'Day 3 of 7 is ready', 'the chest ladder words, never a streak');
   assert.equal(rows.find(r => r.key === 'daily3').line, '2 of 3 done');
   assert.equal(rows.find(r => r.key === 'stamps').action, 'claim_all');
-  assert.equal(model.rewardsCount(input), 1 + 1 + 1 + 2 + 3 + 1);
+  assert.equal(model.rewardsCount(input), 1 + 2 + 3 + 1);
+  const later = plain(model.rewardsRows({ ...input, dailyChest: { unclaimed: false, day: 3, of: 7 } })).map(r => r.key);
+  assert.deepEqual(later, ['level_chest', 'weekly_box', 'trail', 'stamps', 'events', 'daily3'], 'the next open offers them');
   const sum = plain(model.rewardsSummary(input));
   assert.equal(sum.flame, 6, 'the flame shows once Daily 3 is unlocked');
   assert.equal(sum.trailRing, null, 'ready boxes: the number speaks, no ring');

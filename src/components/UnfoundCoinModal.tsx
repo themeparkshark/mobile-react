@@ -24,6 +24,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { UpperText } from '../ui/upper';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import { useRung } from '../services/reveal/revealLadder';
+import RideFactLine from './collection/RideFactLine';
 
 interface Props {
   task: TaskType | SecretTaskType;
@@ -40,6 +41,8 @@ interface Props {
   isGoal?: boolean;
   /** A limited coin's rotation (Coin Map 2.0); out of rotation it cannot be played. */
   limited?: LimitedWindow | null;
+  /** The shelf's park, for sight notes that only mean one place ("Castle" at Disneyland). */
+  parkId?: number | null;
 }
 
 /** Copy for the missing coin, by what kind of place earns it. */
@@ -76,7 +79,7 @@ export function unfoundCoinCopy({ isSecret, isArchived, isResting, kind, limited
     : { ribbon: kind === 'coin' ? 'Sight Coin' : 'Spot Coin', hint: 'Walk up to this spot and tap PLAY! to win its coin for your shelf.', challenge: 'PLAY! at this spot' };
 }
 
-export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62, kind, isGoal = false, limited }: Props) {
+export default function UnfoundCoinModal({ task, isSecret = false, isArchived = false, onChooseGoal, onShowOnMap, onPlayInLine, trigger, size = 62, kind, isGoal = false, limited, parkId = null }: Props) {
   const [visible, setVisible] = useState(false);
   const [afterClose, setAfterClose] = useState<'map' | 'line' | null>(null);
   const [goalBusy, setGoalBusy] = useState(false);
@@ -184,6 +187,10 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
               >
                 {task.name}
               </UpperText>
+
+              {/* T137: the slot shows this coin's face ("O2H"), so its sheet is the first place it is explained: the
+                  land and the fan note, as on the owned coin's card. Secret and resting coins keep their mystery. */}
+              {!isSecret && !isArchived && <RideFactLine rideName={task.name} parkId={parkId} onDark style={{ marginBottom: 10 }} />}
 
               {/* Hint text */}
               <Text

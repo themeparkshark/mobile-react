@@ -156,6 +156,13 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const [daily, setDaily] = useState<DailyThreeState | null>(null);
   const [chests, setChests] = useState<readonly LevelChest[]>([]);
   const [view, setView] = useState<View_ | null>(null);
+  // T118: a chest (today's, Daily 3, Weekly or level) paid out in this visit to Rewards. The other bonus chests wait
+  // for the next open. A visit starts when the Rewards button opens the sheet; a chest card's round trip (the map
+  // fly, the reveal) is the same visit.
+  const [chestThisVisit, setChestThisVisit] = useState(false);
+  useEffect(() => {
+    if (view?.k === 'reveal' && view.rewards) setChestThisVisit(true);
+  }, [view]);
   const [busy, setBusy] = useState(false);
   const [pop, setPop] = useState<{ index: number | null; key: number }>({ index: null, key: 0 });
   const [celebrate, setCelebrate] = useState<string[]>([]);
@@ -497,6 +504,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
    * comes back once it has.
    */
   const chestDone = (back: 'rewards' | 'sheet', mapFly: boolean) => {
+    setChestThisVisit(true);
     void refresh(true);
     const to: View_ = back === 'sheet' && daily ? { k: 'sheet' } : { k: 'rewards' };
     if (to.k === 'rewards') { setRewardsNote(null); void refreshStamps(true); }
@@ -541,6 +549,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     stamps: { claimable: stamps, retry: stampRetry && stamps > 0 },
     events: eventsOpen && flagOn(flags, 'live_events') && liveEvt.event
       ? { chests: openableKeys(liveEvt.event).length, door: !!o.onOpenEvents || rewardsDoorOpen('events') } : null,
+    chestOpenedThisVisit: chestThisVisit,
   };
   const rows = rewardsRows(rewardsInput);
   const summary = rewardsSummary(rewardsInput);
@@ -555,6 +564,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
 
   const openRewards = useCallback(() => {
     playSfx('ui.tap');
+    setChestThisVisit(false);
     setRewardsNote(null);
     setView({ k: 'rewards' });
     // A fresh stamp read: the row never offers CLAIM ALL from a stale count.

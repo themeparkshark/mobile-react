@@ -244,6 +244,6 @@ test('the shop copy is honest: real prices, no random rewards, Parts never sold,
     '../../api/endpoints/me/shop': {}, '../purchases': {}, './track': { trackMoney() {} },
   });
   assert.equal(grantsText({ tickets: 15, coins: 1500, energy: 150, rescue_passes: 2 }),
-    '15 tickets, 1500 Shark Coins, 150 energy and 2 extra tries');
+    '15 Tickets, 1500 Shark Coins, 150 Energy and 2 extra tries');
   assert.equal(grantsText({ rescue_passes: 1 }), '1 extra try');
 });

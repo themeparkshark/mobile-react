@@ -29,7 +29,7 @@ import {
 } from '../../services/money/naturalOffers';
 import { isParkDay, isStarter } from '../../services/money/suppliesPlan';
 import { buyPack, outcomeMessage, useSupplies } from '../../services/money/supplies';
-import { trackImpression } from '../../services/money/track';
+import { trackImpression, trackMoney } from '../../services/money/track';
 import { storeAvailable } from '../../services/purchases';
 import { openMembership } from '../GrownUpGate';
 import { getSharkPass } from '../../api/endpoints/me/shark-pass';
@@ -132,6 +132,9 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
     if (!show || playerId == null) return;
     void saveOfferRecord(playerId, placement, markShown(ctx?.record, today, Date.now()));
     trackImpression(`offer.${placement}`, pack?.product_id);
+    // The Starter Pack's one showing (hold-fix 3): the server sets starter_seen_at, so "once ever" holds on every
+    // phone and money:launch-funnel counts it (only the unmounted StarterOfferCard sent this before).
+    if (placement === 'first_win' && pack) trackMoney('starter_seen', `offer.${placement}`, pack.product_id);
   }, [show]); // eslint-disable-line react-hooks/exhaustive-deps
   const decided = loss || !switchOn || (placement === 'win_vip' && !vipText) || (placement === 'high_point' && (!passOn || passReady === false)) ? false
     : ctx && (placement !== 'high_point' || passReady !== null) ? show : null;

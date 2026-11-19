@@ -165,7 +165,8 @@ test('T128: the shelf opens on the tab holding your coins, fades in once, and Fi
   assert.match(park, /entering=\{seed \|\| reducedMotion \? undefined : FadeIn\.duration\(240\)\}/, 'one fade under 300 ms');
   // Merge w3: lane platform T180 pins the same rule in its own order.
   assert.match(park, /!loading && !progressStale && !!currentPark && !tutorialActive/, 'no lesson over a failed or blank shelf');
-  assert.match(park, /const first = openingTab\(split, limitedShelf, owned, tabs\);/);
+  // Hold-fix 3: the newest coin (when known) picks the tab first; see fix-w3-hold-3 T128.
+  assert.match(park, /const first = openingTab\(split, limitedShelf, ownedNormal, tabs, glowTaskId\(newest, ownedNormal\)\);/);
 });
 
 test('T219: Standings, News and the Stamp Books sit on the plain seabed plate, never the coin-pile backdrop', () => {

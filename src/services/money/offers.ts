@@ -247,6 +247,22 @@ export function vipHeroPerks(perks: readonly { key?: string; icon: string; title
   return { hero, rest: perks.filter(p => !used.has(p)) };
 }
 
+/** The one VIP pitch line, the same on the VIP page and the Supplies VIP card (T156): concrete, never "bigger rewards". */
+export const VIP_PITCH = 'Double ride coin wins, a free Ticket every day and a gift every month.';
+
+/**
+ * The Supplies VIP card's tiles (hold-fix 3, T156): the VIP page's three concrete perks first ("Every ride coin
+ * win pays double", never "2x XP and Shark Coins" on small numbers), then the server's other lines, 4 at most.
+ */
+export function vipCardTiles(perks: readonly { key?: string; icon: string; title: string; body: string }[]): { icon: string; text: string }[] {
+  const { hero, rest } = vipHeroPerks(perks, {});
+  const m = vipRideMultiplier(perks) ?? 2;
+  const heroText = (p: VipHeroPerk) => p.key === 'ride' ? `Every ride coin win pays ${m === 2 ? 'double' : `${m}x`}`
+    : p.key === 'daily_ticket' ? 'A free Ticket every day' : 'A gift every month';
+  return [...hero.map(p => ({ icon: p.icon, text: heroText(p) })),
+    ...rest.filter(p => p.icon !== 'member').map(p => ({ icon: p.icon, text: p.title }))].slice(0, 4);
+}
+
 /** "4h 12m" until the shop day rolls over (the real midnight in the parks' time zone). */
 export function untilText(endsAtIso: string | null | undefined, now: number = Date.now()): string | null {
   const end = endsAtIso ? Date.parse(endsAtIso) : NaN;

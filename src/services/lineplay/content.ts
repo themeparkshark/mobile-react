@@ -48,6 +48,11 @@ export interface TriviaQuestion {
   readonly source?: string;
   /** Theme the newsroom filed it under: kids, classic, history, numbers, deep-cut, lands. */
   readonly deck?: string;
+  /**
+   * A fact-checked row from the server's bank (hold-fix 3): its words are shown exactly as written. The app's
+   * generic-label step is for bundled copy only; it turned "The Disney Studio" into "The park company Studio".
+   */
+  readonly bank?: boolean;
 }
 
 /** Options for dealing a trivia card. */

@@ -36,6 +36,7 @@ export default function TaskCoinModal({
   openRequestKey,
   igniteKey,
   sight = false,
+  onOpen,
 }: {
   readonly isSecretTask?: boolean;
   readonly task: TaskType | SecretTaskType;
@@ -56,6 +57,8 @@ export default function TaskCoinModal({
   readonly igniteKey?: number | string;
   /** A sight (statue, castle): no line, so its Parts come from winning it again. */
   readonly sight?: boolean;
+  /** The player opened this coin's card (the newest coin's glow ends, T128). */
+  readonly onOpen?: () => void;
 }) {
   const [visible, setVisible] = useState(false);
   const [rideCoin, setRideCoin] = useState<RideCoinLevelType | null>(null);
@@ -79,6 +82,7 @@ export default function TaskCoinModal({
 
   const handleOpen = async (stillRequested: () => boolean = () => true) => {
     if (opening.current || !mounted.current || !stillRequested()) return;
+    onOpen?.();
     if (Platform.OS === 'ios') {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     }

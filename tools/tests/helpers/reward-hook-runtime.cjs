@@ -157,6 +157,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)rewards\/offerSlots$/.test(name)) return { NeedTicketOfferSlot: 'NeedTicketOfferSlot', FirstWinOfferSlot: 'FirstWinOfferSlot', WinOfferSlot: 'WinOfferSlot' };
       if (/(^|\/)services\/guide\/freeTickets$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/guide/freeTickets.ts');
       if (/(^|\/)services\/lineplay\/rideLines$/.test(name)) return { taskHasLine: () => false };
+      if (/(^|\/)services\/collection\/newestCoin$/.test(name)) return { noteNewestCoin: async () => undefined };
+      if (/(^|\/)services\/collection\/rideFacts$/.test(name)) return { coinFaceNote: () => null, rideFact: () => null };
       // Nobody signed in unless a test says so (PLAY! reads the Ticket count for its free-try badge).
       if (/(^|\/)context\/AuthProvider$/.test(name)) return { AuthContext: { value: { player: null } } };
       if (/(^|\/)context\/CurrencyFlyProvider$/.test(name)) return { useCurrencyFly: () => ({ triggerFly() {}, getTarget: () => null, registerTarget() {} }) };

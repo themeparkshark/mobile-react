@@ -57,8 +57,16 @@ export function shelfTabs<T extends { readonly id: number }>(permanent: readonly
  * Limited. Rides when you own a ride (or nothing yet).
  */
 export function openingTab(split: { readonly rides: readonly { readonly id: number }[]; readonly sights: readonly { readonly id: number }[] },
-  limited: readonly { readonly id: number }[], ownedIds: ReadonlySet<number>, tabs: readonly ShelfTab[]): ShelfTab {
+  limited: readonly { readonly id: number }[], ownedIds: ReadonlySet<number>, tabs: readonly ShelfTab[],
+  newestTaskId: number | null = null): ShelfTab {
   const owns = (rows: readonly { readonly id: number }[]) => rows.some(row => ownedIds.has(row.id));
+  // Hold-fix 3 (T128): the newest coin's tab first, so its glowing slot is the first thing on screen.
+  if (newestTaskId != null && ownedIds.has(newestTaskId)) {
+    const holds = (rows: readonly { readonly id: number }[]) => rows.some(row => row.id === newestTaskId);
+    if (tabs.includes('sights') && holds(split.sights)) return 'sights';
+    if (tabs.includes('limited') && holds(limited)) return 'limited';
+    if (holds(split.rides)) return 'rides';
+  }
   if (owns(split.rides)) return 'rides';
   if (tabs.includes('sights') && owns(split.sights)) return 'sights';
   if (tabs.includes('limited') && owns(limited)) return 'limited';

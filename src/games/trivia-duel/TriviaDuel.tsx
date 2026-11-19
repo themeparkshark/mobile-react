@@ -53,6 +53,7 @@ import {
   type DuelMode, type FinRank, type SpeedTier,
 } from './engine/config';
 import { factKeysOf, type PoolQuestion } from './engine/content';
+import { lockBadge } from './engine/lockBadge';
 import { applyMatchToRank, pickBark, BARKS } from './engine/finAI';
 import {
   createTally, finalPicker, finBellAnswerMs, finCategoryPick, finInput, ghostInput, makeGhost, NO_INPUT, planFromIds, planMatch, resolveRound,
@@ -976,14 +977,15 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const pickCategory = useCallback((i: number) => { catDone.current?.(i); }, []);
 
   // -- Events from the UI thread ------------------------------------------------------------------
-  const lockLabel = useCallback((ms: number) => `${(ms / 1000).toFixed(1)}s`, []);
+  // Hold-fix 3: the portrait chip says LOCKED, never a seconds readout ("5.7s" read as a clock to a kid).
+  const lockLabel = useCallback((_ms: number) => lockBadge('locked'), []);
 
   const resolveOppShown = useCallback((ms?: number) => {
     if (resolved.current.opp) return;
     resolved.current.opp = true;
     const o = oppIn.current;
     if (o.lockMs < 0 && o.guess == null && o.choice < 0) {
-      setLocks((l) => ({ ...l, opp: 'NO ANSWER' }));
+      setLocks((l) => ({ ...l, opp: lockBadge('none') }));
       return;
     }
     setLocks((l) => ({ ...l, opp: lockLabel(ms ?? o.lockMs) }));
@@ -1126,7 +1128,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
         meIn.current = { ...meIn.current, choice: -1, lockMs: -1 };
         resolved.current.me = true;
         setTiles((ts) => ts.map((s) => (s === 'removed' ? s : 'dim')));
-        setLocks((l) => ({ ...l, me: 'TIME' }));
+        setLocks((l) => ({ ...l, me: lockBadge('none') }));
         if (!resolved.current.opp) later(FIN_RESOLVE_AFTER_MS, () => { resolveOppShown(); maybeReveal(); });
         else maybeReveal();
         return;
@@ -1158,7 +1160,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
         fx.current?.ring(W / 2, ZONE_TOP + ZONE_H / 2, { color: C.gold, from: 60, to: 180, ms: 260 });
         frame('singleMe');
         meAct('buzzWin');
-        setLocks((l) => ({ ...l, me: `BELL ${lockLabel(my)}` }));
+        setLocks((l) => ({ ...l, me: lockBadge('bell') }));
         setTiles((ts) => ts.map((s) => (s === 'removed' ? s : 'up')));
         setSubMode('buzzAnswer');
         setClock({ phase: PH_SUB, sub: 0, subLimit: BUZZ.answerMs, urgent: 0, lastBeat: -1 });
@@ -1181,10 +1183,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
           meIn.current = { ...meIn.current, choice: pick, lockMs: meIn.current.buzzMs ?? -1 };
         } else if (subMode === 'steal') {
           meIn.current = { ...meIn.current, stealChoice: pick, stealMs: subT };
-          setLocks((l) => ({ ...l, me: pick >= 0 ? lockLabel(subT) : 'TIME' }));
+          setLocks((l) => ({ ...l, me: pick >= 0 ? lockLabel(subT) : lockBadge('none') }));
         } else if (subMode === 'open') {
           meIn.current = { ...meIn.current, choice: pick, lockMs: pick >= 0 ? subT : -1 };
-          setLocks((l) => ({ ...l, me: pick >= 0 ? lockLabel(subT) : 'TIME' }));
+          setLocks((l) => ({ ...l, me: pick >= 0 ? lockLabel(subT) : lockBadge('none') }));
         }
         resolved.current.me = true;
         setSubMode(null);
