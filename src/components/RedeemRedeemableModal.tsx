@@ -1304,6 +1304,8 @@ export default function RedeemRedeemableModal({
                             <Text style={styles.shopRowText} numberOfLines={1} adjustsFontSizeToFit>Practice game</Text>
                             <GameIcon name="arrow" size={14} />
                           </Pressable>}
+                          {/* One optional calm offer row after the free ways, above the shop row (T220): never right after a lost try, never on a kid path. */}
+                          {!previewOnly && <NeedTicketOfferSlot placement="need_ticket" taskId={taskId} closeCard={close} loss={cardAfterLoss} />}
                           {/* The grown-up shop comes last, under every free way: one small row that opens Supplies on
                               Tickets, where every purchase sits behind the grown-up gate. No price inside the card. */}
                           {storeAvailable() && !previewOnly && (
@@ -1315,8 +1317,6 @@ export default function RedeemRedeemableModal({
                               <GameIcon name="arrow" size={14} />
                             </Pressable>
                           )}
-                          {/* One optional calm offer row (T220): never right after a lost try, never on a kid path. */}
-                          {!previewOnly && <NeedTicketOfferSlot placement="need_ticket" taskId={taskId} closeCard={close} loss={cardAfterLoss} />}
                         </View>}
                         {needTicket && <Pressable onPress={safeClose} accessibilityRole="button" accessibilityLabel={BACK_TO_MAP}
                           style={({ pressed }) => [styles.mapLink, pressed && { opacity: 0.7 }]} hitSlop={8}>

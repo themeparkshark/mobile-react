@@ -31,7 +31,8 @@ export interface OfferSlotProps {
 
 /** Under the free ways on the NEED A TICKET card. */
 export function NeedTicketOfferSlot({ loss = false }: OfferSlotProps): ReactElement | null {
-  return <CalmOffer placement="need_ticket" loss={loss} style={{ marginTop: 10 }} />;
+  // One slim row: the card is narrow, and the free ways stay the big thing on it.
+  return <CalmOffer placement="need_ticket" loss={loss} compact style={{ marginTop: 10 }} />;
 }
 
 export interface WinOfferSlotProps {

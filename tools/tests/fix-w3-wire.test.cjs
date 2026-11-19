@@ -19,7 +19,7 @@ const offers = loadTs('src/services/money/naturalOffers.ts', {
 
 test('T220 need_ticket: the NEED A TICKET card mounts the calm offer, and never right after a lost try', () => {
   const slots = strip(read('src/components/rewards/offerSlots.tsx'));
-  assert.match(slots, /export function NeedTicketOfferSlot\(\{ loss = false \}: OfferSlotProps\)[^{]*\{\s*return <CalmOffer placement="need_ticket" loss=\{loss\}/);
+  assert.match(slots, /export function NeedTicketOfferSlot\(\{ loss = false \}: OfferSlotProps\)[^{]*\{\s*return <CalmOffer placement="need_ticket" loss=\{loss\} compact/);
   const modal = strip(read('src/components/RedeemRedeemableModal.tsx'));
   assert.match(modal, /<NeedTicketOfferSlot placement="need_ticket" taskId=\{taskId\} closeCard=\{close\} loss=\{cardAfterLoss\} \/>/);
   // The loss card's way on at 0 Tickets (backToCard) is a loss moment; a fresh open of the card is not.
