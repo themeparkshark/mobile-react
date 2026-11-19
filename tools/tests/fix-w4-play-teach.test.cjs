@@ -173,3 +173,21 @@ test('T056 and N07: Beat the Buzzer counts nothing while you read and shows Gill
   assert.match(lock, /if \(!resolved\.current\.opp\) \{[\s\S]*later\(FIN_RESOLVE_AFTER_MS, \(\) => \{ resolveOppShown\(\); maybeReveal\(\); \}\);/);
   assert.match(lock, /if \(!resolved\.current\.opp\) later\(FIN_RESOLVE_AFTER_MS, \(\) => \{ resolveOppShown\(\); maybeReveal\(\); \}\);/);
 });
+
+test('T041: Memory stands each land\'s own landmark (Whack\'s themed props) behind the booth; Main Street keeps the carnival', () => {
+  const game = read('src/games/memory/MemoryGame.tsx');
+  const fn = game.slice(game.indexOf('export function landStageForDeck'), game.indexOf('\n}\n', game.indexOf('export function landStageForDeck')) + 2);
+  // eslint-disable-next-line no-new-func
+  const land = new Function(`${fn.replace('export function', 'function').replace(/: string\): keyof typeof LAND_PROPS \| null/, ')').replace(/\(deckId: string\)/, '(deckId)')}; return landStageForDeck;`)();
+  assert.equal(land('space'), 'space');
+  assert.equal(land('launch-code'), 'space');
+  assert.equal(land('pirates'), 'pirates');
+  assert.equal(land('jungle'), 'jungle');
+  assert.equal(land('mansion'), 'mansion');
+  assert.equal(land('park'), null, 'Main Street keeps its carnival');
+  assert.equal(land('ocean'), null);
+  assert.match(game, /\{mode !== 'warmup' && landStageForDeck\(deck\.id\) \? <LandSky g=\{g\} land=\{landStageForDeck\(deck\.id\)!\} \/> : null\}/);
+  assert.match(game, /space: \{ src: WHACK_PROPS\.space_gantry/, 'existing Alex props only');
+  const theme = read('src/services/rideTheme.ts');
+  assert.match(theme, /indiana jones\|temple of\|tiki/, 'Indiana Jones is a jungle ride');
+});

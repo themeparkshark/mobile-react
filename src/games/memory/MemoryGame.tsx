@@ -26,6 +26,8 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import TapHint, { TAP_HINT_SIZE } from '../../components/TapHint';
 import { Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
 import GameIcon from '../../ui/GameIcon';
+// T041: Whack's themed stage props stand in Memory's sky per land (existing art, no new art).
+import { PROPS as WHACK_PROPS } from '../whack/art.generated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -231,6 +233,45 @@ function WarmupSky({ g }: { g: BoothGeo }) {
           style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
       </View>
       <MatchCue top={cueTop} left={(g.W - cueW * 2 - 10) / 2} h={cueH} />
+    </View>
+  );
+}
+
+/**
+ * T041: the land a Memory deck belongs to, as one of Whack's themed stages (Alex's existing props). Main Street,
+ * the ocean and the other carnival decks keep the carnival sky.
+ */
+export function landStageForDeck(deckId: string): keyof typeof LAND_PROPS | null {
+  if (deckId === 'space' || deckId === 'launch-code') return 'space';
+  if (deckId === 'pirates' || deckId === 'jungle' || deckId === 'mansion' || deckId === 'backlot') return deckId;
+  return null;
+}
+/** Whack's themed stage props (art.generated PROPS, PROP_BOX aspect w/h): one stands in the sky per land. */
+const LAND_PROPS = {
+  space: { src: WHACK_PROPS.space_gantry, aspect: 0.805 },
+  pirates: { src: WHACK_PROPS.pirates_bow, aspect: 0.867 },
+  mansion: { src: WHACK_PROPS.mansion_gate, aspect: 1.315 },
+  jungle: { src: WHACK_PROPS.jungle_steps, aspect: 1.6 },
+  backlot: { src: WHACK_PROPS.backlot_chair, aspect: 0.823 },
+} as const;
+
+/** T041: the land's own landmark stands behind the booth, between Finn and the HUD plates (no new art). */
+function LandSky({ g, land }: { g: BoothGeo; land: keyof typeof LAND_PROPS }) {
+  const prop = LAND_PROPS[land];
+  const room = g.awning.y - 8;
+  if (room < 70) return null;
+  const left = g.barker.x + g.barker.w * 0.82;
+  const right = g.hud.x - 6;
+  const maxW = Math.max(0, right - left);
+  let h = Math.min(170, room);
+  let w = h * prop.aspect;
+  if (w > maxW) { w = maxW; h = w / prop.aspect; }
+  if (h < 56) return null;
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      testID={`memory-land-${land}`}>
+      <Image source={prop.src} resizeMode="contain"
+        style={{ position: 'absolute', left: left + (maxW - w) / 2, top: g.awning.y - h + 6, width: w, height: h }} />
     </View>
   );
 }
@@ -2636,6 +2677,7 @@ export default function MemoryGame({
         {g ? (
           <>
             {mode === 'warmup' ? <WarmupSky g={g} /> : null}
+            {mode !== 'warmup' && landStageForDeck(deck.id) ? <LandSky g={g} land={landStageForDeck(deck.id)!} /> : null}
             {/* The first-win card's pictures, drawn invisibly while the kid plays, so the card is whole on frame one. */}
             {mode === 'warmup' ? (
               <View style={styles.preload} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

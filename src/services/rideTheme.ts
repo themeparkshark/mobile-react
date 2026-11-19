@@ -7,7 +7,8 @@ export function deckIdForRideName(name?: string): RideDeckId {
   if (/pirate|treasure|harbor|ship|sail/.test(ride)) return 'pirates';
   if (/haunted|ghost|phantom|mansion/.test(ride)) return 'mansion';
   if (/studio|backlot|movie|film|cinema/.test(ride)) return 'backlot';
-  if (/jungle|safari|riverboat|rainforest/.test(ride)) return 'jungle';
+  // T041: Adventureland's temple and tiki rides are jungle rides too (Indiana Jones read as Main Street's carnival).
+  if (/jungle|safari|riverboat|rainforest|indiana jones|temple of|tiki/.test(ride)) return 'jungle';
   if (/nemo|the seas|aquarium|ocean|submarine|reef|coral/.test(ride)) return 'ocean';
   return 'park';
 }
