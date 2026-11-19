@@ -46,9 +46,11 @@ test('T185: the name field counts letters and says when it cut a long name; T182
   assert.match(src, /style=\{\[styles\.shark, \{ width: sharkSize, height: sharkSize \}\]\}/);
   const m = src.match(/export function welcomeSharkSize\(stageHeight: number\): number \{[\s\S]*?\n\}/);
   assert.ok(m);
-  const size = new Function(`const SHARK_BOB_ROOM = 16; ${m[0].replace('export ', '').replace(/: number/g, '')}; return welcomeSharkSize;`)();
+  const size = new Function(`const SHARK_BOB_ROOM = 26; ${m[0].replace('export ', '').replace(/: number/g, '')}; return welcomeSharkSize;`)();
   assert.equal(size(0), 260);
-  assert.equal(size(200), 168, 'a short stage gets a smaller shark (stage minus its bob)');
+  assert.equal(size(200), 148, 'a short stage gets a smaller shark (stage minus its bob and sway)');
+  assert.equal(size(300), 248);
+  assert.match(src, /\{ translateY: -bob\.value \* 14 - cheer\.value \* 12 \}/, 'the cheer hop never jumps over the tagline');
   assert.equal(size(600), 260);
 });
 

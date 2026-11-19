@@ -44,7 +44,8 @@ export function welcomeSharkSize(stageHeight: number): number {
   if (!stageHeight) return 260;
   return Math.max(110, Math.min(260, stageHeight - 2 * SHARK_BOB_ROOM));
 }
-const SHARK_BOB_ROOM = 16;
+// The bob lifts him 14 pt and the sway turns him 4 degrees (about 9 pt at his fin): this much room above and below.
+const SHARK_BOB_ROOM = 26;
 
 type Check = { ok: boolean; hint: string };
 function check(name: string): Check {
@@ -98,7 +99,8 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   }, [bob, spin, focused, reduced]);
   const sharkStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: -bob.value * 14 - cheer.value * 60 },
+      // The cheer hop stays inside his own room (it used to jump 60 pt, over the tagline).
+      { translateY: -bob.value * 14 - cheer.value * 12 },
       { rotate: `${-4 + bob.value * 8 + cheer.value * 360}deg` },
       { scale: 1 + cheer.value * 0.08 },
     ],
