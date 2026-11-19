@@ -363,11 +363,16 @@ const STORY_FACT_MAX = 170;
  * The true fact a chapter tells (T077): one of this ride's own checked facts, turning with the episode so a
  * returning player meets a new one. Never another ride's: callers pass only facts keyed to this ride.
  */
-export function chapterFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: readonly string[], offset = 0): string | null {
+export function chapterFact(chapter: Pick<LinePlayChapter, 'id' | 'ride'>, rideFacts: readonly string[], offset = 0): string | null {
   const clean = rideFacts.map(fact => fact.trim()).filter(Boolean);
   if (clean.length === 0) return null;
   const short = clean.filter(fact => fact.length <= STORY_FACT_MAX);
-  const pool = short.length ? short : clean;
+  // A fact that only says where the ride is repeats the story's first line ("rumbles through Frontierland"),
+  // and a height rule is not a story: both come after the ride's real details.
+  const land = chapter.ride?.land?.toLowerCase();
+  const rank = (fact: string) => /\b(inches|cm)\b/i.test(fact) ? 2 : land && fact.toLowerCase().includes(land) ? 1 : 0;
+  const pool = (short.length ? short : clean).map((fact, index) => ({ fact, index }))
+    .sort((a, b) => rank(a.fact) - rank(b.fact) || a.index - b.index).map(entry => entry.fact);
   const episode = Number(/-episode-(\d+)$/.exec(chapter.id)?.[1] ?? 0);
   return pool[(episode + Math.max(0, Math.floor(offset))) % pool.length];
 }
@@ -377,7 +382,7 @@ export function chapterFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: rea
  * the one after, so a ride with three or more facts never repeats one on its page. A ride with fewer never
  * shows clue 1's fact again on clue 2: that page just says Solved.
  */
-export function puzzleFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: readonly string[], clue: 0 | 1): string | null {
+export function puzzleFact(chapter: Pick<LinePlayChapter, 'id' | 'ride'>, rideFacts: readonly string[], clue: 0 | 1): string | null {
   const fact = chapterFact(chapter, rideFacts, clue + 1);
   if (clue === 1 && fact != null && fact === chapterFact(chapter, rideFacts, 1)) return null;
   return fact;

@@ -263,3 +263,13 @@ test('T077: a solved puzzle at a ride with no fact tells its land, never another
   const far = chapters.getLinePlayChapter(1, 'jurassic-1', 'Jurassic World The Ride', 0, 9);
   assert.equal(chapters.puzzleReward(far, [], 0), null);
 });
+
+test('T077: the story leads with a real detail, not a line that only says which land the ride is in', () => {
+  const btm = chapters.getLinePlayChapter(2, '2-big-thunder-mountain-railroad', 'Big Thunder Mountain Railroad', 0, 295);
+  const facts = ['Big Thunder Mountain Railroad rumbles through Frontierland at Magic Kingdom.',
+    'Riders must be 40 inches (102 cm) or taller.', 'You race through an active gold mine aboard a speeding train.'];
+  const story = chapters.chapterStoryText(btm, facts);
+  assert.match(story, /Fan fact: You race through an active gold mine/);
+  // Every fact is still told somewhere on the page, the height rule last.
+  assert.equal(chapters.puzzleFact(btm, facts, 1), facts[1]);
+});
