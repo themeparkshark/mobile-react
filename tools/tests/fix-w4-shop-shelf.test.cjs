@@ -125,3 +125,19 @@ test('T233: the coin cards and the tab header read the edition', () => {
   assert.match(read('src/screens/ParkCollectionHeader.tsx'), /limitedTabLine\(limitedEdition, limitedLeaves\)/);
   assert.match(read('src/screens/ParkScreen.tsx'), /limitedEdition=\{shelfEdition\(limitedShelf\)\}/);
 });
+
+// ---------- T174: the name check runs before LET'S GO; never a raw server sentence ----------
+const welcome = loadTs('src/screens/welcomeCopy.ts', { mocks: { '../services/connectionCopy': { tryAgainWith: () => 'The game is slow. Try again.' } } });
+
+test('T174: a taken name is caught before the save; unknown answers never block', () => {
+  assert.equal(welcome.nameTaken({ available: false, yours: false }), true);
+  assert.equal(welcome.nameTaken({ available: false, yours: true }), false, 'your own name re-saves');
+  assert.equal(welcome.nameTaken({ available: true, yours: false }), false);
+  assert.equal(welcome.nameTaken(null), false, 'older server or a slow check: the save decides');
+  const screen = read('src/screens/WelcomeScreen.tsx');
+  assert.match(screen, /await checkUsername\(name\)/, 'LET\'S GO checks the exact name first');
+  assert.match(screen, /if \(nameTaken\(known\)\) \{\s*setServerError\(NAME_TAKEN_LINE\)/);
+  assert.match(screen, /takenNow \? NAME_TAKEN_LINE : status\.hint/, 'the hint says taken while typing');
+  const api = read('src/api/endpoints/me/username-check.ts');
+  assert.doesNotMatch(api, /message/, "the server's sentence is never read");
+});
