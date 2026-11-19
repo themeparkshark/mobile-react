@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   cancelAnimation,
@@ -47,6 +47,7 @@ export default function CoinCatchReveal({
   ready = true,
   handoff = null,
   onBurst,
+  onExit,
   onDone,
 }: {
   /** The summary hero slot the coin lands in (shared element). */
@@ -60,6 +61,11 @@ export default function CoinCatchReveal({
   readonly ready?: boolean;
   /** Fires at the burst. */
   readonly onBurst?: () => void;
+  /**
+   * Fires as the coin starts to leave (fix w4 T037): the summary comes up underneath now, so the coin
+   * flies into a card that is already there and the map never shows between the catch and the card.
+   */
+  readonly onExit?: () => void;
   readonly onDone: () => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -67,8 +73,8 @@ export default function CoinCatchReveal({
   const finished = useRef(false);
   const [burst, setBurst] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
-  const callbacks = useRef({ onDone, onBurst });
-  callbacks.current = { onDone, onBurst };
+  const callbacks = useRef({ onDone, onBurst, onExit });
+  callbacks.current = { onDone, onBurst, onExit };
   const handoffRef = useRef<CatchHandoff | null>(handoff);
   handoffRef.current = handoff;
   const origin = useRef({ x: 0, y: 0 });
@@ -144,12 +150,17 @@ export default function CoinCatchReveal({
         title.value = 1;
         setBurst(true);
         success();
-        at(1100, finish);
+        at(1100, () => { callbacks.current.onExit?.(); finish(); });
         return;
       }
 
-      // 5. Exit: into the summary's hero slot when it is known, else up and away.
+      // 5. Exit: into the summary's hero slot when it is known, else up and away. The summary
+      // starts coming up under the coin right now (onExit), so it lands in a card already there.
       const exit = () => {
+        callbacks.current.onExit?.();
+        // The title is gone the moment the card comes up under it (its words never sit over the card).
+        cancelAnimation(title);
+        title.value = withTiming(0, { duration: 90 });
         const target = handoffRef.current;
         const coinSize = Math.min(width * 0.52, 240);
         if (target) {
@@ -326,7 +337,7 @@ export default function CoinCatchReveal({
         if (Number.isFinite(x) && Number.isFinite(y)) origin.current = { x, y };
       })}
       accessibilityRole="button"
-      accessibilityLabel={`${isNewCoin ? (sight ? 'New coin' : 'New ride coin') : (sight ? 'Coin' : 'Ride coin')} collected: ${rideName}. Tap to continue.`}
+      accessibilityLabel={`${isNewCoin ? (sight ? 'New coin' : 'New ride coin') : (sight ? 'Coin' : 'Ride coin')} collected: ${rideName}.`}
     >
       {/* A clean deep-water stage lit softly where the coin lands. Alex's water world still shows through,
           blurred and faint (its props turn to soft shapes), so the money shot stays in the TPS world. */}
@@ -367,7 +378,8 @@ export default function CoinCatchReveal({
       </Animated.View>
 
       <Confetti progress={confetti} originY={height * 0.42} width={width} />
-      {burst && <Text style={styles.skip}>Tap to continue</Text>}
+      {/* No "Tap to continue": the coin flies on into the win card by itself (fix w4 T037), so the reveal
+          never reads as a stop. A tap still skips ahead. */}
     </Pressable>
   );
 }
@@ -381,10 +393,6 @@ const styles = StyleSheet.create({
   },
   ride: {
     fontFamily: 'Shark', fontSize: 26, color: '#ffffff', textAlign: 'center', marginTop: 4,
-  },
-  skip: {
-    position: 'absolute', bottom: 60, alignSelf: 'center', fontFamily: 'Shark',
-    fontSize: 17, color: '#ffffff', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1,
   },
 });
 

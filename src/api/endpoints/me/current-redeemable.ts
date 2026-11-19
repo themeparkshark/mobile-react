@@ -5,7 +5,9 @@ import { withPlainRedeemableName } from '../../../helpers/plainRideName';
 
 export default async function currentRedeemable(
   latitude: number,
-  longitude: number
+  longitude: number,
+  /** Picture games only (Settings): the server's deal then names the picture game PLAY will deal (fix w4 T039). */
+  options?: { readonly pictureOnly?: boolean },
 ): Promise<CurrentRedeemableType> {
   const { data } = await client.get<ApiResponseType<CurrentRedeemableType>>(
     '/me/current-redeemable',
@@ -13,6 +15,7 @@ export default async function currentRedeemable(
       params: {
         latitude,
         longitude,
+        ...(options?.pictureOnly ? { picture_only: 1 } : {}),
       },
     }
   );

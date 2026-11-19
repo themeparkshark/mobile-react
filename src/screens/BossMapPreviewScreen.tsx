@@ -44,6 +44,10 @@ const fixtureRound = async (_: number, body: { remote?: boolean }) => ({ ok: tru
 function fixtureRaid(boss: BossId, over: Partial<BossRaid> = {}): BossRaid {
   const stamp = new Date().toISOString();
   return { id: 900000 + boss.length, task_id: 900109, boss, ride_name: 'Practice space attraction',
+    // The server's reason line (T203), in BossRaidService::whyLine's words for a boss whose theme fits.
+    why: boss === 'robo_shark' ? 'Robo-Shark loves speed and space. It is powering up at Practice space attraction.'
+      : boss === 'ghost_squid' ? 'Ghost Squid drifted over to Practice space attraction to cause trouble.'
+        : 'The Kraken crawled out of the water to cause trouble at Practice space attraction.',
     latitude: RIDE.latitude, longitude: RIDE.longitude, hp_max: 6100, hp_left: 3480, status: 'active', starts_at: stamp,
     ends_at: new Date(Date.now() + 18 * 60000).toISOString(), fighters: 6, teams: { mouse: 1240, globe: 860, shark: 520 },
     team_names: { mouse: 'Team Gold', globe: 'Team Green', shark: 'Team Shark' },

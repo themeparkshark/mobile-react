@@ -132,6 +132,14 @@ export function shelfLine(result: CollectionMilestones | null | undefined, parkW
   return have >= progress.available ? `${lead}. Shelf complete!` : lead;
 }
 
+/** What the next trophy is, in one line (fix w4 T054): "12 wins here put a Bronze trophy on your shelf." */
+export function trophyExplainLine(parkWins: number | null | undefined): string | null {
+  const wins = Number(parkWins);
+  if (parkWins == null || !Number.isFinite(wins)) return null;
+  const next = nextTrophy(wins);
+  return next ? `${next.at} wins here put a ${next.name} trophy on your shelf.` : null;
+}
+
 /** The trophy's own line on the win card: "Silver trophy: 35 more wins". Null without wins or after Gold. */
 export function trophyToGoLine(parkWins: number | null | undefined): string | null {
   const wins = Number(parkWins);
@@ -190,6 +198,8 @@ export interface WinChip extends RewardChipModel {
   readonly flyTo: WinFlyTarget;
   /** A shorter, kinder chip (Energy before rung 3: "saved for growing coins"). */
   readonly quiet?: boolean;
+  /** Already in the balance before this card (the line's Parts, T070): shown, never flown again. */
+  readonly noFly?: boolean;
 }
 
 /**
@@ -205,14 +215,31 @@ export function winRewardChips(input: WinRowInput): WinChip[] {
   if (n(input.coins)) chips.push({ icon: 'coins', amount: n(input.coins), label: 'Shark Coins', flyTo: 'coins' });
   if (n(input.vipCoins)) chips.push({ icon: 'member', amount: n(input.vipCoins), label: 'VIP', flyTo: 'coins' });
   if (n(input.tickets)) chips.push({ icon: 'ticket', amount: n(input.tickets), label: n(input.tickets) === 1 ? 'Ticket' : 'Tickets', flyTo: 'tickets' });
+  if (n(input.parts)) chips.push({ icon: 'parts', amount: n(input.parts), label: n(input.parts) === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
+  // T070: the Parts this coin already earned in its line get their own quiet chip that says where they came from
+  // (already in the balance, so they never fly again: a separate kind the card's fly loop skips).
   const lineParts = n(input.lineParts);
-  if (n(input.parts) || lineParts) {
-    const parts = n(input.parts) + lineParts;
-    chips.push({ icon: 'parts', amount: parts, label: parts === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
-  }
+  if (lineParts) chips.push({ icon: 'parts', amount: lineParts, label: 'From your line', flyTo: 'energy', quiet: true, noFly: true });
   if (input.coinLevelsOpen && n(input.energy)) chips.push({ icon: 'energy', amount: n(input.energy), label: 'Energy', flyTo: 'energy' });
   if (n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'xp' });
   return chips;
+}
+
+/**
+ * The number a reward chip shows (fix w4 N08): always its real amount, from the chip's first visible
+ * frame. Counting up from 0 flashed "+0" while the chip popped in, so chips never count.
+ */
+export function chipAmountText(amount: number): number {
+  return Number.isFinite(amount) && amount > 0 ? Math.floor(amount) : 0;
+}
+
+/**
+ * When chip `index` has settled on the win card's entrance clock (900 ms, ease-out cubic; chip i is
+ * fully in at 0.65 + 0.08 i of it): its number pops and ticks then, so the pop is seen, not hidden.
+ */
+export function chipLandMs(index: number, enterMs = 900): number {
+  const done = Math.min(1, 0.65 + 0.08 * Math.max(0, index));
+  return Math.round(enterMs * (1 - Math.cbrt(1 - done)));
 }
 
 /** Energy that flies to the Shelf button with no chip on the card (before coin levels open). */
@@ -310,6 +337,11 @@ export interface WinShelfLine {
   readonly icon: 'trophyBronze' | 'trophySilver' | 'trophy' | 'sparkle';
   /** Set when this win earned a trophy: the card shows its trophy moment. */
   readonly trophy?: TrophyMoment;
+  /**
+   * What the named trophy is, in one line (fix w4 T054), and which line it stands in for: the
+   * card shows it the first time, and a tap on the line swaps it with the trophy count after.
+   */
+  readonly explain?: { readonly line: string; readonly replaces: 'sub' | 'text' } | null;
 }
 
 export function winShelfLine(
@@ -324,12 +356,16 @@ export function winShelfLine(
   const shelf = shelfLine(milestones ?? null, wins);
   if (shelf) {
     const sub = shelf.endsWith('Shelf complete!') ? null : trophyToGoLine(wins);
-    return { text: shelf, sub, icon: wins != null ? trophyIcon(wins) : 'trophyBronze' };
+    const help = sub ? trophyExplainLine(wins) : null;
+    return { text: shelf, sub, icon: wins != null ? trophyIcon(wins) : 'trophyBronze',
+      explain: help ? { line: help, replaces: 'sub' } : null };
   }
   const own = isNewCoin ? limitedWinLine(limited) : null;
   if (own) return { text: own, icon: 'sparkle' };
   // A coin won again: the trophy it counts toward, in the shelf's own words.
-  return wins != null && wins > 0 ? { text: nextTrophyLine(wins), icon: trophyIcon(wins) } : null;
+  if (wins == null || !(wins > 0)) return null;
+  const help = trophyExplainLine(wins);
+  return { text: nextTrophyLine(wins), icon: trophyIcon(wins), explain: help ? { line: help, replaces: 'text' } : null };
 }
 
 /** Which way out of the win card was tapped (the card dims its buttons at once). */

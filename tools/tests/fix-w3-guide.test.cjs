@@ -169,7 +169,7 @@ test('T009: the range check never drops an answer and always asks with the lates
   // The map uses its own watched position: no second Highest-accuracy GPS read per check.
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.doesNotMatch(explore, /checkForRedeemable/);
-  assert.match(explore, /createRangeChecker<CurrentRedeemableType \| undefined>\(\s*point => \{[\s\S]{0,300}?return currentRedeemable\(point\.latitude, point\.longitude\);/);
+  assert.match(explore, /createRangeChecker<CurrentRedeemableType \| undefined>\(\s*point => \{[\s\S]{0,500}?currentRedeemable\(point\.latitude, point\.longitude(?:, \{ pictureOnly \})?\)\);?/);
   // Before the first answer PLAY! is down for the guide too: no "Tap PLAY!" with no PLAY!.
   assert.match(read('src/components/guide/useMapGuide.ts'), /playableTaskId: rangeChecked \? playableTaskId \?\? null : null,/);
   // A few steps out with PLAY! not up yet: "Almost there", never "5 m".

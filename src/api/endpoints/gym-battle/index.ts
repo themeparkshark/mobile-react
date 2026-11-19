@@ -1,3 +1,4 @@
+import { withPlainField } from '../../../helpers/plainRideName';
 import api from '../../client';
 import { arenaLocation } from './arenaLocation';
 import { badShapeError, isCoordinate, isRecord } from '../../jsonGuard';
@@ -28,9 +29,14 @@ export async function joinTeam(team: 'mouse' | 'globe' | 'shark'): Promise<{
   team_name: string;
   team_emoji: string;
   team_color: string;
+  /** Coins won today before the pick, now counted for the new team (core-loop builds, fix w3 T194). */
+  ride_control_credit?: { ride_name?: string | null; points?: number | null; team?: string | null; first?: boolean | null }[];
 }> {
   const response = await api.post('/teams/join', { team });
-  return response.data;
+  const data = response.data;
+  // The credited coins say their ride name the way every screen does ("Enchanted Tiki Room", never "Tiki Room").
+  return Array.isArray(data?.ride_control_credit)
+    ? { ...data, ride_control_credit: withPlainField(data.ride_control_credit, 'ride_name') } : data;
 }
 
 export interface TeamStanding {

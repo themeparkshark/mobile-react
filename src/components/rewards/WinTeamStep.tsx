@@ -15,7 +15,8 @@ import TeamBadge from '../TeamBadge';
 import YellowButton from '../YellowButton';
 import { TEAMS, teamName, type TeamId } from '../../constants/teams';
 import { joinTeam } from '../../api/endpoints/gym-battle';
-import { TEAM_STEP_ORDER, TEAM_STEP_VIBE, teamJoinOutcome } from './winTeamModel';
+import { TEAM_STEP_ORDER, TEAM_STEP_VIBE, teamCreditLine, teamJoinOutcome } from './winTeamModel';
+import GameIcon from '../../ui/GameIcon';
 import ForKeepsNote from './ForKeepsNote';
 
 export default function WinTeamStep({ reducedMotion, onDone }: {
@@ -25,23 +26,36 @@ export default function WinTeamStep({ reducedMotion, onDone }: {
 }) {
   const [picked, setPicked] = useState<TeamId | null>(null);
   const [stage, setStage] = useState<'pick' | 'joining' | 'done' | 'error'>('pick');
+  // T194: the coin just won (before the pick) counts for the new team when the server says so.
+  const [credit, setCredit] = useState<string | null>(null);
   const join = async () => {
     if (!picked || stage === 'joining') return;
     setStage('joining');
     let outcome: 'joined' | 'error';
-    try { await joinTeam(picked); outcome = 'joined'; } catch (error) { outcome = teamJoinOutcome(error, picked); }
+    let line: string | null = null;
+    try {
+      const answer = await joinTeam(picked);
+      outcome = 'joined';
+      line = teamCreditLine(answer?.ride_control_credit, teamName(picked));
+    } catch (error) { outcome = teamJoinOutcome(error, picked); }
     if (outcome === 'joined') {
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => undefined);
+      setCredit(line);
       setStage('done');
-      setTimeout(() => onDone(picked), reducedMotion ? 600 : 1300);
+      // A credit line is one more sentence to read, so the welcome stays up a little longer.
+      setTimeout(() => onDone(picked), reducedMotion ? (line ? 1600 : 600) : line ? 2400 : 1300);
     } else setStage('error');
   };
   if (stage === 'done' && picked) {
     return (
       <Animated.View entering={reducedMotion ? FadeIn.duration(120) : ZoomIn.springify().damping(12).stiffness(220)} style={styles.done}
-        accessible accessibilityRole="alert" accessibilityLabel={`Welcome to ${teamName(picked)}!`}>
+        accessible accessibilityRole="alert" accessibilityLabel={`Welcome to ${teamName(picked)}!${credit ? ` ${credit}` : ''}`}>
         <TeamBadge team={picked} size={96} />
         <Text style={styles.doneTitle}>{`Welcome to ${teamName(picked)}!`}</Text>
+        {!!credit && <Animated.View entering={reducedMotion ? undefined : FadeIn.delay(380).duration(220)} style={styles.creditRow}>
+          <GameIcon name="crown" size={22} />
+          <Text style={styles.creditText} numberOfLines={2}>{credit}</Text>
+        </Animated.View>}
       </Animated.View>
     );
   }
@@ -90,6 +104,8 @@ const styles = StyleSheet.create({
   later: { marginTop: 8, paddingVertical: 6, paddingHorizontal: 16 },
   laterText: { fontFamily: 'Shark', fontSize: 17, color: '#ffffff' },
   done: { alignItems: 'center', paddingVertical: 18 },
+  creditRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 10, paddingHorizontal: 8 },
+  creditText: { fontFamily: 'Knockout', fontSize: 17, color: '#ffe07a', textAlign: 'center', flexShrink: 1 },
   doneTitle: { fontFamily: 'Shark', fontSize: 24, color: '#ffffff', textAlign: 'center', marginTop: 10, textShadowColor: '#05346e',
     textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
 });

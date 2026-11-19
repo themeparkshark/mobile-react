@@ -25,3 +25,28 @@ export function teamJoinOutcome(error: unknown, team: TeamId): 'joined' | 'error
 export function wantsWinTeamStep(input: { needsTeam: boolean; isNewCoin: boolean; offeredBefore: boolean }): boolean {
   return input.needsTeam && input.isNewCoin && !input.offeredBefore;
 }
+
+/** One coin the server counted for the new team when the player joined (fix w3 T194, core-loop builds). */
+export interface TeamJoinCredit {
+  readonly ride_name?: string | null;
+  readonly points?: number | null;
+  readonly team?: string | null;
+  readonly first?: boolean | null;
+}
+
+/**
+ * The line after joining when coins won before the pick now count for the new team (fix w4 T194):
+ * "Your Mr. Lincoln coin counts for Team Green!", or "Your 2 coins from today count for Team Green!".
+ * Null when the join answer has no ride_control_credit (older servers, or nothing to credit): today's
+ * team screen words then stay as they are.
+ */
+export function teamCreditLine(credits: readonly TeamJoinCredit[] | null | undefined, teamLabel: string): string | null {
+  if (!Array.isArray(credits)) return null;
+  const counted = credits.filter(credit => credit && Number(credit.points) > 0);
+  if (!counted.length) return null;
+  if (counted.length === 1) {
+    const ride = typeof counted[0].ride_name === 'string' ? counted[0].ride_name.trim() : '';
+    return ride ? `Your ${ride} coin counts for ${teamLabel}!` : `Your coin from today counts for ${teamLabel}!`;
+  }
+  return `Your ${counted.length} coins from today count for ${teamLabel}!`;
+}

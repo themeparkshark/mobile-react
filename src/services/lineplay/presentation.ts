@@ -31,3 +31,35 @@ export function queueArcadeDestinations<T extends { id: string; kind: string; ga
   });
   return [...choices.values()];
 }
+
+/**
+ * Games that live in the LinePlay Games sheet every wait without being a playlist page (fix w4 T031).
+ * Parade Beat left the swipe rotation (Sept 30) but it is a favorite, so the sheet always offers it.
+ * Their tiles carry an index at or below ARCADE_EXTRA_INDEX (never a page index): a tap plays the
+ * game straight from the sheet, with no page to jump to.
+ */
+export const ARCADE_EXTRA_GAMES: readonly string[] = ['timing'];
+export const ARCADE_EXTRA_INDEX = -100;
+
+export function arcadeExtraId(gameId: string): string {
+  return `arcade-${gameId}`;
+}
+
+/** The arcade's tiles: every playlist game, then each extra game the playlist does not already hold. */
+export function queueArcadeWithExtras<C extends { id: string; gameId: string; index: number; completed: boolean }>(
+  fromPages: readonly C[],
+  completedIds: ReadonlySet<string>,
+  extra: (gameId: string, index: number, completed: boolean) => C,
+): C[] {
+  const have = new Set(fromPages.map(choice => choice.gameId));
+  const extras = ARCADE_EXTRA_GAMES.filter(gameId => !have.has(gameId))
+    .map((gameId, i) => extra(gameId, ARCADE_EXTRA_INDEX - i, completedIds.has(arcadeExtraId(gameId))));
+  return [...fromPages, ...extras];
+}
+
+/** The game an extra tile plays (null for a page tile): a minigame item no playlist page holds. */
+export function arcadeExtraItem(index: number, seed: number): { kind: 'minigame'; id: string; gameId: string; seed: number } | null {
+  if (index > ARCADE_EXTRA_INDEX) return null;
+  const gameId = ARCADE_EXTRA_GAMES[ARCADE_EXTRA_INDEX - index];
+  return gameId ? { kind: 'minigame', id: arcadeExtraId(gameId), gameId, seed } : null;
+}

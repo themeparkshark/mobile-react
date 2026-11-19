@@ -122,7 +122,7 @@ import { resolveProjectMission } from '../../services/lineplay/projectMission';
 import { crewRelayEpilogue } from '../../services/lineplay/crewRelay';
 import { ADAPTIVE_STORY_TOTAL, nextAdaptiveStoryTitle, type LinePlayChapter } from '../../services/lineplay/chapters';
 import { noteFoundAdventure, storyCreditEarned } from '../../services/lineplay/foundAdventures';
-import { linePlayPages, queueArcadeDestinations } from '../../services/lineplay/presentation';
+import { arcadeExtraItem, linePlayPages, queueArcadeDestinations, queueArcadeWithExtras } from '../../services/lineplay/presentation';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
 import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
 import { isPassAndPlay } from '../../services/lineplay/lineGroup';
@@ -172,6 +172,7 @@ function playedActivityName(id: string, playlist: readonly ActivityItem[], chapt
   if (id.endsWith('-route-alpha')) return chapter?.relay.routeNames[0] ?? 'Crew route';
   if (id.endsWith('-route-omega')) return chapter?.relay.routeNames[1] ?? 'Crew route';
   if (id.startsWith('signal-bonus-')) return id.endsWith('route_a') ? 'Crew Memory Match' : 'Crew Whack-a-Shark';
+  if (id.startsWith('arcade-')) return GAME_NAMES[id.slice('arcade-'.length)] ?? 'Mini-game';
   if (id.startsWith('project-')) return `Park chapter ${GAME_NAMES[id.split('-').at(-1) ?? ''] ?? 'round'}`;
   return 'Bonus round';
 }
@@ -1104,15 +1105,31 @@ export default function LinePlayScreen() {
   // ("Who's in line?"); a solo wait never meets a pass-the-phone page (core loop 5.5, lines 107 and 108).
   const crewInLine = isPassAndPlay(groupPlay.group);
   const activityPages = crewInLine ? allPages : allPages.filter(page => !isCrewOnlyPage(page, snapshot.chapter?.id));
-  const arcadeBase = queueArcadeDestinations(activityPages, completedActivityIds)
-    .map(choice => ({
-      id: choice.id,
-      title: GAME_NAMES[choice.gameId] ?? 'Queue Game',
-      gameId: choice.gameId,
-      index: choice.index,
-      completed: choice.completed,
-      bestStars: snapshot.gameBestStars[choice.gameId as keyof typeof snapshot.gameBestStars],
-    }));
+  const arcadeChoice = (choice: { id: string; gameId: string; index: number; completed: boolean }) => ({
+    id: choice.id,
+    title: GAME_NAMES[choice.gameId] ?? 'Queue Game',
+    gameId: choice.gameId,
+    index: choice.index,
+    completed: choice.completed,
+    bestStars: snapshot.gameBestStars[choice.gameId as keyof typeof snapshot.gameBestStars],
+  });
+  // T031: Parade Beat is in the Games sheet every wait, though it is not a swipe page.
+  const arcadeBase = queueArcadeWithExtras(queueArcadeDestinations(activityPages, completedActivityIds).map(arcadeChoice),
+    completedActivityIds, (gameId, index, completed) => arcadeChoice({ id: `arcade-${gameId}`, gameId, index, completed }));
+  // A tile tap: a page game jumps to its page and plays there; an extra game plays straight from the sheet.
+  const chooseArcade = (index: number) => {
+    const extra = arcadeExtraItem(index, ((ride?.rideId ?? 0) * 7919 + 17) >>> 0);
+    if (extra) {
+      queuedArcadeGame.current = extra as Extract<ActivityItem, { kind: 'minigame' }>;
+      setArcadeOpen(false);
+      return;
+    }
+    const page = activityPages[index];
+    if (page?.kind !== 'minigame') return;
+    queuedArcadeGame.current = page;
+    setArcadeOpen(false);
+    jumpToPage(index);
+  };
   // NEW only on games this account has never played, two at most (all six NEW meant nothing).
   const arcadeNew = arcadeNewFlags(arcadeBase, playedEver);
   const arcadeChoices = arcadeBase.map((choice, i) => ({ ...choice, isNew: arcadeNew[i] }));
@@ -1931,13 +1948,7 @@ export default function LinePlayScreen() {
           queuedArcadeGame.current = null;
           if (next) handlePlayGame(next);
         }}
-        onChoose={(index) => {
-          const page = activityPages[index];
-          if (page?.kind !== 'minigame') return;
-          queuedArcadeGame.current = page;
-          setArcadeOpen(false);
-          jumpToPage(index);
-        }}
+        onChoose={chooseArcade}
         onOpenCodebreaker={() => {
           setArcadeOpen(false);
           jumpToPage(activityPages.findIndex(page => page.kind === 'puzzle'));
@@ -1955,13 +1966,7 @@ export default function LinePlayScreen() {
           queuedArcadeGame.current = null;
           if (next) handlePlayGame(next);
         }}
-        onChoose={(index) => {
-          const page = activityPages[index];
-          if (page?.kind !== 'minigame') return;
-          queuedArcadeGame.current = page;
-          setArcadeOpen(false);
-          jumpToPage(index);
-        }}
+        onChoose={chooseArcade}
       />}
 
       {snapshot.parkProject && (

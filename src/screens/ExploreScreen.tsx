@@ -44,6 +44,7 @@ import useAdventureStampMoment from './ExploreScreen/useAdventureStampMoment';
 import { resolveMapQueueContext, resolveQueueStoryContext } from '../services/lineplay/resolveRide';
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import currentRedeemable from '../api/endpoints/me/current-redeemable';
+import { pictureOnlyFor } from '../services/playPrefs';
 import { createRangeChecker, playAnswerNear, provisionalPlay, selectionStale } from '../components/guide/playRangeCheck';
 import { coinArtCache } from '../components/guide/coinArtCache';
 import ParkMapRetryCard, { useParkMapRetry } from './ExploreScreen/ParkMapRetry';
@@ -1202,11 +1203,14 @@ export function ExploreScreenBody() {
   // One request at a time, every answer kept, the latest fix asked next, from the map's own watched position (no
   // second GPS reading): PLAY! rises within a request of stepping into range (fix round w3 T009, playRangeCheck.ts).
   const failedRef = useRef(failedTaskIds); failedRef.current = failedTaskIds;
+  const playerIdRef = useRef(player?.id ?? null); playerIdRef.current = player?.id ?? null;
   const rangeChecker = useMemo(() => createRangeChecker<CurrentRedeemableType | undefined>(
     point => {
       // Dev builds only: lane walks time PLAY! from the fix to the answer (never in a store bundle).
       if (__DEV__) console.log(`[range] ask ${point.latitude.toFixed(6)},${point.longitude.toFixed(6)} t=${Date.now()}`);
-      return currentRedeemable(point.latitude, point.longitude);
+      // Picture games only asks for the picture game, so the card names the game PLAY really deals (T039).
+      return pictureOnlyFor(playerIdRef.current).catch(() => false)
+        .then(pictureOnly => currentRedeemable(point.latitude, point.longitude, { pictureOnly }));
     },
     (redeemable, point) => {
       setRangeChecked(true);

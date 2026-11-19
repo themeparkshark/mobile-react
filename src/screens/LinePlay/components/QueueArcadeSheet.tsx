@@ -153,7 +153,8 @@ const styles = StyleSheet.create({
   close: { width: 48, height: 48, justifyContent: 'center', alignItems: 'center' },
   intro: { color: '#164f85', fontFamily: 'Knockout', fontSize: 17,
     paddingHorizontal: 18, paddingTop: 14, paddingBottom: 8 },
-  games: { flexDirection: 'row', flexWrap: 'wrap', gap: 9,
+  // An odd count (Parade Beat joins the queue's six, T031) centers its last tile instead of leaving it at the left.
+  games: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 9,
     paddingHorizontal: 14, paddingBottom: 12 },
   game: { width: '100%', minHeight: 83, justifyContent: 'space-between',
     backgroundColor: '#fff', borderRadius: 13, borderWidth: 2, borderColor: '#89cafa',
