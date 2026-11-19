@@ -173,7 +173,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
         <Pressable onPress={() => void act()} accessibilityRole="button" style={st.vipTap}
           accessibilityLabel={`${vipText}. For grown-ups, opens VIP.`}>
           <GameIcon name="member" size={22} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipText} numberOfLines={2}>{vipText}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{vipText}</Text>
           <GameIcon name="arrow" size={14} />
         </Pressable>
         <Pressable onPress={dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Not now">
