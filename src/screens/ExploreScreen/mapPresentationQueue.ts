@@ -119,7 +119,14 @@ export function firstVisitChestWaits(state: {
   /** When Finn's "Let's hunt!" line closed (ms), or null while it is still up. */
   readonly huntStartedAt: number | null;
   readonly now: number;
+  /**
+   * The home intro (the treat cards) played on this app open: this install is new to the player, even when the
+   * server remembers catches from before (a reinstall or a new phone). The chest waits for this visit's first
+   * catch (fix round w3, T111): it never opens straight after the intro cards.
+   */
+  readonly introThisOpen?: boolean;
 }): boolean {
+  if (state.introThisOpen && state.catchesThisVisit < 1) return true;
   if (!state.firstVisit || state.catchesThisVisit >= 2) return false;
   if (state.huntStartedAt == null) return true;
   return state.now - state.huntStartedAt < FIRST_VISIT_CHEST_WAIT_MS;

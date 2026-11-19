@@ -30,8 +30,8 @@ test('eligibility: each rung keys to what the player did, and to its switch', ()
   assert.equal(e('coin_levels', { coinsWon: 3 }), true);
   assert.equal(e('coin_levels', { levelUpReady: true }), true);
   assert.equal(e('coin_levels', { linePartsOnOwned: 1 }), true);
-  assert.equal(e('daily', { homeDays: 2 }), false);
-  assert.equal(e('daily', { homeDays: 3 }), true);
+  assert.equal(e('daily', { homeDays: 1 }), false, 'day 1 at home stays calm');
+  assert.equal(e('daily', { homeDays: 2 }), true, 'T099: the 2nd home day brings Daily 3');
   assert.equal(e('daily', { parkDaysDone: 1 }), true);
   assert.equal(e('daily', { parkDaysDone: 1 }, { level_chests: true }), true, 'either rung 4 switch is enough');
   assert.equal(e('daily', { parkDaysDone: 1 }, {}), false, 'a missing switch is off');

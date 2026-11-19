@@ -24,7 +24,7 @@ function rowArt(key: RewardsRowKey) {
   }
 }
 
-const LABEL = { open: 'OPEN', go: 'SEE', claim_all: 'CLAIM ALL' } as const;
+const LABEL = { open: 'OPEN', go: 'SEE', claim_all: 'CLAIM ALL', retry: 'RETRY' } as const;
 
 /** The gold NEW pill (the same one as the Pins lanyard card): a feature's first appearance, never a popup. */
 export function NewPill({ style }: { readonly style?: object }) {
@@ -41,8 +41,10 @@ export function NewPill({ style }: { readonly style?: object }) {
  * (the same chest moments as before); stamps claim in place. Nothing here is
  * for sale and nothing counts down.
  */
-export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMotion, enterRows = true, onRow, onClose }: {
+export default function RewardsSheet({ rows, flame, flameLine = null, empty, busy, note, reducedMotion, enterRows = true, onRow, onClose }: {
   readonly rows: readonly RewardsRow[];
+  /** One calm line under the flame (keep it tomorrow, or welcome back), never a countdown. */
+  readonly flameLine?: string | null;
   /** The flame (Daily 3 streak) once Daily 3 is unlocked; null before. */
   readonly flame: number | null;
   /** The closing line when nothing is ready (always a reason to come back). */
@@ -80,6 +82,7 @@ export default function RewardsSheet({ rows, flame, empty, busy, note, reducedMo
           <Text style={styles.flameText}>{flame > 0 ? `${flame} day flame` : 'Start a flame with Daily 3'}</Text>
         </View>
       )}
+      {flame != null && !!flameLine && <Text style={styles.flameLine} maxFontSizeMultiplier={1.2}>{flameLine}</Text>}
       <ScrollView style={{ maxHeight: listMax }} contentContainerStyle={[styles.rows, compact && styles.rowsCompact]} showsVerticalScrollIndicator={false}>
         {rows.map((row, i) => (
           <Animated.View key={row.key} entering={reducedMotion || !enterRows ? undefined : FadeInDown.delay(40 * i).duration(180)}>
@@ -124,6 +127,7 @@ const styles = StyleSheet.create({
     paddingTop: 22, paddingBottom: 14, paddingHorizontal: 12, gap: 8 },
   flameRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6 },
   flameText: { fontFamily: 'Shark', fontSize: 18, color: BRAND.white },
+  flameLine: { fontFamily: 'Knockout', fontSize: 16, color: '#e4f7ff', textAlign: 'center', marginTop: -4 },
   rows: { gap: 8, paddingVertical: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 70, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 16,
     paddingHorizontal: 10, paddingVertical: 6 },

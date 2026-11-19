@@ -12,7 +12,7 @@
 import { kidWords, passGainWords } from '../words/playerWords';
 
 export type RewardsRowKey = 'daily_chest' | 'daily3' | 'level_chest' | 'weekly_box' | 'trail' | 'stamps' | 'events';
-export type RewardsAction = 'open' | 'go' | 'claim_all';
+export type RewardsAction = 'open' | 'go' | 'claim_all' | 'retry';
 
 export interface RewardsRow {
   readonly key: RewardsRowKey;
@@ -29,7 +29,11 @@ export interface RewardsInput {
   /** Today's daily chest (always on). */
   readonly dailyChest: { readonly unclaimed: boolean; readonly day: number; readonly of: number } | null;
   /** Daily 3, after rung 4 and with its switch on. */
-  readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number } | null;
+  readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number;
+    /** Today's goals were shown to the player (T096). false: the row leads to the goals first, never "All 3 done!". */
+    readonly seen?: boolean;
+    /** Today already counts for the flame, and the best flame so far (T109, T110). */
+    readonly counted?: boolean; readonly best?: number } | null;
   /** The Weekly Box (comes with Daily 3). */
   readonly weekly: { readonly claimable: boolean } | null;
   /** The lowest unopened level chest, and how many wait (rung 4). */
@@ -39,7 +43,9 @@ export interface RewardsInput {
     /** The Trail host is on screen to open (false: the row shows its line with no button, never a dead tap). */
     readonly door?: boolean } | null;
   /** Earned stamps whose rewards are still to claim. */
-  readonly stamps: { readonly claimable: number } | null;
+  readonly stamps: { readonly claimable: number;
+    /** A claim did not come through and the server still holds the stamp (T094): the row stays with RETRY. */
+    readonly retry?: boolean } | null;
   /** Event chests to open, after rung 9 and only while an event is on. */
   readonly events: { readonly chests: number; readonly door?: boolean } | null;
 }
@@ -54,11 +60,14 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
   }
   if (i.daily3) {
     const d = i.daily3;
-    if (d.claimable) rows.push({ key: 'daily3', title: 'Daily 3 Chest', line: 'All 3 done! Open your chest', ready: 1, action: 'open' });
+    if (d.claimable && d.seen === false) rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.total} of ${d.total} goals done. See them`, ready: 1, action: 'go' });
+    else if (d.claimable) rows.push({ key: 'daily3', title: 'Daily 3 Chest', line: 'All 3 done! Open your chest', ready: 1, action: 'open' });
     else if (d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: 'Done for today. New goals tomorrow', ready: 0, action: 'go' });
     else rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.done} of ${d.total} done`, ready: 0, action: 'go' });
   }
-  if (i.levelChest && i.levelChest.waiting > 0) {
+  // T118: one chest moment at a time. While the Daily 3 chest is ready, the level chest waits its turn (it shows the
+  // moment the Daily 3 chest is opened, so the two are never offered together).
+  if (i.levelChest && i.levelChest.waiting > 0 && !i.daily3?.claimable) {
     rows.push({ key: 'level_chest', title: `Level ${i.levelChest.level} Chest`, line: 'New gear inside', ready: i.levelChest.waiting, action: 'open' });
   }
   if (i.weekly?.claimable) {
@@ -73,7 +82,9 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
     }
   }
   if (i.stamps && i.stamps.claimable > 0) {
-    rows.push({ key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize', 'stamp prizes')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
+    rows.push(i.stamps.retry
+      ? { key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize is', 'stamp prizes are')} still waiting`, ready: i.stamps.claimable, action: 'retry' }
+      : { key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize', 'stamp prizes')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
   }
   if (i.events && i.events.chests > 0) {
     rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: i.events.door !== false ? 'open' : null });
@@ -195,4 +206,58 @@ export function weekStartsLine(w: { readonly claimed: boolean; readonly claimabl
 /** Streak Freezes show once the flame has reached 3 days (or the player already holds one). */
 export function freezesShown(streak: { readonly days: number; readonly best: number; readonly freezes: number }): boolean {
   return streak.freezes > 0 || streak.days >= 3 || streak.best >= 3;
+}
+
+/**
+ * The line under the Rewards sheet after CLAIM ALL (T094, T100): every prize that landed, by name (XP too), then,
+ * when a stamp did not come through and the server still holds it, that it waits on the row's RETRY.
+ */
+export function stampClaimNote(paid: { readonly coins: number; readonly tickets: number; readonly energy: number; readonly xp: number },
+  stillWaiting: number): string {
+  const got = [
+    paid.tickets ? `+${paid.tickets} ${paid.tickets === 1 ? 'Ticket' : 'Tickets'}` : null,
+    paid.coins ? `+${paid.coins} Shark Coins` : null,
+    paid.energy ? `+${paid.energy} Energy` : null,
+    paid.xp ? `+${paid.xp} XP` : null,
+  ].filter(Boolean).join(', ');
+  if (stillWaiting > 0) {
+    const wait = `${plural(stillWaiting, 'stamp is', 'stamps are')} still waiting. Tap RETRY.`;
+    return got ? `${got}. ${wait}` : wait;
+  }
+  return got || 'Claimed!';
+}
+
+/**
+ * Today's chest is already open on this phone (T092): its Daily 3 goal reads Done, even before the server's next
+ * Daily 3 read says so (a chest whose answer came back slowly, or a read that raced the open). GO never sends the
+ * player to a map with nothing to claim.
+ */
+export function withChestOpened<G extends { readonly kind: string; readonly done: boolean; readonly progress: number; readonly target: number }>(
+  goals: readonly G[], chestOpened: boolean): readonly G[] {
+  if (!chestOpened || !goals.some(g => g.kind === 'chest' && !g.done)) return goals;
+  return goals.map(g => (g.kind === 'chest' && !g.done ? { ...g, done: true, progress: Math.max(g.progress, g.target) } : g));
+}
+
+/**
+ * One calm line under the flame in the Rewards sheet (T109, T110), never a countdown:
+ * - a lit flame that counts today: come back tomorrow to keep it;
+ * - no flame after having had one (days away): a kind welcome back and how to light a new one;
+ * - otherwise nothing (the flame line already says "Start a flame with Daily 3").
+ */
+export function flameNote(d: RewardsInput['daily3']): string | null {
+  if (!d) return null;
+  if (d.flame > 0 && d.counted) return 'Open the game tomorrow to keep your flame';
+  if (d.flame === 0 && (d.best ?? 0) > 0) return 'Welcome back! Finish Daily 3 to light a new flame';
+  return null;
+}
+
+/**
+ * The Rewards button's number settles before it shows (T113): reads land one by one as the map opens (the chest,
+ * then stamps, then level chests), and the badge used to count up 1, 4, 5 under the player. A rising number waits
+ * until it has held still for SETTLE_MS; a falling number (a claim) shows at once.
+ */
+export const BADGE_SETTLE_MS = 1200;
+export function settleBadge(shown: number, next: number, stillForMs: number): number {
+  if (next <= shown) return next;
+  return stillForMs >= BADGE_SETTLE_MS ? next : shown;
 }

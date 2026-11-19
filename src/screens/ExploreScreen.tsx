@@ -525,6 +525,7 @@ export function ExploreScreenBody() {
   const [homeIntroOpen, setHomeIntroOpen] = useState(false);
   // Finn's home intro is still owed: it goes first, and the daily chest waits for it (core loop 4.3 rule 1).
   const [homeIntroOwed, setHomeIntroOwed] = useState(false);
+  const introThisOpen = useRef(false);
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
   // The right column's widest pill (Energy, or Trail Boxes above it) and the column's height: Finn's
@@ -1272,7 +1273,10 @@ export function ExploreScreenBody() {
     const timer = setTimeout(() => setChestClock(tick => tick + 1), FIRST_VISIT_CHEST_WAIT_MS + 50);
     return () => clearTimeout(timer);
   }, [huntStartedAt]);
+  // The treat cards played on this open (T111): the chest waits for this visit's first catch.
+  if ((homeIntroOwed || homeIntroOpen) && !park) introThisOpen.current = true;
   const firstVisitHold = firstVisitChestWaits({
+    introThisOpen: introThisOpen.current && !park,
     // The first hunt is the home map's (home catches count it down). In a park there is no home catch
     // to make, so a park-first new player's chest and Daily 3 never wait on it (they never showed).
     firstVisit: !!firstVisit.current && !park, catchesThisVisit, huntStartedAt, now: chestClock >= 0 ? Date.now() : 0,

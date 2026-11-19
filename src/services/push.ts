@@ -9,6 +9,7 @@ import * as Device from 'expo-device';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import client from '../api/client';
+import { cancelLocalReminders } from './retention/localReminders';
 import * as RootNavigation from '../RootNavigation';
 
 export type PushState = 'granted' | 'undetermined' | 'denied' | 'unsupported';
@@ -36,6 +37,8 @@ async function register(): Promise<boolean> {
  * shared iPad never gets the last player's pushes. Best effort, 3 s cap.
  */
 export async function unregisterPush(): Promise<void> {
+  // The last player's local reminders never ring for the next one (T226).
+  await cancelLocalReminders();
   try {
     if ((await pushState()) !== 'granted') return;
     const projectId = Constants.expoConfig?.extra?.eas?.projectId as string | undefined;

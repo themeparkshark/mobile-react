@@ -471,7 +471,7 @@ test('NEW tags: each reward rung wears one NEW on its own surface, and a shown N
     assert.match(src, /\{tag\.isNew && <NewPill \/>\}/, chip);
   }
   const retention = read('src/components/retention/useRetention.tsx');
-  assert.match(retention, /markRungSeen\('daily'\);\n    setSheetFromRewards\(fromRewards\);/, 'opening Daily 3 clears its NEW');
+  assert.match(retention, /markRungSeen\('daily'\);\n(    [^\n]*noteDaily3Seen[^\n]*\n)?    setSheetFromRewards\(fromRewards\);/, 'opening Daily 3 clears its NEW');
   assert.match(retention, /const rung = rowRung\(key\);\n    if \(rung\) markRungSeen\(rung\);/, 'a row tap clears its NEW');
 });
 
@@ -482,7 +482,8 @@ test('stamps row is honest: a fresh read on open, the server count, and no "Clai
   assert.match(hook, /if \(!o\.enabled \|\| o\.refreshKey === firstKey\.current\) return;\n    void refreshStamps\(true\);/, 'a win that earns a stamp raises the number at once');
   assert.match(read('src/screens/TrailPreviewScreen.tsx'), /mode: 'fixed', first_box: 'second_park_day'/, 'the known-contents preview scene');
   assert.match(hook, /if \(claimed === 0 && failed === 0\) \{ setRewardsNote\(null\); return; \}/);
-  assert.match(hook, /coins \? `\+\$\{coins\} Shark Coins` : null/);
+  // Fix round w3 (T094, T100): the note names every prize that landed, XP too (rewardsModel.stampClaimNote).
+  assert.match(hook, /setRewardsNote\(stampClaimNote\(sum, /);
   const dot = loadTs('src/components/profile/stampDot.ts', {});
   assert.equal(dot.stampClaimableCount({ stamps: {}, summary: { claimable: 3 } }), 3);
 });
