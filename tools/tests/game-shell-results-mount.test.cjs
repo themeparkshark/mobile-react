@@ -17,7 +17,7 @@ function shell(extra = {}, reduced = false) {
     './LinePlayMovementContext': { LinePlayMovementContext: { value: null }, shouldPauseForMovement: () => false },
     './RideChallengeContext': { RideChallengeContext: { value: false } },
     './ShellFrameContext': { ShellFrameContext: { value: null } },
-    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null } },
+    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null }, RetryRoundContext: { value: 0 } },
     './results/feelings': loadTs('src/gamekit/results/feelings.ts'),
     './Haptics': { Haptic: haptic }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => reduced },
