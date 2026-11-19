@@ -55,7 +55,7 @@ function load(file, mocks = {}) {
 
 test('memory finales never promise turns the game does not have', () => {
   const rideTheme = load('src/services/rideTheme.ts');
-  const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme });
+  const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme, './rideLands': load('src/services/lineplay/rideLands.ts') });
   const rides = [
     [2, 'space-mountain-2', 'Space Mountain'], [8, 'space-mountain-8', 'Space Mountain'],
     [8, 'jungle-cruise-8', 'Jungle Cruise'], [8, 'big-thunder-mountain-railroad-8', 'Big Thunder Mountain Railroad'],

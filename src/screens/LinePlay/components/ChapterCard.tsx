@@ -12,7 +12,9 @@ import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withTiming } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
 import useUiReducedMotion from '../../../ui/useUiReducedMotion';
-import type { LinePlayChapter } from '../../../services/lineplay/chapters';
+import { chapterStoryText, type LinePlayChapter } from '../../../services/lineplay/chapters';
+import { cachedRideFacts } from '../../../services/lineplay/triviaDeck';
+import { rideFact } from '../../../services/collection/rideFacts';
 import { crewRelayEpilogue, type CrewRelayProgress } from '../../../services/lineplay/crewRelay';
 import type { ChapterClue } from '../../../services/lineplay/chapterClue';
 import { chapterKicker, chapterPageKicker } from '../../../services/lineplay/labels';
@@ -273,7 +275,7 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, crew = f
         <GameIcon name="info" size={24} />
         <Text style={styles.storyToggleText}>{storyOpen ? 'Hide the story' : 'Read the story'}</Text>
       </Pressable>
-      {storyOpen && <Text style={styles.story}>{done === 3 ? chapter.completedStory : chapter.story}</Text>}
+      {storyOpen && <Text style={styles.story}>{chapterStoryText(chapter, chapterRideFacts(chapter), done === 3)}</Text>}
 
       {chapterClue && <View style={styles.clueBadge}>
         <Text style={styles.clueKicker}>YOUR CLUE CHANGED THE FINALE</Text>
@@ -295,12 +297,28 @@ export default function ChapterCard({ chapter, completedIds, crewRelay, crew = f
         <Text style={styles.promptsText}>Crew Prompts: nine talk-and-notice prompts for the end of your wait</Text>
       </Pressable>}
       <Text style={styles.footer}>
-        {chapter.adaptive
-          ? 'Keep playing as the line moves. The shark story is made up. The trivia is about parks in general.'
-          : 'Keep playing as the line moves. The shark story is made up. We checked the ride facts on the park’s own website.'}
+        {chapterFooterLine(chapter, chapterRideFacts(chapter).length > 0)}
       </Text>
     </PageScroll>
   );
+}
+
+/** This ride's own checked facts (T077): its deck rows, else its authored coin note at Disneyland. */
+function chapterRideFacts(chapter: LinePlayChapter): readonly string[] {
+  const ride = chapter.ride;
+  if (!ride) return [];
+  const server = cachedRideFacts(ride.parkId, ride.rideId);
+  if (server.length) return server;
+  const note = ride.parkId === 8 ? rideFact(ride.name, 8) : null;
+  return note ? [note.note] : [];
+}
+
+/** The page's small print: what is made up and what is true, in plain words. */
+export function chapterFooterLine(chapter: Pick<LinePlayChapter, 'adaptive' | 'ride'>, hasRideFact: boolean): string {
+  if (!chapter.adaptive) return 'Keep playing as the line moves. The shark story is made up. We checked the ride facts on the park’s own website.';
+  if (hasRideFact) return 'Keep playing as the line moves. The shark story is made up. The fan facts about this ride are checked.';
+  if (chapter.ride?.land) return 'Keep playing as the line moves. The shark story is made up. What it says about the land is true.';
+  return 'Keep playing as the line moves. The shark story is made up.';
 }
 
 /** The chapter page's light-blue frame (the fade above the rail ends in this color). */

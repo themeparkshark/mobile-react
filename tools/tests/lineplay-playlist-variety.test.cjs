@@ -20,7 +20,7 @@ function load(file, dependencies = {}) {
 }
 
 const rideTheme = load('src/services/rideTheme.ts');
-const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme });
+const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme, './rideLands': load('src/services/lineplay/rideLands.ts') });
 const session = load('src/services/lineplay/LinePlaySession.ts', {
   './content': { buildPredictionCard: wait => ({ id: `pred-${wait}`, postedWaitMinutes: wait }) },
   '../../games/trivia/config': { LINEPLAY_ROUND_QUESTIONS: 5 },
