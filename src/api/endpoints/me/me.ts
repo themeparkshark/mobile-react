@@ -21,7 +21,7 @@ export default async function me({
     if (throwOnError && (!player || typeof player !== 'object' || !player.id)) {
       throw new Error('Sign-in did not return a player profile.');
     }
-    // DEV: V2 fields — DB has these, production Forge backend just needs PlayerResource updated
+    // DEV: V2 fields: DB has these, production Forge backend just needs PlayerResource updated
     if (__DEV__ && player) {
       if (player.tickets == null) player.tickets = 10;
       if (player.energy == null) player.energy = 0; // Unlimited currency, starts at 0

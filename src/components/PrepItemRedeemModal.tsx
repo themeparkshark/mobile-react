@@ -674,7 +674,7 @@ export default function PrepItemRedeemModal({
                       </View>
                     )}
 
-                    {/* Rewards Received — actual amounts from API */}
+                    {/* Rewards Received: actual amounts from API */}
                     {!pickupOutcome?.replayed && <View
                       style={{
                         marginLeft: -4,

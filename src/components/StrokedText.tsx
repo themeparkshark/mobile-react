@@ -39,11 +39,11 @@ export default function StrokedText({
   return (
     // T177: VoiceOver reads one title, never the sizer and the eight outline copies (REWARDS x9).
     <View style={{ alignItems: 'center', justifyContent: 'center' }} accessible accessibilityRole={accessibilityRole} accessibilityLabel={children}>
-      {/* Invisible sizer — sets the layout size, no offset */}
+      {/* Invisible sizer: sets the layout size, no offset */}
       <Text {...textProps} style={[style, { opacity: 0 }]}>
         {children}
       </Text>
-      {/* Stroke layers — all absolute, centered on sizer */}
+      {/* Stroke layers: all absolute, centered on sizer */}
       {strokeOffsets.map((offset, i) => (
         <Text
           key={i}
@@ -60,7 +60,7 @@ export default function StrokedText({
           {children}
         </Text>
       ))}
-      {/* Main text on top — absolute, no offset */}
+      {/* Main text on top: absolute, no offset */}
       <Text
         {...textProps}
         style={[
