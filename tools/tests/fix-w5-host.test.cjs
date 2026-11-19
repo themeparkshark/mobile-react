@@ -136,7 +136,9 @@ test('every iOS Modal goes through the door, and the door draws in-tree unless t
   // A sheet is released (invisible, touches pass natively) before it leaves the tree, never removed while it blocks.
   assert.match(sheet, /pointerEvents=\{shownReleased \? 'none' : 'auto'\}/);
   assert.match(sheet, /if \(motion\.outMs === 0\) \{ release\(\); return undefined; \}/);
-  assert.match(sheet, /\} else if \(phase === 'up' && !wants\) \{\s*setPhase\('closing'\);/, 'even an instant leave goes through the release');
+  assert.match(sheet, /\} else if \(phase === 'up' && !wants\) \{\s*cancelAnimationFrame\(showFrame\.current\);\s*setPhase\('closing'\);/, 'even an instant leave goes through the release');
+  // ROOT-GATE: the enter starts in the commit that first draws the sheet, not one re-render later.
+  assert.match(sheet, /opener\.current = openerNow\(\);\s*enterNow\(\);\s*setPhase\('up'\);/);
   assert.ok(H.SHEET_RELEASE_FRAMES >= 2 && H.SHEET_RELEASE_FALLBACK_MS <= 300);
   assert.match(sheet, /<SheetOverlay\.Provider value=\{setOverlay\}>/, 'the in-sheet gate layer still draws in the sheet');
 });

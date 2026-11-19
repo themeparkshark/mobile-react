@@ -116,39 +116,43 @@ export default function OverlaySheet(props: DoorModalProps) {
     setReleased(true);
   }, []);
 
-  useLayoutEffect(() => {
-    if (phase === 'off' && wants) {
-      dismissTold.current = false;
-      showTold.current = false;
-      opener.current = openerNow();
-      setPhase('up');
-    } else if (phase === 'up' && !wants) {
-      setPhase('closing');
-    } else if (phase === 'closing' && wants) {
-      setReleased(false);
-      setPhase('up');
-    }
-  }, [phase, wants]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Up: measured, listed, and on its way in on the UI thread. Asked again while leaving: back from where it is.
-  useLayoutEffect(() => {
-    if (phase !== 'up') return undefined;
+  // Up: measured, listed, and on its way in on the UI thread, in the very commit that first draws it (not one
+  // re-render later: on a busy phone that was 100 to 180 ms more before the root gate began to show, fix pass w5,
+  // ROOT-GATE). Asked again while leaving: back from where it is.
+  const showFrame = useRef(0);
+  const enterNow = () => {
     measureOwner();
     overlayStack.add(id.current);
     cancelAnimation(p);
     if (motion.kind === 'none') p.value = 1;
     else if (motion.kind === 'fade') p.value = withTiming(1, { duration: motion.inMs, easing: Easing.out(Easing.quad) });
     else p.value = withSpring(1, { ...SPRING.settle, overshootClamping: true });
-    if (showTold.current) return undefined;
+    if (showTold.current) return;
     // onShow once its first frame is drawn (a native sheet's onShow came after UIKit put it up).
-    const frame = requestAnimationFrame(() => {
-      if (!live.current || now.current.phase !== 'up' || showTold.current) return;
+    cancelAnimationFrame(showFrame.current);
+    showFrame.current = requestAnimationFrame(() => {
+      if (!live.current || !now.current.wants || now.current.phase === 'closing' || showTold.current) return;
       showTold.current = true;
       pressTrace('door.nativeShow', () => `id=${id.current} ${now.current.props.testID ?? 'sheet'} overlay=1`);
       now.current.props.onShow?.({ nativeEvent: {} });
     });
-    return () => cancelAnimationFrame(frame);
-  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
+  };
+  useLayoutEffect(() => {
+    if (phase === 'off' && wants) {
+      dismissTold.current = false;
+      showTold.current = false;
+      opener.current = openerNow();
+      enterNow();
+      setPhase('up');
+    } else if (phase === 'up' && !wants) {
+      cancelAnimationFrame(showFrame.current);
+      setPhase('closing');
+    } else if (phase === 'closing' && wants) {
+      setReleased(false);
+      enterNow();
+      setPhase('up');
+    }
+  }, [phase, wants]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Leaving: off the list at once (assistive tech moves on), out on the UI thread, out of the tree when that ends.
   useEffect(() => {
@@ -214,6 +218,7 @@ export default function OverlaySheet(props: DoorModalProps) {
     live.current = true;
     return () => {
       live.current = false;
+      cancelAnimationFrame(showFrame.current);
       const state = now.current;
       pressTrace('door.torn', () => `id=${id.current} phase=${state.phase} overlay=1`);
       overlayStack.remove(id.current);
