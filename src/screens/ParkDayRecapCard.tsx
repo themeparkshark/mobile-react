@@ -11,6 +11,7 @@ import { parkDayFlexPayload, parkDayCoinRow } from '../share/parkDay';
 import { shortParkName } from '../helpers/parkName';
 import { plainRideName } from '../helpers/plainRideName';
 import * as RootNavigation from '../RootNavigation';
+import CalmOffer from '../components/money/CalmOffer';
 
 interface Props {
   readonly parkId: number;
@@ -134,6 +135,10 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
         accessibilityLabel="Share your park day as an image" onPress={shareDay}>
         <Text style={styles.shareText}>SHARE MY DAY</Text>
       </Pressable>}
+      {/* Today's story after a win is a high point (fix w4 T220): one slim Shark Pass row for grown-ups.
+          CalmOffer keeps every rule (served switch, never on a kid path, once a day shared with the Daily 3
+          chest, Not now kept, on sale and not owned). Never on an earlier day's story. */}
+      {!selectedDay && recap.distinct_rides_won > 0 && <CalmOffer placement="high_point" compact style={styles.passOffer} />}
       <Pressable style={styles.link} accessibilityRole="button" onPress={() => RootNavigation.navigate('CoinShelf')}>
         <Text style={styles.linkText}>All your park shelves</Text>
         <GameIcon name="arrow" size={20} />
@@ -156,6 +161,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
 }
 
 const styles = StyleSheet.create({
+  passOffer: { marginTop: 12 },
   shareButton: { marginTop: 12, backgroundColor: '#ffcf3b', borderRadius: 16, paddingVertical: 12,
     alignItems: 'center', borderBottomWidth: 4, borderBottomColor: '#d99a00' },
   shareText: { fontFamily: 'Shark', fontSize: 20, color: '#075083' },
