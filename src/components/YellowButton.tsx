@@ -1,4 +1,5 @@
 import { Animated, ImageBackground, Pressable, Text, View } from 'react-native';
+import { pressTrace } from '../ui/pressTrace';
 import { useEffect, useRef, useState } from 'react';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { artButtonFontSize } from '../ui/artButtonText';
@@ -142,14 +143,15 @@ export default function YellowButton({
       disabled={disabled}
       hitSlop={hitSlop}
       onPress={() => {
+        pressTrace('yellow.press', () => `${text} disabled=${disabled}`);
         if (disabled) {
           return;
         }
 
         onPress?.();
       }}
-      onPressIn={zoomOut}
-      onPressOut={zoomIn}
+      onPressIn={() => { pressTrace('yellow.in', () => text); zoomOut(); }}
+      onPressOut={() => { pressTrace('yellow.out', () => text); zoomIn(); }}
     >
       <Animated.View
         style={{

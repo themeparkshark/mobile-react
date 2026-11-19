@@ -88,6 +88,7 @@ test('the paid game host has no pan responder on a tap: the swipe to close exist
     react: { useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}] },
     'react-native': { Modal: 'Modal', PanResponder: { create: c => ({ panHandlers: c }) }, Pressable: 'Pressable', StyleSheet: { create: s => s, absoluteFill: {} }, useWindowDimensions: () => ({ width: 402 }) },
     'react-native-reanimated': { default: { View: 'AV' }, Easing: {}, cancelAnimation() {}, runOnJS: f => f, useAnimatedStyle: f => f, useSharedValue: v => ({ value: v }), withSpring: v => v, withTiming: v => v },
+    '../../ui/pressTrace': { pressTrace() {} },
   });
   assert.equal(calm.calmSwipeCloses(120, 0), true);
   assert.equal(calm.calmSwipeCloses(40, 0.2), false);
@@ -99,6 +100,8 @@ test('the paid game host has no pan responder on a tap: the swipe to close exist
 test('a press on a sheet on its way out, right over PLAY!, is PLAY!\'s press: held and honored, never lost', () => {
   const { modalLayers, leavingSheetTap, LEAVING_TAP_MIN_MS } = loadTs('src/ui/modalLayers.ts', {
     react: { createContext: () => ({}), useCallback: f => f, useContext() {}, useEffect() {}, useRef: v => ({ current: v }), useState: v => [v, () => {}], useSyncExternalStore() {} },
+    './pressTrace': { pressTrace() {} },
+    './tapThrough': { tapThrough: { keep: (x, y) => ({ x, y, claimed: false }), drop() {} } },
   });
   modalLayers.reset();
   const heard = [];

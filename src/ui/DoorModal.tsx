@@ -13,6 +13,8 @@
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { I18nManager, StyleSheet } from 'react-native';
 import { leavingSheetTap } from './modalLayers';
+import { pressTrace } from './pressTrace';
+import { tapThrough, type ChainNode } from './tapThrough';
 import {
   DOOR_DISMISS_ANIMATED_MS, DOOR_DISMISS_MS, DOOR_PRESENT_MS, DOOR_TORN_ANIMATED_MS, DOOR_TORN_MS,
   doorNativeVisible, doorPresentTimedOut, modalDoor, type DoorPhase,
@@ -30,6 +32,9 @@ const { VirtualizedListContextResetter } = require('@react-native/virtualized-li
 /** True inside a sheet's children: UIKit presents what is there from that sheet, so it neither waits nor blocks. */
 const InsideNativeModal = createContext(false);
 let nextId = 1;
+/** Phase log only: every host that is not off, so a refused present names what was up at that moment. */
+const doorsUp = new Map<number, string>();
+const doorsText = () => [...doorsUp].map(([k, v]) => `${k}:${v}`).join(' ');
 
 export interface DoorModalProps {
   readonly visible?: boolean;
@@ -50,6 +55,11 @@ export interface DoorModalProps {
 }
 
 const respond = () => true;
+/** The renderer's fiber behind a host view (React Native's own public-instance field, read as the inspector does). */
+function internalHandle(host: unknown): ChainNode | null {
+  const h = host as { __internalInstanceHandle?: ChainNode; _internalInstanceHandle?: ChainNode };
+  return h._internalInstanceHandle ?? h.__internalInstanceHandle ?? null;
+}
 
 export default function DoorModal(props: DoorModalProps) {
   const nested = useContext(InsideNativeModal);
@@ -69,6 +79,7 @@ export default function DoorModal(props: DoorModalProps) {
 
   const freeSlot = () => { if (!now.current.nested) modalDoor.release(id.current); };
   const gone = () => {
+    pressTrace('door.gone', () => `id=${id.current} phase=${now.current.phase}`);
     if (!dismissTold.current) { dismissTold.current = true; now.current.props.onDismiss?.(); }
     freeSlot();
     if (live.current) setPhase('off');
@@ -92,6 +103,21 @@ export default function DoorModal(props: DoorModalProps) {
   }, [phase, wants, nested]);
 
   useEffect(() => { if (blink) setBlink(false); }, [blink]);
+  // A top-level sheet just left the screen: the first tap that landed on it while it was leaving now reaches the
+  // screen under it (ui/tapThrough.ts). This effect runs after the commit that took the sheet out of the tree.
+  const lastPhase = useRef<DoorPhase>('off');
+  useEffect(() => {
+    const was = lastPhase.current;
+    lastPhase.current = phase;
+    if (phase === 'off' && was !== 'off' && !nested) {
+      const how = tapThrough.deliver();
+      if (how !== 'none') pressTrace('tapThrough.deliver', () => `id=${id.current} ${how}`);
+    }
+  }, [phase, nested]);
+  useEffect(() => {
+    if (phase === 'off') doorsUp.delete(id.current); else doorsUp.set(id.current, `${props.testID ?? 'sheet'}${nested ? '/n' : ''}/${phase}`);
+    pressTrace('door.phase', () => `id=${id.current} ${props.testID ?? 'sheet'} ${phase} wants=${wants} nested=${nested} holder=${modalDoor.holder()} waiting=${modalDoor.waiting()} up=[${doorsText()}]`);
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // UIKit gets a moment to say the sheet is up. A refused host asks again. The host stays mounted with its children
   // (a remount would hand a card's Reanimated styles fresh views with values that no longer change).
@@ -101,13 +127,14 @@ export default function DoorModal(props: DoorModalProps) {
       const next = doorPresentTimedOut(tries.current, now.current.wants);
       if (next === 'present_again') {
         tries.current += 1;
-        if (__DEV__) console.log(`[door] no native onShow after ${DOOR_PRESENT_MS} ms: asking again (try ${tries.current})`);
+        pressTrace('door.presentAgain', () => `id=${id.current} try=${tries.current} up=[${doorsText()}]`);
         setBlink(true);
       } else if (next === 'gone') {
         freeSlot();
         setPhase('off');
       } else {
         freeSlot();
+        pressTrace('door.lost', () => `id=${id.current} up=[${doorsText()}]`);
         setPhase('lost');
         now.current.props.onPresentLost?.();
       }
@@ -127,8 +154,12 @@ export default function DoorModal(props: DoorModalProps) {
     live.current = true;
     return () => {
       live.current = false;
+      doorsUp.delete(id.current);
+      pressTrace('door.torn', () => `id=${id.current} phase=${now.current.phase}`);
       const state = now.current;
       if (state.nested) return;
+      // Torn out while it was on screen: the tap kept for the screen under it goes there once this commit is done.
+      if (state.phase !== 'off' && state.phase !== 'queued') setTimeout(() => { tapThrough.deliver(); }, 0);
       if (state.phase === 'queued' || state.phase === 'off' || state.phase === 'lost') modalDoor.cancel(id.current);
       else modalDoor.releaseAfter(id.current, state.animated ? DOOR_TORN_ANIMATED_MS : DOOR_TORN_MS);
     };
@@ -150,12 +181,16 @@ export default function DoorModal(props: DoorModalProps) {
       hardwareAccelerated={props.hardwareAccelerated}
       onRequestClose={props.onRequestClose}
       onShow={(event: unknown) => {
+        pressTrace('door.nativeShow', () => `id=${id.current} phase=${now.current.phase}`);
         if (now.current.phase === 'lost' && !now.current.nested) modalDoor.occupy(id.current);
         if (now.current.phase === 'presenting' || now.current.phase === 'lost') setPhase('up');
         props.onShow?.(event);
       }}
       onDismiss={gone}
-      visible={doorNativeVisible(phase) && !blink}
+      // A sheet that is up and no longer wanted is hidden natively in this same commit (not one commit later through
+      // 'closing'): the leaving sheet covers the screen for as short a time as UIKit allows.
+      visible={doorNativeVisible(phase) && !blink && !(phase === 'up' && !wants)}
+      ref={(host: unknown) => { if (host && !nested) tapThrough.setScreenRoot(internalHandle(host)); }}
       statusBarTranslucent={props.statusBarTranslucent}
       identifier={id.current}
       style={styles.modal}
@@ -169,7 +204,7 @@ export default function DoorModal(props: DoorModalProps) {
           <InsideNativeModal.Provider value>
             <View style={[styles.container, containerStyles]} collapsable={false}
               // On touch down: the sheet can be gone before the finger lifts, and that touch would never end here.
-              onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number } }) => leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing')}>
+              onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number } }) => leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants), !now.current.nested)}>
               {children}
             </View>
           </InsideNativeModal.Provider>

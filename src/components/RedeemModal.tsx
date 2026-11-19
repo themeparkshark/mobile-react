@@ -1,5 +1,6 @@
 import { leavingSheetTap, modalLayers } from '../ui/modalLayers';
 import { createPressQueue } from './guide/playPressQueue';
+import { pressTrace } from '../ui/pressTrace';
 import { useContext, useEffect, useRef, useState } from 'react';
 import { Animated, AppState, Text, View, type TextStyle, type ViewStyle } from 'react-native';
 import { Image } from 'expo-image';
@@ -241,9 +242,12 @@ export default function RedeemModal({
   const playDrawn = !!redeemable && available;
   useEffect(() => {
     if (!playDrawn) return undefined;
-    return leavingSheetTap.listen((x, y) => {
+    return leavingSheetTap.listen((x, y, claim) => {
       pillRef.current?.measureInWindow((px, py, width, height) => {
-        if (x >= px - PLAY_HOLD_SLOP && x <= px + width + PLAY_HOLD_SLOP && y >= py - PLAY_HOLD_SLOP && y <= py + height + PLAY_HOLD_SLOP) pressPlayRef.current();
+        if (x >= px - PLAY_HOLD_SLOP && x <= px + width + PLAY_HOLD_SLOP && y >= py - PLAY_HOLD_SLOP && y <= py + height + PLAY_HOLD_SLOP) {
+          claim();   // PLAY! answers this tap itself: the screen under the sheet is not pressed again (ui/tapThrough.ts)
+          pressPlayRef.current();
+        }
       });
     });
   }, [playDrawn]);
@@ -259,6 +263,7 @@ export default function RedeemModal({
   useEffect(() => () => pressQueue.cancel(), [pressQueue]);
   const openRef = useRef<() => void>(() => undefined);
   openRef.current = () => {
+    pressTrace('play.open', () => `${redeemable ? `${redeemable.type}:${redeemable.model.id}` : 'none'}`);
     if (!redeemable) return;   // walked off while the press waited: nothing to open
     setOpenedRedeemable(redeemable);
     // A coin whose card was read before, with a Ticket in hand: PLAY! is the one press (the card starts at once).
@@ -269,7 +274,7 @@ export default function RedeemModal({
   pressPlayRef.current = () => {
     pressNow();
     const how = pressQueue.press(() => openRef.current());
-    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[press] PLAY! ${identity} ${how} modalVisible=${modalVisible} t=${Date.now()}`);
+    pressTrace('play.press', () => `${identity} ${how} modalVisible=${modalVisible} leaving=${modalLayers.leavingCount()} layers=${modalLayers.count()}`);
   };
   // Out of Tickets with no free way to play right now (T030): PLAY! dims and wears a ticket, so it never looks
   // like a free press; it still opens the card, whose big button plays the line or a practice game.
@@ -296,7 +301,7 @@ export default function RedeemModal({
       {redeemable && available && (
         <Animated.View style={entrance}>
           <Animated.View ref={pillRef} collapsable={false} style={{ transform: [{ scale: press }], opacity: pill.dim ? 0.62 : 1 }}
-            onTouchStart={() => { if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[press] touch t=${Date.now()}`); }}>
+            onTouchStart={() => pressTrace('play.touch')}>
             <YellowButton
               onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
               onPress={() => pressPlayRef.current()}

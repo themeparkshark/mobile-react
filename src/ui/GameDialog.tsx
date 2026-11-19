@@ -276,7 +276,7 @@ export function GameDialog({
   const dismiss = dismissAction(request);
 
   return (
-    <Modal transparent visible={mounted} animationType="none" statusBarTranslucent
+    <Modal transparent visible={mounted} animationType="none" statusBarTranslucent testID="dialog"
       onDismiss={() => deliverRef.current()}
       onRequestClose={() => { if (dismiss !== null) close(dismiss); }}>
       <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}

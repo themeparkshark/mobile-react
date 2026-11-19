@@ -6,6 +6,7 @@ import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from '
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useModalLayer } from '../ui/modalLayers';
+import { pressTrace } from '../ui/pressTrace';
 
 /**
  * The grown-up gate in front of every paywall and real-money purchase
@@ -395,6 +396,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     const host: GateHost = {
       hint: text => setHint(text),
       show: (r: GateRequest) => {
+        pressTrace('gate.ask', () => `nested=${nested} hosts=${hosts.length}`);
         reqRef.current?.resolve(false);
         reqRef.current = r; answerRef.current = null; shownRef.current = false;
         setTyped(''); setDetails(r.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setClosing(null); setReq(r);
@@ -419,11 +421,13 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const layerFront = useModalLayer(!!req && !nested, 'wait');
   const front = nested ? !!req : layerFront;
   const presenting = !!req && front && closing === null;
+  useEffect(() => { if (req) pressTrace('gate.front', () => `nested=${nested} front=${front} presenting=${presenting}`); }, [req, front, presenting]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!presenting) return undefined;
     const t = setTimeout(() => {
       if (shownRef.current || !reqRef.current || answerRef.current !== null) return;
       // It never showed, so there is no fade to wait for: a no at once, so the next tap asks fresh.
+      pressTrace('gate.watchdog', () => `nested=${nested}`);
       showRetryHint(gateRetryHint(reqRef.current.reason));
       answerRef.current = false;
       finish();
@@ -466,7 +470,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   return (
     <>
     <Modal visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
-      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
+      testID={nested ? 'gate-slot' : 'gate'}
+      onShow={() => { pressTrace('gate.nativeShow', () => `nested=${nested}`); shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>

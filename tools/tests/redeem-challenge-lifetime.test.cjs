@@ -51,6 +51,7 @@ function mapChallenge(initial = task) {
       if (name === '../services/task-attempt/pendingWins') return { findPendingWin: async () => ({ win: null, unsure: false }), pendingWinRedeemable() {} };
       if (name === '../api/endpoints/me/stamps') return { getStamps: async () => ({ stamps: {}, newly_earned: [] }) };
       if (name === './rewards/playPill') return require('./helpers/ts-module.cjs').loadTs('src/components/rewards/playPill.ts');
+      if (name === '../ui/pressTrace') return { pressTrace() {} };
       if (name === './rewards/coinCardSeen') return { coinCardSeenNow: () => false, warmCoinCardsSeen() {}, markCoinCardSeen: async () => undefined };
       if (name.includes('assets/')) return 1;
       return { default: name };

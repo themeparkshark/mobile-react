@@ -3,6 +3,7 @@ import { Modal, PanResponder, Pressable, StyleSheet, useWindowDimensions } from 
 import Animated, {
   Easing, cancelAnimation, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming,
 } from 'react-native-reanimated';
+import { pressTrace } from '../../ui/pressTrace';
 
 /**
  * The reward cards' one modal host (the Rewards sheet, Daily 3, the reveals and the daily chest; core loop,
@@ -115,8 +116,9 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
     cancelAnimation(p);
   }, [p]);
 
-  const shown = () => { if (mounted.current && visibleRef.current) cb.current.onShow?.(); };
+  const shown = () => { pressTrace('calm.shown'); if (mounted.current && visibleRef.current) cb.current.onShow?.(); };
   const hidden = () => {
+    pressTrace('calm.hidden', () => `visible=${visibleRef.current}`);
     if (!mounted.current || visibleRef.current) return;
     hidPending.current = true;
     setNative(false);
@@ -137,6 +139,7 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
   useEffect(() => {
     const first = firstRun.current;
     firstRun.current = false;
+    pressTrace('calm.visible', () => `${visible} native=${native} first=${first}`);
     if (visible) {
       drag.value = 0;
       if (!native) {
@@ -180,7 +183,7 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
   });
 
   return (
-    <Modal visible={native} transparent animationType="none" statusBarTranslucent
+    <Modal visible={native} transparent animationType="none" statusBarTranslucent testID="calm"
       onShow={onNativeShow}
       // @ts-expect-error DoorModal's own prop, not in React Native's Modal types.
       onPresentLost={onPresentLost}
