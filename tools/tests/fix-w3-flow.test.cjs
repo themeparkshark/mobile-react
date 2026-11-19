@@ -203,8 +203,11 @@ test('T037 T065 a ride win shows one short stamp (no buttons, no Share), then th
 /* T048: honest win card. */
 test('T048 the win card shows the Parts and XP granted, and the next coin by a short name with its distance', () => {
   const win = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': { taskHasLine: () => false } });
-  const labels = [...win.winRewardChips({ coins: 10, tickets: 1, parts: 4, energy: 40, xp: 25, coinLevelsOpen: false, dailyOpen: false })].map(c => c.label);
-  assert.deepEqual(labels, ['Shark Coins', 'Ticket', 'Ride Parts', 'XP']);
+  const labels = [...win.winRewardChips({ coins: 10, tickets: 1, parts: 4, energy: 40, xp: 25, coinLevelsOpen: true, dailyOpen: false })].map(c => c.label);
+  assert.deepEqual(labels, ['Shark Coins', 'Ticket', 'Ride Parts', 'Energy', 'XP']);
+  // Fix w4 T097: before coin levels open, Parts and Energy fly to the Shelf with no chip (one new idea per win).
+  const early = [...win.winRewardChips({ coins: 10, tickets: 1, parts: 4, energy: 40, xp: 25, coinLevelsOpen: false, dailyOpen: false })].map(c => c.label);
+  assert.deepEqual(early, ['Shark Coins', 'Ticket', 'XP']);
   assert.equal(win.shortCoinName("Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson"), 'Adventureland Treehouse');
   assert.equal(win.shortCoinName('Star Wars: Rise of the Resistance'), 'Star Wars');
   assert.equal(win.nextCoinButton({ taskId: 9, name: "Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson", meters: 85, reason: 'nearest_open' }, 4).detail,

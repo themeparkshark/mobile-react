@@ -7,6 +7,7 @@ import { playSfx } from '../gamekit/SFX';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import type { ShelfArrivalTarget } from '../hooks/useEarnedShelfArrival';
 import GameIcon from '../ui/GameIcon';
+import { useRung } from '../services/reveal/revealLadder';
 
 /**
  * The caught coin flies in an arc into its measured, server-confirmed slot.
@@ -20,6 +21,8 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
   onLand: () => void; onInspect: () => void; onClose: () => void;
 }) {
   const reduced = useReducedGameMotion();
+  // Fix w4 T097: "Level up" waits for coin levels (rung 3); before that the chip just says where the coin went.
+  const levelsOpen = useRung('coin_levels').open;
   const progress = useSharedValue(0);
   const chip = useSharedValue(0);
   const [landed, setLanded] = useState(false);
@@ -88,10 +91,10 @@ export default function CoinShelfArrival({ target, coinUrl, rideName, parkName, 
         </Text>
         <Text style={styles.title} numberOfLines={1}>{rideName}</Text>
       </View>
-      <Pressable accessibilityRole="button" accessibilityLabel="Level up this coin" style={styles.primary}
+      {levelsOpen && <Pressable accessibilityRole="button" accessibilityLabel="Level up this coin" style={styles.primary}
         onPress={() => { finish(); callbacks.current.onInspect(); }}>
         <Text style={styles.primaryText}>Level up</Text>
-      </Pressable>
+      </Pressable>}
       <Pressable accessibilityRole="button" accessibilityLabel="Keep exploring this shelf" hitSlop={8}
         style={styles.close} onPress={() => { finish(); callbacks.current.onClose(); }}>
         <GameIcon name="close" size={28} />

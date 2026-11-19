@@ -22,6 +22,7 @@ import { LEAVE_FADE_MS, shelfLeaving } from '../services/collection/shelfLeaving
 import { useNativeModalLayer } from '../ui/modalLayers';
 import YellowButton from './YellowButton';
 import { tryAgainLine } from '../services/connectionCopy';
+import { useRung } from '../services/reveal/revealLadder';
 
 export default function TaskCoinModal({
   task,
@@ -138,18 +139,23 @@ export default function TaskCoinModal({
   const shownLevel = Math.max(1, Math.min(5, Number(rideCoin?.current_level ?? level ?? publicLevel) || 1));
   const knownLevel = rideCoin?.current_level ?? level ?? publicLevel;
   const ignite = upgradedKey || igniteKey;
-  // The collected-coin card (read-only or offline) takes its turn like every other sheet.
-  const infoLayer = useNativeModalLayer(visible && (readOnly || coinUnavailable), 'wait');
+  // Fix w4 T097: before coin levels open (rung 3) your own coin opens its simple collected card, never the
+  // level-up sheet with Energy and Ride Parts costs: one new idea at a time.
+  const levelsOpen = useRung('coin_levels').open;
+  const simpleCard = readOnly || coinUnavailable || !levelsOpen;
+  // The collected-coin card (read-only, offline or before coin levels) takes its turn like every other sheet.
+  const infoLayer = useNativeModalLayer(visible && simpleCard, 'wait');
 
   return (
     <>
       <Button onPress={() => handleOpen()} accessibilityLabel={readOnly
         ? `${task.name} ride coin, collected${knownLevel ? `, ${coinLevelLabel(shownLevel)}` : ''}. View collection details`
-        : `${task.name} ride coin, ${coinLevelLabel(shownLevel)}. See how to level it up`}>
+        : !levelsOpen ? `${task.name} ride coin, collected. View it`
+          : `${task.name} ride coin, ${coinLevelLabel(shownLevel)}. See how to level it up`}>
         {trigger ?? <ShelfCoin coinUrl={task.coin_url} level={shownLevel} size={size} phase={phase} igniteKey={ignite} />}
       </Button>
 
-      {readOnly || coinUnavailable ? <Modal isVisible={infoLayer.present} onBackdropPress={() => setVisible(false)}
+      {simpleCard ? <Modal isVisible={infoLayer.present} onBackdropPress={() => setVisible(false)}
         onModalHide={() => {
           infoLayer.onDismissed();
           if (playAfterClose) {
@@ -179,7 +185,7 @@ export default function TaskCoinModal({
                 borderBottomWidth: 4, borderBottomColor: '#d99a00',
                 paddingHorizontal: 15, paddingVertical: 8, marginTop: 12 }}>
                 <Text style={{ fontFamily: 'Shark', color: '#05346e', fontSize: 17 }}>
-                  {knownLevel ? coinLevelLabel(shownLevel).toUpperCase() : 'COLLECTED'}
+                  {knownLevel && (levelsOpen || readOnly) ? coinLevelLabel(shownLevel).toUpperCase() : 'COLLECTED'}
                 </Text>
               </View>}
               {!coinUnavailable && typeof timesCompleted === 'number' && <View style={{ flexDirection: 'row',

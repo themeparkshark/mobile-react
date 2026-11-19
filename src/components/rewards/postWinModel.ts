@@ -194,10 +194,10 @@ export interface WinChip extends RewardChipModel {
 
 /**
  * The one reward row (fix W3 T048: everything the server granted that a player keeps an eye on). Shark Coins and
- * Tickets always; the member's VIP coins as one chip; the Ride Parts that landed on this coin and the XP always,
- * whenever the server granted them; Energy as its own chip once coin levels are open (before that it is not
- * named on the card: it still flies to the Shelf button, so a first coin never shows a fifth chip or a
- * "saved for growing coins" riddle). Never a "+0".
+ * Tickets always; the member's VIP coins as one chip; XP whenever the server granted it. Ride Parts and Energy are
+ * the coin levels idea (rung 3): before it opens they are not named on the card (fix w4 T097, one new idea per
+ * win), they still fly to the Shelf button and the server keeps counting them, and the day the rung opens the
+ * card teaches both in one pictured line (coinLevelsIntro). Never a "+0".
  */
 export function winRewardChips(input: WinRowInput): WinChip[] {
   const chips: WinChip[] = [];
@@ -206,7 +206,7 @@ export function winRewardChips(input: WinRowInput): WinChip[] {
   if (n(input.vipCoins)) chips.push({ icon: 'member', amount: n(input.vipCoins), label: 'VIP', flyTo: 'coins' });
   if (n(input.tickets)) chips.push({ icon: 'ticket', amount: n(input.tickets), label: n(input.tickets) === 1 ? 'Ticket' : 'Tickets', flyTo: 'tickets' });
   const lineParts = n(input.lineParts);
-  if (n(input.parts) || lineParts) {
+  if (input.coinLevelsOpen && (n(input.parts) || lineParts)) {
     const parts = n(input.parts) + lineParts;
     chips.push({ icon: 'parts', amount: parts, label: parts === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
   }
@@ -219,6 +219,23 @@ export function winRewardChips(input: WinRowInput): WinChip[] {
 export function silentEnergy(input: Pick<WinRowInput, 'energy' | 'coinLevelsOpen'>): number {
   const value = Number.isFinite(input.energy) && input.energy > 0 ? Math.floor(input.energy) : 0;
   return input.coinLevelsOpen ? 0 : value;
+}
+
+/** Ride Parts that fly to the Shelf button with no chip on the card (before coin levels open, fix w4 T097). */
+export function silentParts(input: Pick<WinRowInput, 'parts' | 'lineParts' | 'coinLevelsOpen'>): number {
+  const n = (value: number | undefined) => (Number.isFinite(value) && (value as number) > 0 ? Math.floor(value as number) : 0);
+  return input.coinLevelsOpen ? 0 : n(input.parts) + n(input.lineParts);
+}
+
+/**
+ * The day coin levels open (rung 3 wears its NEW tag), the win card teaches them in one pictured line, once:
+ * the Parts and Energy chips sit right above it. Null on every other win.
+ */
+export function coinLevelsIntro(input: { readonly rungNew: boolean; readonly parts: number; readonly energy: number }): string | null {
+  if (!input.rungNew) return null;
+  const has = (v: number) => Number.isFinite(v) && v > 0;
+  if (!has(input.parts) && !has(input.energy)) return null;
+  return '[icon:parts] [icon:energy] Ride Parts and Energy level up your coins';
 }
 
 /**

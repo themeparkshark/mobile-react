@@ -32,6 +32,16 @@ import {
   type DexReward, type DexSet,
 } from './dexModel';
 import { BEAT } from './bookClock';
+import { useRung } from '../../services/reveal/revealLadder';
+
+/**
+ * Fix w4 T097: Energy is the coin levels idea (rung 3). Before it opens, a set's prizes name the Tickets, coins and
+ * XP only (the server still pays the Energy, it just is not a fourth word on day one). The crown is the title ribbon's.
+ */
+function useShownPrizes(reward: DexReward) {
+  const levelsOpen = useRung('coin_levels').open;
+  return prizeChips(reward).filter(chip => chip.icon !== 'crown' && (levelsOpen || chip.icon !== 'energy'));
+}
 import type { EventCard } from './eventCards';
 
 export const BOOK_BG = require('../../../assets/images/screens/leaderboard/standings-bg.png');
@@ -387,7 +397,7 @@ function TitleStamp({ text, reduced }: { readonly text: string; readonly reduced
 
 /** Prize chips with words: "+15 Energy", "+1 Ticket", "+30 XP". The title gets its own gold ribbon (TitleRibbon). */
 export function PrizeChips({ reward, titleChip = false }: { readonly reward: DexReward; readonly titleChip?: boolean }) {
-  const chips = prizeChips(reward).filter(chip => chip.icon !== 'crown');
+  const chips = useShownPrizes(reward);
   if (chips.length === 0 && !reward.title) return <Text style={styles.chipText}>A surprise</Text>;
   return (
     <View style={styles.chips}>
@@ -594,9 +604,10 @@ function PrizeRow({ set, reward, final, titleWorn, titleBusy, onTitle, reduced, 
 
 /** The prizes as one quiet line of icon + words ("+200 Energy  +50 Tickets  +1000 XP"), for the locked big prize. */
 function PrizeWords({ reward }: { readonly reward: DexReward }) {
+  const chips = useShownPrizes(reward);
   return (
     <View style={styles.words}>
-      {prizeChips(reward).filter(chip => chip.icon !== 'crown').map(chip => (
+      {chips.map(chip => (
         <View key={chip.icon} style={styles.wordItem}>
           <GameIcon name={chip.icon} size={20} />
           <Text style={styles.wordText} numberOfLines={1} maxFontSizeMultiplier={1.3}>
@@ -611,9 +622,10 @@ function PrizeWords({ reward }: { readonly reward: DexReward }) {
 
 /** The prize icons alone, for a won step's slim line. */
 function PrizeMini({ reward }: { readonly reward: DexReward }) {
+  const chips = useShownPrizes(reward);
   return (
     <View style={styles.mini} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
-      {prizeChips(reward).filter(chip => chip.icon !== 'crown').map(chip => (
+      {chips.map(chip => (
         <View key={chip.icon} style={styles.miniChip}>
           <GameIcon name={chip.icon} size={22} />
           <Text style={styles.miniText} maxFontSizeMultiplier={1.3}>{chip.value}</Text>

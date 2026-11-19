@@ -32,8 +32,9 @@ import type { StampData } from '../api/endpoints/me/stamps';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
+import GameRichText from '../ui/GameRichText';
 import {
-  type TrophyMoment, BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, silentEnergy, teamSentence, winButtonLabel, winShelfLine,
+  type TrophyMoment, BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, silentEnergy, silentParts, coinLevelsIntro, teamSentence, winButtonLabel, winShelfLine,
   winRewardChips, WIN_FLY_ROUTES,
   type NextCoinButton, type WinCardExit, type WinChip, type WinFlyTarget,
 } from './rewards/postWinModel';
@@ -279,7 +280,8 @@ export default function PostWinRewardsModal({
   const { player, refreshPlayer } = useContext(AuthContext);
   const { triggerFly, getTarget } = useCurrencyFly();
   const isVip = !!player?.is_subscribed;
-  const coinLevels = useRung('coin_levels').open;
+  const coinLevelsRung = useRung('coin_levels');
+  const coinLevels = coinLevelsRung.open;
   const daily = useRung('daily').open;
   const afterHide = useRef<(() => void) | null>(null);
   useEffect(() => () => { afterHide.current = null; }, []);
@@ -342,6 +344,8 @@ export default function PostWinRewardsModal({
     coins: coinsEarned, tickets: nextRideTicketEarned, parts: ridePartsEarned, energy: energyEarned, xp: xpEarned,
     vipCoins, coinLevelsOpen: coinLevels, dailyOpen: daily, lineParts,
   }), [coinsEarned, nextRideTicketEarned, ridePartsEarned, energyEarned, xpEarned, vipCoins, coinLevels, daily, lineParts]);
+  // Fix w4 T097: the win that opens coin levels teaches Parts and Energy in one pictured line (once: the tag clears on close).
+  const levelsIntro = coinLevels ? coinLevelsIntro({ rungNew: coinLevelsRung.isNew, parts: ridePartsEarned + lineParts, energy: energyEarned }) : null;
   const headline = milestoneHeadline(milestones ?? null);
   // The shelf line, or for a limited coin (no park shelf count) its own home: "Limited coin. Yours to keep!"
   const shelf = winShelfLine(milestones ?? null, limited, isNewCoin, parkWins);
@@ -423,6 +427,10 @@ export default function PostWinRewardsModal({
     // Energy before coin levels open has no chip on the card, but it still lands on the Shelf button.
     const quietEnergy = silentEnergy({ energy: energyEarned, coinLevelsOpen: coinLevels });
     if (quietEnergy > 0) fly(FLY_ART.energy, Math.min(quietEnergy, 3), WIN_FLY_ROUTES.energy);
+    // Ride Parts before coin levels open (fix w4 T097): no chip, but they still land on the Shelf button.
+    const quietParts = silentParts({ parts: ridePartsEarned, lineParts, coinLevelsOpen: coinLevels });
+    if (quietParts > 0) fly(FLY_ART.parts, Math.min(quietParts, 3), WIN_FLY_ROUTES.parts);
+    if (levelsIntro) coinLevelsRung.markSeen();
     if (earnedStamp) fly(FLY_ART.stamp, 1, WIN_FLY_ROUTES.stamp);
     // T143: the won coin itself arcs to the Shelf button (it bumps as the coin lands), so a kid sees where it went.
     if (hasCoin && taskCoinUrl && !coinArtFailed) {
@@ -599,6 +607,10 @@ export default function PostWinRewardsModal({
                 <GameIcon name="parts" size={22} />
                 <View style={styles.partsTrack}><View style={[styles.partsFill, { width: `${Math.round(parts.after * 100)}%` }]} /></View>
                 <Text style={styles.partsText}>{parts.ready ? 'Ready to level up' : `${parts.have}/${parts.need}`}</Text>
+              </View>}
+              {!!levelsIntro && <View style={styles.partsLine} accessibilityRole="text"
+                accessibilityLabel="New: Ride Parts and Energy level up your coins">
+                <GameRichText style={styles.partsText} iconSize={22} numberOfLines={2}>{levelsIntro}</GameRichText>
               </View>}
               {team && <View style={styles.teamLine} accessibilityRole="text">
                 <GameIcon name="crown" size={22} />
