@@ -1,10 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
+import { useSheetOverlay } from '../ui/sheetOverlay';
 import { useModalLayer } from '../ui/modalLayers';
 import { pressTrace } from '../ui/pressTrace';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -399,15 +400,18 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const reqRef = useRef<GateRequest | null>(null);
   const answerRef = useRef<boolean | null>(null);
   const shownRef = useRef(false);
+  const sheetOverlay = useSheetOverlay();
+  const inSheetRef = useRef(false);
   const finish = useCallback(() => {
     const done = reqRef.current;
     if (!done) return;
     reqRef.current = null;
     const ok = answerRef.current === true;
     answerRef.current = null;
+    pressTrace('gate.answer', () => `nested=${nested} ok=${ok} shown=${shownRef.current} unshown=${!!done.unshown}`);
     setReq(null); setDetails(null); setClosing(null);
     done.resolve(ok);
-  }, []);
+  }, [nested]);
   // The gate fades in and out on the UI thread inside a sheet UIKit presents with no animation of its own (fix pass
   // w4, N02): UIKit's own fade presentation took 1.3 to 5.3 s to report under load and sometimes never did, so the
   // gate was closed before it drew. A plain present reports at once; the look is the same soft fade.
@@ -455,10 +459,15 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const layerFront = useModalLayer(!!req && !nested, 'wait');
   const front = nested ? !!req : layerFront;
   const presenting = !!req && front && closing === null;
-  useEffect(() => {
-    if (!presenting) return;
+  const fadeIn = useCallback(() => {
     fade.value = 0;
     fade.value = withTiming(1, { duration: reduced ? 0 : GATE_FADE_IN_MS });
+  }, [fade, reduced]);
+  useEffect(() => {
+    // In a sheet's own view the fade starts once the layer is mounted (drawn, below): started earlier, it could end
+    // before the view existed and the gate stayed at opacity 0, unseen and letting taps through (fix pass w4, N02).
+    if (!presenting || inSheetRef.current) return;
+    fadeIn();
   }, [presenting, req]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (req) pressTrace('gate.front', () => `nested=${nested} front=${front} presenting=${presenting}`); }, [req, front, presenting]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -484,6 +493,29 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     const t = setTimeout(() => setHint(null), GATE_HINT_MS);
     return () => clearTimeout(t);
   }, [hint]);
+  // A slot inside a sheet draws the gate in that sheet's own view (fix pass w4, N02): a second native sheet presented
+  // from the card came up 0.8 to 8.4 s late and 4 times in 20 never, so it was closed unseen. Outside a sheet, and
+  // for the root gate, it is the <Modal> below as before.
+  const inSheet = nested && sheetOverlay !== null;
+  inSheetRef.current = inSheet;
+  const overlayKey = useRef(0);
+  if (overlayKey.current === 0) overlayKey.current = nextOverlayKey++;
+  const bodyRef = useRef<ReactNode>(null);
+  const sentRef = useRef<ReactNode>(null);
+  useEffect(() => {
+    if (!sheetOverlay || bodyRef.current === sentRef.current) return;
+    sentRef.current = bodyRef.current;
+    sheetOverlay(overlayKey.current, bodyRef.current);
+  });
+  useEffect(() => () => { sheetOverlay?.(overlayKey.current, null); }, [sheetOverlay]);
+  const drawn = useCallback(() => {
+    if (!reqRef.current || shownRef.current) return;
+    shownRef.current = true;
+    fadeIn();
+    pressTrace('gate.drawn', () => `nested=${nested} inSheet=true`);
+  }, [nested, fadeIn]);
+  // In the sheet's own view there is no native dismiss to wait for: the answer goes once the fade out has ended.
+  useEffect(() => { if (inSheet && closing !== null) finish(); }, [inSheet, closing, finish]);
   // Not a <Modal>: it draws inside whatever holds this host, so it shows even where the gate could not.
   const hintPill = hint ? (
     <View style={styles.hintWrap} pointerEvents="none">
@@ -493,6 +525,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
       </View>
     </View>
   ) : null;
+  bodyRef.current = null;
   if (!req || !front) return hintPill;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
@@ -507,11 +540,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     }
     setTyped(t => (t.length < 3 ? t + k : t));
   };
-  return (
-    <>
-    <Modal visible={closing === null && !devRefuse()} transparent animationType="none" onRequestClose={() => close(false)} statusBarTranslucent
-      testID={nested ? 'gate-slot' : 'gate'}
-      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
+  const scrim = (
       <Animated.View style={[styles.scrim, fadeStyle]}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
@@ -588,10 +617,28 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
         </View>
         )}
       </Animated.View>
+  );
+  if (inSheet) {
+    bodyRef.current = closing === null && !devRefuse() ? <GateDrawn onDrawn={drawn}>{scrim}</GateDrawn> : null;
+    return hintPill;
+  }
+  return (
+    <>
+    <Modal visible={closing === null && !devRefuse()} transparent animationType="none" onRequestClose={() => close(false)} statusBarTranslucent
+      testID={nested ? 'gate-slot' : 'gate'}
+      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
+      {scrim}
     </Modal>
     {hintPill}
     </>
   );
+}
+
+let nextOverlayKey = 1;
+/** Mounted in the sheet's own view in the commit that draws the gate: from then on a grown-up can see it. */
+function GateDrawn({ onDrawn, children }: { readonly onDrawn: () => void; readonly children: ReactNode }) {
+  useEffect(() => { onDrawn(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <>{children}</>;
 }
 
 /** House navy panel, white rim, gold OK key (blue/white/gold palette): every ink is AA on its surface. */

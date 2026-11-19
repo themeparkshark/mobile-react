@@ -11,11 +11,14 @@
  *    own view controller, not under the host). A sheet UIKit is slow to report is never presented again (that hid it
  *    mid-present, fix pass w4): after one long wait the door lets it go and its owner hears onPresentLost.
  * 4. A tap on a sheet that is leaving reaches the button under it once the sheet is gone (ui/tapThrough.ts).
+ * 5. A layer drawn above a sheet's own contents (the grown-up gate asked from a row on the coin card) is drawn in this
+ *    sheet's own view, not as a second native sheet presented from it (useSheetOverlay, fix pass w4, N02).
  */
-import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { I18nManager, StyleSheet } from 'react-native';
 import { leavingSheetTap } from './modalLayers';
 import { pressTrace } from './pressTrace';
+import { sheetOverlayContext, withOverlay, type SheetOverlayList, type SheetOverlaySet } from './sheetOverlay';
 import { tapThrough, type ChainNode } from './tapThrough';
 import {
   DOOR_DISMISS_ANIMATED_MS, DOOR_DISMISS_MS, DOOR_PRESENT_MS, DOOR_TORN_ANIMATED_MS, DOOR_TORN_MS,
@@ -33,6 +36,7 @@ const { VirtualizedListContextResetter } = require('@react-native/virtualized-li
 
 /** True inside a sheet's children: UIKit presents what is there from that sheet, so it neither waits nor blocks. */
 const InsideNativeModal = createContext(false);
+
 let nextId = 1;
 /** Phase log only: every host that is not off, so a refused present names what was up at that moment. */
 const doorsUp = new Map<number, string>();
@@ -67,6 +71,7 @@ function internalHandle(host: unknown): ChainNode | null {
 }
 
 export default function DoorModal(props: DoorModalProps) {
+  const SheetOverlay = sheetOverlayContext();
   const nested = useContext(InsideNativeModal);
   const rootTag = useContext(RootTagContext);
   const wants = props.visible !== false;
@@ -81,6 +86,8 @@ export default function DoorModal(props: DoorModalProps) {
   now.current = { phase, wants, animated, nested, props };
   const tries = useRef(0);
   const dismissTold = useRef(false);
+  const [overlays, setOverlays] = useState<SheetOverlayList>([]);
+  const setOverlay = useCallback<SheetOverlaySet>((key, node) => { if (live.current) setOverlays(list => withOverlay(list, key, node)); }, []);
 
   const freeSlot = () => { if (!now.current.nested) modalDoor.release(id.current); };
   const gone = () => {
@@ -225,6 +232,7 @@ export default function DoorModal(props: DoorModalProps) {
       <VirtualizedListContextResetter>
         <ScrollView.Context.Provider value={null}>
           <InsideNativeModal.Provider value>
+           <SheetOverlay.Provider value={setOverlay}>
             <View style={[styles.container, containerStyles]} collapsable={false}
               // On touch down: the sheet can be gone before the finger lifts, and that touch would never end here.
               onTouchStart={(event: { nativeEvent: { pageX: number; pageY: number; tpsSheetNoted?: boolean } }) => {
@@ -234,7 +242,12 @@ export default function DoorModal(props: DoorModalProps) {
                 leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants), !now.current.nested);
               }}>
               {children}
+              {overlays.map(([key, node]) => (
+                // Never box-none: a layer that is fading in (or a frame late) still keeps a tap off the sheet under it.
+                <View key={key} style={StyleSheet.absoluteFill} accessibilityViewIsModal>{node}</View>
+              ))}
             </View>
+           </SheetOverlay.Provider>
           </InsideNativeModal.Provider>
         </ScrollView.Context.Provider>
       </VirtualizedListContextResetter>
