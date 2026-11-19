@@ -167,3 +167,11 @@ test('the gate marks an ask it never drew as unshown, and the offer row is busy 
   assert.match(offer, /haptic\('tapLight'\);\n[^\n]*\n\s*if \(placement !== 'win_vip' && placement !== 'high_point' && pack\) setBusy\(true\);/);
   assert.match(offer, /style=\{\(\{ pressed \}\) => \[st\.slimTap, pressed && st\.slimPressed, busy && st\.slimBusy\]\}/);
 });
+
+test('the gate is presented with no UIKit animation and fades on the UI thread (UIKit\'s fade reported 1.3 to 5.3 s late)', () => {
+  const gate = src('src/components/GrownUpGate.tsx');
+  assert.match(gate, /<Modal visible=\{closing === null && !devRefuse\(\)\} transparent animationType="none"/);
+  assert.match(gate, /<Animated\.View style=\{\[styles\.scrim, fadeStyle\]\}>/);
+  assert.match(gate, /fade\.value = withTiming\(0, \{ duration: reduced \? 0 : GATE_FADE_OUT_MS \}, done => \{ if \(done\) runOnJS\(closeAfterFade\)\(ok\); \}\);/);
+  assert.match(gate, /setTimeout\(\(\) => closeAfterFade\(ok\), GATE_FADE_OUT_MS \+ 250\)/, 'a fade that never reports still closes');
+});

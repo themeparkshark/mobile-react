@@ -124,6 +124,8 @@ function loadGate(os = 'ios') {
   const clock = fakeClock();
   const rt = hooksRuntime();
   const gate = loadTs('src/components/GrownUpGate.tsx', {
+    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, runOnJS: f => f, useAnimatedStyle: f => f(), useSharedValue: v => ({ value: v }), withTiming: (v, c, cb) => { if (cb) cb(true); return v; } },
+    '../ui/useUiReducedMotion': { __esModule: true, default: () => false },
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined } },
     react: rt.React,
     'react/jsx-runtime': { jsx: el, jsxs: el, Fragment: 'Fragment' },

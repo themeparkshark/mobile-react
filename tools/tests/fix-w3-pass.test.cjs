@@ -133,6 +133,8 @@ test('T091 lane fixture: inert unless the lane mute and the fixture are both set
 
 function gateModule() {
   return loadTs('src/components/GrownUpGate.tsx', {
+    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, runOnJS: f => f, useAnimatedStyle: f => f(), useSharedValue: v => ({ value: v }), withTiming: (v, c, cb) => { if (cb) cb(true); return v; } },
+    '../ui/useUiReducedMotion': { __esModule: true, default: () => false },
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => {} } },
     react: { useEffect() {}, useState: v => [v, () => {}] },
     'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },

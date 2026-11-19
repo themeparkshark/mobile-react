@@ -21,6 +21,8 @@ const where = re => SRC.filter(({ code }) => re.test(strip(code))).map(({ file }
 
 function gateModule(store = {}, navigated = [], dev = true) {
   return loadTs('src/components/GrownUpGate.tsx', {
+    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, runOnJS: f => f, useAnimatedStyle: f => f(), useSharedValue: v => ({ value: v }), withTiming: (v, c, cb) => { if (cb) cb(true); return v; } },
+    '../ui/useUiReducedMotion': { __esModule: true, default: () => false },
     '@react-native-async-storage/async-storage': { __esModule: true, default: {
       getItem: async k => store[k] ?? null, setItem: async (k, v) => { store[k] = v; } } },
     react: { useEffect() {}, useState: v => [v, () => {}] },

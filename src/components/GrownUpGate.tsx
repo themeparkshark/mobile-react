@@ -7,6 +7,8 @@ import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useModalLayer } from '../ui/modalLayers';
 import { pressTrace } from '../ui/pressTrace';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 /**
  * The grown-up gate in front of every paywall and real-money purchase
@@ -77,6 +79,9 @@ function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show
 let open: Promise<GateOutcome> | null = null;
 /** iOS shows nothing new while a modal is still sliding away: the answer waits for the gate to be gone. */
 export const GATE_DISMISS_FALLBACK_MS = 2000;
+/** The gate's own soft fade, in and out (UI thread). */
+export const GATE_FADE_IN_MS = 220;
+export const GATE_FADE_OUT_MS = 160;
 /**
  * A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs.
  * Long enough that a slow or hot phone still gets its gate (presenting can take 3 s or more there).
@@ -403,13 +408,22 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     setReq(null); setDetails(null); setClosing(null);
     done.resolve(ok);
   }, []);
+  // The gate fades in and out on the UI thread inside a sheet UIKit presents with no animation of its own (fix pass
+  // w4, N02): UIKit's own fade presentation took 1.3 to 5.3 s to report under load and sometimes never did, so the
+  // gate was closed before it drew. A plain present reports at once; the look is the same soft fade.
+  const reduced = useUiReducedMotion();
+  const fade = useSharedValue(0);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const closeAfterFade = useCallback((ok: boolean) => { setClosing(current => (current === null ? ok : current)); }, []);
   const close = useCallback((ok: boolean) => {
     if (!reqRef.current || answerRef.current !== null) return;
     answerRef.current = ok;
     // Only iOS refuses to present while a modal is leaving (and only iOS reports onDismiss).
     if (Platform.OS !== 'ios') { finish(); return; }
-    setClosing(ok);
-  }, [finish]);
+    fade.value = withTiming(0, { duration: reduced ? 0 : GATE_FADE_OUT_MS }, done => { if (done) runOnJS(closeAfterFade)(ok); });
+    // A fade whose end never comes back (a busy phone) still closes.
+    setTimeout(() => closeAfterFade(ok), GATE_FADE_OUT_MS + 250);
+  }, [finish, fade, reduced, closeAfterFade]);
   useEffect(() => {
     const host: GateHost = {
       hint: text => setHint(text),
@@ -441,6 +455,11 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const layerFront = useModalLayer(!!req && !nested, 'wait');
   const front = nested ? !!req : layerFront;
   const presenting = !!req && front && closing === null;
+  useEffect(() => {
+    if (!presenting) return;
+    fade.value = 0;
+    fade.value = withTiming(1, { duration: reduced ? 0 : GATE_FADE_IN_MS });
+  }, [presenting, req]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (req) pressTrace('gate.front', () => `nested=${nested} front=${front} presenting=${presenting}`); }, [req, front, presenting]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!presenting) return undefined;
@@ -490,10 +509,10 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   };
   return (
     <>
-    <Modal visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
+    <Modal visible={closing === null && !devRefuse()} transparent animationType="none" onRequestClose={() => close(false)} statusBarTranslucent
       testID={nested ? 'gate-slot' : 'gate'}
       onShow={() => { shownRef.current = true; }} onDismiss={finish}>
-      <View style={styles.scrim}>
+      <Animated.View style={[styles.scrim, fadeStyle]}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
             <RealMoneyMark size={36} />
@@ -568,7 +587,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
           )}
         </View>
         )}
-      </View>
+      </Animated.View>
     </Modal>
     {hintPill}
     </>
