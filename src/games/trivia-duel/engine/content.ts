@@ -59,8 +59,9 @@ export interface DuelQuestion {
  * generic labels; fact keys are kept from the original wording. Pure.
  */
 export function withGenericLabels(q: DuelQuestion): DuelQuestion {
-  if (NAMES_IN_TEXT) return q;
   const factKeys = q.factKeys ?? factKeysOf(q);
+  // Names as written (hold-2 T043): the same fact keys, and a choice still starts with a capital ("The Universal Studio Tour").
+  if (NAMES_IN_TEXT) return { ...q, choices: q.choices.map(capitalize), factKeys };
   return {
     ...q,
     prompt: genericize(q.prompt),

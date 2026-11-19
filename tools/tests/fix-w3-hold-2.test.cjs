@@ -216,3 +216,30 @@ test('T158 hold-2: a sticker sizes to its own words in a wide clear box, so a na
   const profile = fs.readFileSync('src/screens/ProfileScreen.tsx', 'utf8');
   assert.match(profile, /sticker: <StarterSticker align="center" style=\{\{ top: -10 \}\} \/>/, 'centered over the Profile badge, clear of the next badge');
 });
+
+/* T043 hold-2: the bank reads as its writers wrote it; the display-edge word swap garbled it. */
+test('T043 hold-2: bank lines the swap garbled now read as written (row 198 and its siblings)', () => {
+  const L = loadTs('src/games/trivia-duel/engine/labels.ts');
+  const C = loadTs('src/games/trivia-duel/engine/content.ts');
+  // Lines from the published scratch bank (verify-2 v2-81 and the full-bank scan in hold-2/gen-before.txt).
+  const bank = [
+    'Which Disneyland Railroad engine is named after a Disney animator instead of a railroad legend?',
+    'The Walt Disney World Railroad, dating back to 1971, cut through the site.',
+    'Stardust Racers holds which record at Universal Orlando Resort?',
+    'The train runs to King’s Cross Station in the London area of Universal Studios Florida.',
+    'Joe Rohde, portfolio creative director at Walt Disney Imagineering, described the breakout story in 2016.',
+    'In Florida the tree is a Disneyodendron eximus, or out-of-the-ordinary Disney tree.',
+    'Guardians of the Galaxy - Mission: BREAKOUT! opened at Disney California Adventure in which year?',
+    'Main Street, U.S.A. and Frontierland',
+    'Roy O. Disney',
+    'Bowser Jr. swiped the Golden Mushroom.',
+  ];
+  for (const line of bank) assert.equal(L.genericize(line), line);
+  const before = /park company|Walt World|the studio (?:Studios|Orlando)|park designering|park companyodendron|Roy O\. The|BREAKOUT! Opened|U\.S\.A\. And|Jr\. Swiped/;
+  for (const line of bank) assert.doesNotMatch(L.genericize(line), before);
+  // A dealt bank question (the coin's Beat the Buzzer round) goes through the same display edge and keeps its words.
+  const q = C.withGenericLabels({ id: 'x', prompt: bank[0], choices: ['the Ward Kimball', 'Ernest S. Marsh'], correctIndex: 0, fact: bank[1] });
+  assert.equal(q.prompt, bank[0]);
+  assert.equal(q.fact, bank[1]);
+  assert.deepEqual([...q.choices], ['The Ward Kimball', 'Ernest S. Marsh'], 'a choice still starts with a capital');
+});
