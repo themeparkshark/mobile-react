@@ -89,9 +89,10 @@ test('T220 high_point: one slim Shark Pass row as today\'s Daily 3 chest opens, 
 
 test('T220: a buy from an offer inside a native sheet can show its grown-up gate (a slot inside each sheet)', () => {
   const modal = strip(read('src/components/RedeemRedeemableModal.tsx'));
-  assert.match(modal, /\{open === true && <GrownUpGateSlot \/>\}\s*<\/CalmModal>/);
+  // hold-2: a slot only while its sheet is really presented (a slot in a waiting sheet held the top of the gate hosts).
+  assert.match(modal, /\{challengeLayer\.present && <GrownUpGateSlot \/>\}\s*<\/CalmModal>/);
   const retention = strip(read('src/components/retention/useRetention.tsx'));
-  assert.match(retention, /\{!!content && <GrownUpGateSlot \/>\}\s*<\/CalmModal>/);
+  assert.match(retention, /\{layer\.present && !!content && <GrownUpGateSlot \/>\}\s*<\/CalmModal>/);
 });
 
 test('T124: the ride line sits under the won coin name on the win card, with the coin\'s park', () => {

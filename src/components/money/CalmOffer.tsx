@@ -152,8 +152,9 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
     if (placement === 'high_point') { beforeLeave?.(); RootNavigation.navigate('SharkPass'); return; }
     if (!pack) return;
     // The one gated buy path: a grown-up answers first; the price shows only on the gate's details card.
-    const outcome = await buyPack(pack, { onStart: () => setBusy(true), placement: `offer.${placement}` });
-    setBusy(false);
+    // hold-2: the row shows it is working from the tap itself (it used to look dead until the gate came up).
+    setBusy(true);
+    const outcome = await buyPack(pack, { placement: `offer.${placement}` }).finally(() => setBusy(false));
     if (outcome.status === 'success') {
       await refreshPlayer?.().catch(() => undefined);
       setGone(true);
@@ -188,7 +189,8 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   if (compact) {
     return (
       <Animated.View entering={FadeInUp.delay(200).springify().damping(16)} style={[st.slim, style]}>
-        <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button" style={st.slimTap}
+        <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button"
+          style={({ pressed }) => [st.slimTap, (pressed || busy) && st.slimPressed]}
           accessibilityLabel={`${copy.kicker}. ${copy.title}. ${copy.action}.`}>
           {placement === 'high_point' ? <GameIcon name="star" size={34} /> : <PackArt art={art} size={40} bob={false} />}
           <View style={{ flex: 1 }}>
@@ -246,6 +248,8 @@ const st = StyleSheet.create({
   slim: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', backgroundColor: '#123f80', borderRadius: 16,
     borderWidth: 2, borderColor: BRAND.gold, borderBottomWidth: 4, paddingLeft: 8, paddingRight: 10, paddingVertical: 5 },
   slimTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // The row answers the finger at once (hold-2: a tap that showed nothing read as dead).
+  slimPressed: { opacity: 0.8, transform: [{ translateY: 1 }] },
   slimTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
   slimAsk: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },

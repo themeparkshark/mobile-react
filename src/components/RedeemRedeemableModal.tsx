@@ -1509,8 +1509,10 @@ export default function RedeemRedeemableModal({
       />
           </View>
         </View>
-        {/* The grown-up gate inside this native sheet (a calm offer's buy on the card or the win card), so it shows above it. */}
-        {open === true && <GrownUpGateSlot />}
+        {/* The grown-up gate inside this native sheet (a calm offer's buy on the card or the win card), so it shows above it.
+            Mounted only while the sheet is really presented (hold-2): a slot inside a sheet that is still waiting its turn
+            would sit on top of the gate hosts, and a buy tapped elsewhere would ask through a gate that can never show. */}
+        {challengeLayer.present && <GrownUpGateSlot />}
       </CalmModal>
     </>
   );
