@@ -206,3 +206,24 @@ test('T041: the land prop fits between Finn and the chain plate on every phone (
     assert.ok(h >= 56, `${W}x${H}: the space gantry is ${Math.round(h)} pt tall (needs 56)`);
   }
 });
+
+test('N03: a fast tapper tapping all over the screen (board, card and buttons) never presses a results button', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const M = loadTs('src/components/rewards/mashGuard.ts');
+  // Taps every 150 to 900 ms all over the screen; only every 3rd to 8th tap lands on a button (the device run that
+  // pressed DONE: the lock only counted button taps, so the gaps between button taps woke it).
+  for (const gap of [150, 300, 450, 700, 900]) {
+    for (const every of [3, 5, 8]) {
+      const taps = []; for (let t = 0; t < 20000; t += gap) taps.push(t);
+      assert.equal(M.firstButtonPressOf(taps, (i) => i % every === 0), null, `gap ${gap} ms, button every ${every} taps`);
+    }
+  }
+  // The old rule (button taps only) is what pressed DONE on device: the same tapper presses there.
+  const taps = []; for (let t = 0; t < 20000; t += 300) taps.push(t);
+  assert.notEqual(M.firstPressOf(taps.filter((_, i) => i % 8 === 0)), null);
+  // A player who stops and looks presses the first time.
+  assert.equal(M.firstButtonPressOf([100, 400, 700, 2400], (i) => i === 3), 2400);
+  const hook = read('src/components/rewards/useResultInputLock.ts');
+  assert.match(hook, /const left = quietWaitLeft\(lastUserTouchAt\(\), Date\.now\(\), quietMs\);/);
+  assert.match(read('src/Root.tsx'), /onTouchStart=\{onAnyTouch\}/, 'the root touch clock feeds it');
+});
