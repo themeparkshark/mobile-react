@@ -26,7 +26,7 @@ import { AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { gameSavesPlayer } from '../../gamekit/core/playerStorage';
 import {
-  EMPTY_PROGRESS, RUNG_ORDER, initialOpened, localDay, nextToOpen, pickNewTag, rungVisible,
+  EMPTY_PROGRESS, RUNG_ORDER, VETERAN_COINS, initialOpened, localDay, nextToOpen, pickNewTag, rungVisible,
   type Progress, type ProgressEvent, type Rung,
 } from './ladderRules';
 
@@ -339,6 +339,20 @@ const coinTodayKey = () => (wonCoinToday() ? '1' : '0');
 /** wonCoinToday as a hook (re-reads whenever the ladder store changes, and at each app open). */
 export function useWonCoinToday(): boolean {
   return useSyncExternalStore(subscribe, coinTodayKey, () => '0') === '1';
+}
+
+/**
+ * Fix w4 T106: a veteran (VETERAN_COINS or more coins won, the same rule that opens every rung at first sight) never
+ * gets the beginner sheets (the park help pages, the home treats intro). False until the server feed arrives.
+ */
+export function isVeteranNow(): boolean {
+  return !!server && Number.isFinite(server.coinsWon) && server.coinsWon >= VETERAN_COINS;
+}
+
+const veteranKey = () => (isVeteranNow() ? '1' : '0');
+
+export function useLadderVeteran(): boolean {
+  return useSyncExternalStore(subscribe, veteranKey, () => '0') === '1';
 }
 
 /** Read without React (tests, captures, the map's own logic). */

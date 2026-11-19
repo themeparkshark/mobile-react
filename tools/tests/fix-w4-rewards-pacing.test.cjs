@@ -173,3 +173,17 @@ test('T224 T242 a stamp title shows as New title, worn when the server says so',
   assert.match(hook, /\{!!v\.title && <View style=\{styles\.nextRow\}>/);
   assert.match(read('src/api/endpoints/me/stamps.ts'), /title_worn\?: boolean/);
 });
+
+/* T106: a veteran never gets beginner sheets; one lesson per app open. */
+test('T106 the help pages and the treats intro skip veterans, and never share one app open', async () => {
+  const s = ladderStore();
+  s.R.feedLadder({ flags: {}, atPark: false, progress: { coinsWon: 4 } });
+  await s.ready();
+  assert.equal(s.R.isVeteranNow(), false);
+  s.R.feedLadder({ progress: { coinsWon: 5 } });
+  assert.equal(s.R.isVeteranNow(), true);
+  const map = read('src/screens/ExploreScreen.tsx');
+  assert.match(map, /const helpPageDue = !!park && atParkNow && !veteran && !introThisOpen\.current && helpPageSeen === false/);
+  assert.match(map, /const homeIntroAllowed = homeIntroMayPresent\(homeIntroQueue\) && !veteran && lessonOpen\.current !== appOpenId;/);
+  assert.match(map, /lessonOpen\.current = appOpenId;\n\s+setHelpPageSeen\(true\);/);
+});

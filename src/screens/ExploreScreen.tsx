@@ -149,7 +149,7 @@ import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
-import { retireRungTag, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
+import { retireRungTag, useLadderVeteran, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
 import { linePlayRoute } from '../components/guide/guideCoins';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -532,6 +532,9 @@ export function ExploreScreenBody() {
   // Finn's home intro is still owed: it goes first, and the daily chest waits for it (core loop 4.3 rule 1).
   const [homeIntroOwed, setHomeIntroOwed] = useState(false);
   const introThisOpen = useRef(false);
+  // Fix w4 T106: the app open whose one lesson (the park help pages) already showed; the treats intro waits for another.
+  const lessonOpen = useRef<string | null>(null);
+  const veteran = useLadderVeteran();
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
   // The right column's widest pill (Energy, or Trail Boxes above it) and the column's height: Finn's
@@ -1426,7 +1429,7 @@ export function ExploreScreenBody() {
     otherModalOpen: showTooFarModal || showCommunityCenterModal, chestShowing: dailyGiftOccluded,
     caughtThisSession, firstFindLineDone: hasCompleted('home_first_find'),
   };
-  const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue);
+  const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue) && !veteran && lessonOpen.current !== appOpenId;
   // While Fin-ister Nights is on (or its exit / Marquee card is up) the generic park tip stays away.
   const parkTip = frightOwnsParkTips({ modeOn: frightNight.modeOn, recapUp: !!frightEngine.recapOffer || !!frightEngine.marquee })
     ? null : parkTipFor({ inPark: atParkNow, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
@@ -1461,12 +1464,16 @@ export function ExploreScreenBody() {
       .catch(() => { if (live) setHelpPageSeen(true); });
     return () => { live = false; };
   }, [helpPageKey]);
-  const helpPageDue = !!park && helpPageSeen === false && isReady && hasCompleted('onboarding') && hasCompleted('park_arrival')
+  // Fix w4 T106: a veteran never gets the beginner pages; the park pages open only in a real park reading (never
+  // on the way home), and never in an app open that already showed the home treats intro (one lesson per open).
+  const helpPageDue = !!park && atParkNow && !veteran && !introThisOpen.current && helpPageSeen === false && isReady
+    && hasCompleted('onboarding') && hasCompleted('park_arrival')
     && !parkLessonRan.current && !isActive && parkTipReady && !parkTipShowing && attentionFor('help_page');
   useEffect(() => {
     if (!helpPageDue || !helpPageKey) return undefined;
     const timer = setTimeout(() => {
       if (!attentionQueue.take(appOpenId, 'help_page')) return;
+      lessonOpen.current = appOpenId;
       setHelpPageSeen(true);
       void AsyncStorage.setItem(helpPageKey, '1').catch(() => undefined);
       openHelpSheet('park_map');
@@ -1474,7 +1481,8 @@ export function ExploreScreenBody() {
     return () => clearTimeout(timer);
   }, [helpPageDue, helpPageKey, appOpenId, openHelpSheet]);
   // Would present but for a find: home finds hold their auto-open until the intro is seen.
-  const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
+  const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false }) && !veteran
+    && lessonOpen.current !== appOpenId;
 
   // Declutter inputs, rebuilt only when what the solver sees changes (the camera side runs in Map).
   // The opportunity clock and GPS fixes tick often; they reach the layout only through these
