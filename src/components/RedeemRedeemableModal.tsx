@@ -52,7 +52,8 @@ import { wantsWinTeamStep } from './rewards/winTeamModel';
 import type { ClaimSource } from '../services/guide/freeTickets';
 import { guide, type GuideTarget } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
-import { pictureOnlyFor, playFlagsNow, loadPlayFlags } from '../services/playPrefs';
+import { pictureOnlyFor, playFlagsNow, loadPlayFlags, usePlayPrefs } from '../services/playPrefs';
+import { shouldRedealPicture } from '../services/task-attempt/pictureRedeal';
 import { takeRideTry, type RideTrySummary } from '../gamekit/results/rideTry';
 import { resolveQueueStoryContext } from '../services/lineplay/resolveRide';
 import { parkShelfRequest, prefetchParkShelf } from '../services/collection/parkShelfPrefetch';
@@ -308,6 +309,8 @@ export default function RedeemRedeemableModal({
   const attemptRef = useRef<TaskAttempt | null>(null);
   /** This try was asked as picture-only (kid rules when the server does not say). */
   const pictureOnlyRef = useRef(false);
+  /** T038: this try's trivia round was switched to a picture game from its card (no new Ticket). */
+  const [redealt, setRedealt] = useState(false);
   /** The deal step, readable from the spend callback declared above it (T036, T044). */
   const selectAssignedGameRef = useRef<() => boolean>(() => false);
   const savedAttemptIdRef = useRef<number | null>(null);
@@ -681,6 +684,33 @@ export default function RedeemRedeemableModal({
       spendingRef.current = false;
     }
   }, [location, redeemable, player?.id, taskType, taskId, taskName, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint]);
+
+  // T038: Picture games turned on from the Beat the Buzzer card at this try's start (a child who cannot read
+  // yet): the same attempt is dealt again as a picture game (a new request id, picture_only; the server swaps
+  // a started trivia round and adds the kid rules, no new Ticket), so the first round is never reading-only.
+  const play = usePlayPrefs(player?.id ?? null);
+  const redealing = useRef(false);
+  useEffect(() => {
+    if (!open || !shouldRedealPicture({ flowState, pictureOnlyNow: play.prefs.pictureOnly, pictureOnlyTry: pictureOnlyRef.current,
+      attempt: attemptRef.current, busy: redealing.current || spendingRef.current })) return;
+    if (!player?.id || !taskType || !taskId) return;
+    redealing.current = true;
+    void (async () => {
+      try {
+        const saved = await readTaskAttemptCheckpoint(player.id, taskType, taskId);
+        if (!saved) return;
+        await writeTaskAttemptCheckpoint({ ...saved, pictureOnly: true,
+          requestId: `tps-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}` });
+        requestIdRef.current = null;
+        setRedealt(true);
+        await handleStartWheel();
+      } catch (error) {
+        console.warn('Could not switch to a picture game:', error);
+      } finally {
+        redealing.current = false;
+      }
+    })();
+  }, [open, flowState, play.prefs.pictureOnly, player?.id, taskType, taskId, handleStartWheel]);
 
   const handleCheckRideAccess = useCallback(async () => {
     setStartError(null);
@@ -1382,9 +1412,9 @@ export default function RedeemRedeemableModal({
               rideName={taskName}
               kicker={punchLines(taskName, playFlagsNow().retrySameGame).kicker}
               winLine={punchLines(taskName).win}
-              note={proofRejected ? 'Same game. No new Ticket.'
+              note={proofRejected ? 'Same game. No new Ticket.' : redealt ? 'Picture game. No new Ticket.'
                 : attemptRef.current?.rescue_pass ? (redeemable?.rescue_pass_source === 'daily' ? 'Today’s free try' : 'An extra try') : undefined}
-              onDone={() => setFlowState('minigame')}
+              onDone={() => { setRedealt(false); setFlowState('minigame'); }}
             />
           )}
           {/* T044: only a game this build does not know ever stops here; a known game goes straight to the punch. */}

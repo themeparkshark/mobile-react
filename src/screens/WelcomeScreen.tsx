@@ -14,6 +14,7 @@ import Animated, {
 import SafeScreen from '../components/SafeScreen';
 import updatePlayer from '../api/endpoints/me/update-player';
 import FindOriginalAccount from '../components/FindOriginalAccount';
+import PictureGamesLink from '../components/help/PictureGamesLink';
 import { AuthContext } from '../context/AuthProvider';
 import useCrumbs from '../hooks/useCrumbs';
 import { RECOVERY_COPY } from '../services/accountRecovery/model';
@@ -237,6 +238,12 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
                 <GameButton label={RECOVERY_COPY.welcomeLink} variant="ghost" tone="onBlue"
                   fullWidth={false} onPress={() => setFindingOriginal(true)}
                   accessibilityHint="Gets back the account from the old Theme Park Shark app" testID="welcome-find-original" />
+              </Animated.View>
+            )}
+            {/* T038: a grown-up turns Picture games on before the first ride try (a child who cannot read yet). */}
+            {!done && (
+              <Animated.View entering={reduced ? undefined : FadeInUp.delay(850).duration(400)}>
+                <PictureGamesLink />
               </Animated.View>
             )}
             {!done && (

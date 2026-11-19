@@ -132,7 +132,7 @@ export default function GameIntroCard({ kind, onStart, name, win }: {
         {offerPictures && (
           <Pressable onPress={() => play.setPictureOnly(!play.prefs.pictureOnly)} accessibilityRole="switch"
             accessibilityState={{ checked: play.prefs.pictureOnly }}
-            accessibilityLabel="Can't read yet? Picture games only. Your next tries deal picture games, never trivia."
+            accessibilityLabel="Can't read yet? Picture games only. A ride try switches to a picture game, never trivia."
             style={({ pressed }) => [styles.pictureToggle, play.prefs.pictureOnly && styles.pictureOn, pressed && styles.pressed]}>
             <View style={styles.toggleArt}>
               <Picture pic={{ art: ART.question, mark: 'close' }} />
@@ -141,7 +141,7 @@ export default function GameIntroCard({ kind, onStart, name, win }: {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.toggleTitle}>Can't read yet?</Text>
-              <Text style={styles.toggleLine}>{play.prefs.pictureOnly ? 'Picture games: on. Next try is a picture game.' : 'Picture games'}</Text>
+              <Text style={styles.toggleLine}>{play.prefs.pictureOnly ? 'Picture games: on.' : 'Picture games'}</Text>
             </View>
             <GameIcon name={play.prefs.pictureOnly ? 'check' : 'arrow'} size={24} />
           </Pressable>
