@@ -147,6 +147,18 @@ test('T102 level lines become one moment (in their turn), and a stamp claim\'s l
   assert.equal(lv.takeLevelMoment(), 5, 'two quick levels fold into one moment');
   assert.equal(lv.levelUpLine(5, true), 'Level 5! Your Level 5 Chest is in Rewards');
   assert.equal(lv.levelUpLine(5, false), 'You reached Level 5!');
+  // Device run: a home treat took Level 3 to 4 with no server level line; the player read catches it.
+  lv.resetLevelUpsForTests();
+  let fired = 0; lv.onLevelUp(() => { fired += 1; });
+  lv.notePlayerLevel(135, 3);
+  assert.equal(fired, 0, 'the first read is the baseline');
+  lv.notePlayerLevel(135, 4);
+  assert.equal(fired, 1);
+  assert.equal(lv.takeLevelMoment(), 4);
+  lv.takeLevelUps(['You reached Level 4!']);
+  assert.equal(fired, 1, 'the server line for the same level adds nothing');
+  lv.notePlayerLevel(200, 9);
+  assert.equal(fired, 1, 'another player signing in is a new baseline');
   assert.match(read('src/hooks/useAxiosSetup.ts'), /routeBroadcasts\(shown, messages => \{ const banners = takeLevelUps\(messages\);/,
     'routed through the win card hold, so it waits behind the card');
   assert.match(read('src/components/retention/useRetention.tsx'), /if \(\(answer\.levels_gained \?\? 0\) > 0\) noteLevelUp\(answer\.level \?\? null\);/);

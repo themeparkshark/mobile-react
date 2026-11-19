@@ -56,8 +56,22 @@ export function levelUpLine(level: number, chestWaits: boolean): string {
   return chestWaits ? `Level ${level}! Your Level ${level} Chest is in Rewards` : `You reached Level ${level}!`;
 }
 
+/**
+ * The player's level as the app last saw it (any refresh of the player). Some XP paths never send the server's
+ * level line (a home treat adds XP without one), so a level that went up between two reads is a level-up too.
+ * The first read for a player only sets the baseline (never a toast for the level they already had).
+ */
+let seen: { player: number; level: number } | null = null;
+export function notePlayerLevel(playerId: number | null | undefined, level: number | null | undefined): void {
+  if (typeof playerId !== 'number' || typeof level !== 'number' || !Number.isFinite(level)) return;
+  if (!seen || seen.player !== playerId) { seen = { player: playerId, level }; announced = level; queue = []; return; }
+  if (level > seen.level) noteLevelUp(level);
+  seen = { player: playerId, level };
+}
+
 /** Tests only. */
 export function resetLevelUpsForTests(): void {
+  seen = null;
   announced = 0;
   queue = [];
   listeners.clear();

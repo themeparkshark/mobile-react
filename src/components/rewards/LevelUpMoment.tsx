@@ -5,10 +5,11 @@
  * The toast layer sits under native sheets, so a level reached inside one (a stamp claim in Rewards) waits until
  * every sheet is gone, then plays a beat later on the screen the player is looking at (device run, Nov 19).
  */
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { AuthContext } from '../../context/AuthProvider';
 import { useToast } from '../Toast';
 import { haptic } from '../../gamekit/Haptics';
-import { levelUpLine, onLevelUp, takeLevelMoment } from '../../services/rewards/levelUps';
+import { levelUpLine, notePlayerLevel, onLevelUp, takeLevelMoment } from '../../services/rewards/levelUps';
 import { retentionFlagsNow } from '../../services/retention/flags';
 import { rungState } from '../../services/reveal/revealLadder';
 import { useAnyModalLayer } from '../../ui/modalLayers';
@@ -20,6 +21,10 @@ export default function LevelUpMoment() {
   const { showToast } = useToast();
   const sheetUp = useAnyModalLayer();
   const [level, setLevel] = useState<number | null>(null);
+  // A level that rose between two reads of the player counts too (home treats add XP with no level line).
+  const { player } = useContext(AuthContext);
+  const playerLevel = player?.experience_level?.level ?? null;
+  useEffect(() => { notePlayerLevel(player?.id ?? null, playerLevel); }, [player?.id, playerLevel]);
   useEffect(() => onLevelUp(() => {
     const next = takeLevelMoment();
     if (next) setLevel(current => Math.max(current ?? 0, next));
