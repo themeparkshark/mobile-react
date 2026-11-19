@@ -124,3 +124,26 @@ test('SAFETY-shutdown-extra-try the map notes it as it clears the saved try, and
   assert.match(card, /\{!returnedLine && playsNow && outOfTickets && challengeStepLine\(freeStep\)/, 'one line, never two');
   assert.match(card, /'This extra try timed out, so it came back to you\.'/);
 });
+
+/* T023: the arrive card waited on a slow ride list ("Finding your next coin" for about 30 s in the w3 walk). */
+test('T023 the last ride list per player and park draws at once, and only while it is fresh', async () => {
+  const store = new Map();
+  const storage = { getItem: async k => store.get(k) ?? null, setItem: async (k, v) => { store.set(k, v); } };
+  const cache = loadTs('src/services/map/rideListCache.ts', { '@react-native-async-storage/async-storage': { __esModule: true, default: storage } });
+  const now = Date.now();
+  assert.equal(cache.recallRideList(96, 8, now), null, 'nothing kept yet: the map waits for the server as before');
+  cache.rememberRideList(96, 8, { tasks: [{ id: 77 }] }, now);
+  assert.deepEqual(JSON.parse(JSON.stringify(cache.recallRideList(96, 8, now))), { tasks: [{ id: 77 }] });
+  assert.equal(cache.recallRideList(96, 2, now), null, 'per park');
+  assert.equal(cache.recallRideList(97, 8, now), null, 'per player');
+  assert.equal(cache.recallRideList(96, 8, now + cache.MAX_AGE_MS + 1), null, 'never an old list');
+  // A cold launch reads it back from the phone.
+  const cold = loadTs('src/services/map/rideListCache.ts', { '@react-native-async-storage/async-storage': { __esModule: true, default: storage } });
+  assert.equal(cold.recallRideList(96, 8, now), null);
+  assert.equal((await cold.loadRideList(96, 8, now)).tasks[0].id, 77);
+  assert.equal(cold.recallRideList(96, 8, now).tasks[0].id, 77, 'and keeps it in memory after');
+  const map = read('src/screens/ExploreScreen.tsx');
+  assert.match(map, /rememberRideList\(player\.id, park\.id, data, Date\.now\(\)\);/);
+  assert.match(map, /const kept = recallRideList<RedeemablesType>\(player\?\.id, park\?\.id\);\n\s+setRedeemables\(kept\);/);
+  assert.match(map, /if \(current && saved\) setRedeemables\(prev => prev \?\? saved\);/, "the server's answer always wins");
+});

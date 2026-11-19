@@ -142,6 +142,8 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../helpers/check-for-redeemable': { default: async () => undefined },
     // PLAY!'s range check (fix round w3): the real one-at-a-time checker, over a stubbed server answer.
     '../api/endpoints/me/current-redeemable': { default: async () => options.inRange ?? undefined },
+    // T023 (fix pass w5): no ride list kept from an earlier visit unless a test gives one.
+    '../services/map/rideListCache': { recallRideList: () => options.keptRideList ?? null, loadRideList: async () => null, rememberRideList: () => undefined },
     '../components/guide/playRangeCheck': playRangeCheck,
     './coinArtCache': coinArtCache,
     '../components/guide/coinArtCache': coinArtCache,
