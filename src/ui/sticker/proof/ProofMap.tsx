@@ -62,7 +62,8 @@ export default function ProofMap({ toastOnOpen = false }: { readonly toastOnOpen
       header={{ children: [<CurrencyChip key="c" kind="coins" value={350} />, <CurrencyChip key="t" kind="tickets" value={2} />] }}
       footer={{ items: FOOTER_ITEMS, picked: tab, onPick: setTab }}>
       <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.cardGap }}>
-        <Page small padding="snug" style={{ flex: 1 }}>
+        <View style={{ flex: 1 }}>
+        <Page small padding="snug">
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACE.cardGap }}>
             <Spot state="next" art={ART.coin} size={48} label="Walt Statue coin, next up" />
             <View style={{ flex: 1 }}>
@@ -71,6 +72,7 @@ export default function ProofMap({ toastOnOpen = false }: { readonly toastOnOpen
             </View>
           </View>
         </Page>
+        </View>
         <View style={{ gap: SPACE.cardGap, paddingTop: SPACE.base }}>
           <RoundButton kind="base" accessibilityLabel="Shark" size={56} art={ART.shark} artMirror onPress={noop} />
           <RoundButton kind="base" accessibilityLabel="Daily chest, 2 ready" size={56} art={ART.chestClosed} badge={2} onPress={noop} />

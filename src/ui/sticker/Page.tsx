@@ -15,7 +15,7 @@
  * the foot fixed outside it, so a tall sheet scrolls instead of pushing its way out off screen.
  */
 import { memo, type ReactNode } from 'react';
-import { ScrollView, View, useWindowDimensions, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { ScrollView, StyleSheet, View, useWindowDimensions, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
 import type { AnimatedStyle } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Pattern, Rect } from 'react-native-svg';
 import Arrive from './Arrive';
@@ -91,7 +91,9 @@ function PageImpl({ floating = false, small = false, label, ribbon, topArt, foot
   const padTop = ribbonG ? ribbonG.overlap + 8 : label ? labelReach(!!label.large) + 12 : pad;
   const footH = foot ? foot.height ?? WAVE.height : 0;
   const bodyStyle = { paddingHorizontal: pad, paddingTop: padTop, paddingBottom: foot ? SPACE.base * 2 : pad };
-  const outer: StyleProp<ViewStyle> = [{ marginTop: rise, width: widthProp }, scroll ? { flexShrink: 1 } : null, style];
+  // The rise is added to any top margin the caller gives (the gap between stacked pages), never replaced by it.
+  const given = StyleSheet.flatten(style) ?? {};
+  const outer: StyleProp<ViewStyle> = [style, { marginTop: rise + (typeof given.marginTop === 'number' ? given.marginTop : 0), width: widthProp ?? given.width }, scroll ? { flexShrink: 1 } : null];
   const body = (dropStyle?: AnimatedStyle<ViewStyle>) => (
     <Shell radius={radius} line={LINE.page} face={FACE} edge={edge} drop={DROP.page} dropColor={onMap ? DROP.map : DROP.color}
       insetTop={INSET} float={floating ? FLOAT_SHADOW : undefined} dropStyle={dropStyle} inside={DOTS}
@@ -104,7 +106,7 @@ function PageImpl({ floating = false, small = false, label, ribbon, topArt, foot
         )}
         {foot ? (
           // The foot is laid out under the body, cut by the page's own bottom corners inside the navy line.
-          <View style={{ height: footH, marginHorizontal: LINE.page, marginBottom: LINE.page, overflow: 'hidden',
+          <View style={{ marginHorizontal: LINE.page, marginBottom: LINE.page, overflow: 'hidden',
             borderBottomLeftRadius: radius - LINE.page, borderBottomRightRadius: radius - LINE.page }}>
             <WaveFoot width={width - LINE.page * 2} height={footH}>{foot.children}</WaveFoot>
           </View>

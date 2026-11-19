@@ -12,7 +12,7 @@ import Svg, { ClipPath, Defs, G, Image as SvgImage, LinearGradient, Path, Stop }
 import { PlaceProvider } from './StickerContext';
 import { ART } from './art';
 import { insideFoot } from './level';
-import { INK, SHADE, WAVE } from './tokens';
+import { INK, SHADE, SPACE, WAVE } from './tokens';
 
 /** Half-waves of period/2 across [x0, x1] at `crest` (control points `amplitude` above and below), as path commands after a move to (x0, crest). */
 export function waveRun(x0: number, x1: number, crest: number, period: number = WAVE.period, amplitude: number = WAVE.amplitude, startUp: boolean = true): string {
@@ -33,20 +33,27 @@ export function wavePath(width: number, height: number, period: number = WAVE.pe
 }
 
 let nextId = 0;
+/** How much taller than its least height the water is drawn. */
+const GROW = 120;
 
-function WaveFootImpl({ width, height = WAVE.height, children, style }: {
+function WaveFootImpl({ width, height = WAVE.height, padBottom = SPACE.base * 2, children, style }: {
   /** The band's real width (Page passes its own; a screen band passes the window's). */
   readonly width: number;
+  /** The band's least height; it grows with what it holds (a gold primary and its edge), never clipping it. */
   readonly height?: number;
+  /** Room under the content (a screen band adds the home bar inset). */
+  readonly padBottom?: number;
   readonly children?: ReactNode;
   readonly style?: StyleProp<ViewStyle>;
 }) {
   const id = useRef(`wave${(nextId += 1)}`).current;
   const w = Math.max(1, Math.round(width));
-  const d = wavePath(w, height);
+  // The water is drawn taller than the least height, so a band that grows never shows its end.
+  const drawn = height + GROW;
+  const d = wavePath(w, drawn);
   return (
-    <View style={[{ height }, style]}>
-      <Svg width={w} height={height} style={{ position: 'absolute', left: 0, top: 0 }} pointerEvents="none">
+    <View style={[{ minHeight: height, overflow: 'hidden' }, style]}>
+      <Svg width={w} height={drawn} style={{ position: 'absolute', left: 0, top: 0 }} pointerEvents="none">
         <Defs>
           <ClipPath id={`${id}c`}><Path d={d} /></ClipPath>
           <LinearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1">
@@ -58,10 +65,10 @@ function WaveFootImpl({ width, height = WAVE.height, children, style }: {
         <Path d={d} transform={`translate(0,-${WAVE.line})`} fill={INK.navy} />
         <Path d={d} fill={`url(#${id}g)`} />
         <G clipPath={`url(#${id}c)`}>
-          <SvgImage href={ART.topBar} x={-w * 0.476} y={0} width={w * 2.11} height={height + 10} preserveAspectRatio="none" opacity={WAVE.textureOpacity} />
+          <SvgImage href={ART.topBar} x={-w * 0.476} y={0} width={w * 2.11} height={drawn + 10} preserveAspectRatio="none" opacity={WAVE.textureOpacity} />
         </G>
       </Svg>
-      <View style={{ position: 'absolute', left: 0, right: 0, top: WAVE.contentTop, bottom: 0, alignItems: 'center' }}>
+      <View style={{ paddingTop: WAVE.contentTop, paddingBottom: padBottom, alignItems: 'center' }}>
         <PlaceProvider value={insideFoot()}>{children}</PlaceProvider>
       </View>
     </View>

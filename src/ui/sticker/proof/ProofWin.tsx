@@ -53,7 +53,7 @@ export default function ProofWin() {
     return () => { clearTimeout(walk); clearTimeout(land); };
   }, []);
   const inner = screenFrameWidth(width) - LINE.page * 2 - SPACE.pagePad * 2;
-  const stageH = Math.round(inner * 0.58);
+  const stageH = Math.round(inner * 0.5);
   const coin = Math.round(stageH * 0.86);
   return (
     <Screen testID="proof-win" header={{ children: [
@@ -63,7 +63,7 @@ export default function ProofWin() {
     ] }}
       foot={{ height: FOOT, children: (
         <View style={{ alignItems: 'center', alignSelf: 'stretch', paddingHorizontal: SPACE.margin + 8, marginTop: -WAVE_TAG_LIFT }}>
-          <Tag icon={ART.coin} iconRatio={ART_RATIO.coin} label="Next coin: Tiki Room, 61 meters">Tiki Room, 61 m</Tag>
+          <Tag icon={ART.coin} iconRatio={ART_RATIO.coin} label="Next coin: Tiki Room, 61 meters" style={{ alignSelf: 'center' }}>Tiki Room, 61 m</Tag>
           <StickerButton label="NEXT COIN" variant="primary" size="large" fullWidth style={{ marginTop: SPACE.base * 2 }} onPress={noop} />
           <GhostButton label="See my shelf" style={{ marginTop: SPACE.base }} onPress={noop} />
         </View>

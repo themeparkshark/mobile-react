@@ -65,12 +65,12 @@ export const ToastPill = memo(function ToastPill({ title, line, art, artRatio = 
   const edge = edgeFor('card', place);
   const artH = TOAST.art;
   return (
-    <View style={{ minHeight: TOAST.height, alignSelf: 'center', minWidth: 220, maxWidth: '100%' }}>
-      <Shell radius={RADIUS.pill} line={place.level === 'map' ? LINE.map : LINE.card} face={CREAM} edge={edge}
+    <View style={{ height: TOAST.height, alignSelf: 'center', minWidth: 220, maxWidth: '100%' }}>
+      <Shell radius={TOAST.height / 2} line={place.level === 'map' ? LINE.map : LINE.card} face={CREAM} edge={edge}
         drop={edge ? DROP.cardOnWorld : DROP.cardInPage} dropColor={place.level === 'map' ? DROP.map : DROP.color}
-        insetTop={{ width: 2, color: INK.white }} insetBottom={{ width: 4, color: INK.creamDeep }} style={{ flexGrow: 1 }}>
+        insetTop={{ width: 2, color: INK.white }} insetBottom={{ width: 4, color: INK.creamDeep }} style={{ height: TOAST.height }}>
         <PlaceProvider value={insideCard()}>
-          <View style={{ minHeight: TOAST.height, flexDirection: 'row', alignItems: 'center', paddingLeft: art ? 44 : 18, paddingRight: 18, gap: 14 }}>
+          <View style={{ height: TOAST.height, flexDirection: 'row', alignItems: 'center', paddingLeft: art ? 44 : 18, paddingRight: 18, gap: 14 }}>
             <View style={{ paddingTop: 2, flexShrink: 1 }}><StickerText spec={TITLE} align="left" role="none">{title}</StickerText></View>
             {line ? <View style={{ flexShrink: 1, marginLeft: 'auto' }}><StickerText spec={LINE_SPEC} tone="soft" align="right" role="none">{line}</StickerText></View> : null}
           </View>

@@ -17,7 +17,7 @@ function GlyphImpl({ kind, size = 24 }: { readonly kind: GlyphKind; readonly siz
     return (
       <View accessible={false} style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: INK.navy, alignItems: 'center', justifyContent: 'center' }}>
         <View style={{ paddingTop: 2 }}>
-          <StickerText size={Math.round(size * 0.66)} tone="white" stroke={0} drop={0} lineHeight={Math.round(size * 0.8)} role="none" maxScale={1}>$</StickerText>
+          <StickerText size={Math.round(size * 0.66)} fill={INK.white} stroke={0} drop={0} lineHeight={Math.round(size * 0.8)} role="none" maxScale={1}>$</StickerText>
         </View>
       </View>
     );

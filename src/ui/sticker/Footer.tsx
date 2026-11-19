@@ -73,6 +73,8 @@ export type FooterProps = {
 };
 
 const WORD = { ...TEXT.tag, size: FOOTER.label, spacing: 0.04, maxScale: 1 };
+/** The word under an icon may be wider than its icon (STANDINGS). */
+const LABEL_W = 96;
 
 const Tab = memo(function Tab({ item, index, picked, width, height, onPick }: {
   item: FooterItem; index: number; picked: boolean; width: number; height: number; onPick?: (key: string) => void;
@@ -96,7 +98,7 @@ const Tab = memo(function Tab({ item, index, picked, width, height, onPick }: {
         <Lift source={item.art ?? a.art} width={iconW} height={iconH} />
         {item.badge ? <Badge count={item.badge} label="" hidden style={{ position: 'absolute', right: -8, top: -4 }} /> : null}
       </Animated.View>
-      <View style={{ position: 'absolute', bottom: picked ? 4 : FOOTER.labelBottom, alignItems: 'center' }}>
+      <View style={{ position: 'absolute', bottom: picked ? 4 : FOOTER.labelBottom, left: hitW / 2 - LABEL_W / 2, width: LABEL_W, alignItems: 'center' }}>
         {picked ? (
           <View>
             <View style={{ position: 'absolute', left: 0, right: 0, top: 2, bottom: -2, borderRadius: 999, backgroundColor: DROP.color }} />

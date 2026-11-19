@@ -169,7 +169,7 @@ function ButtonBody({
             <View style={styles.row}>
               {image ? <Image source={image} resizeMode="contain" fadeDuration={0} style={{ height: Math.round(text.size * 1.1), width: Math.round(text.size * 1.1) }} /> : null}
               <View style={styles.lbl}>
-                <StickerText spec={text} tone={look.ink === 'navy' ? 'navy' : look.ink === 'soft' ? 'soft' : 'auto'} lineHeight={Math.round(text.size * 1.15)} role="none" fit={fit}>{label}</StickerText>
+                <StickerText spec={text} tone={look.ink === 'white' ? 'auto' : 'navy'} fill={look.ink === 'soft' ? INK.navySoft : undefined} lineHeight={Math.round(text.size * 1.15)} role="none" fit={fit}>{label}</StickerText>
               </View>
             </View>
           )}

@@ -282,7 +282,7 @@ export const LABEL = { height: 30, heightLarge: 36, padX: 14, font: 17, fontLarg
 export const BADGE = { size: 22, ring: 2, font: 13, max: 99 } as const;
 export const BAR = { height: 18, dot: 22, dotLine: 2.5, inset: 3 } as const;
 /** Spots: ghosts are a tinted silhouette of the art; next up is a 3 pt gold ring with a gold-light ring inside. */
-export const SPOT = { size: 46, line: 2, nextLine: 3, nextInner: 2, ghostOpacity: 0.38, ghostPaperOpacity: 0.9, weekMin: 24 } as const;
+export const SPOT = { size: 46, line: 2, nextLine: 3, nextInner: 2, ghostOpacity: 0.3, ghostPaperOpacity: 0.75, ghostTrace: 0.22, weekMin: 24 } as const;
 /**
  * Header band: the water's straight bottom edge sits `crest` under the safe area top, then the
  * navy line, the white edge and a 3 pt drop at the map's 50 percent navy; content starts `gap`

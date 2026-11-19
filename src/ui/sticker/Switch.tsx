@@ -3,7 +3,7 @@
  * switch"). On: the gold groove, the knob at the right. Off: the blue groove, the knob at the left.
  * Never a stock switch. The knob walks on a spring on the UI thread (Reduce Motion: it jumps and the
  * gold fades in over 150 ms). At least 44 pt to touch, says "switch" and on or off to VoiceOver;
- * off (disabled) fades by the one off token; busy holds it still and says busy.
+ * off (disabled) is a sky groove (the kit's off look); busy holds it still and says busy.
  */
 import { memo, useEffect } from 'react';
 import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -12,7 +12,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withSpring, withTim
 import { haptic } from '../../gamekit/Haptics';
 import { SPRING } from '../motion';
 import useUiReducedMotion from '../useUiReducedMotion';
-import { BUTTON, DROP, INK, OFF, SHADE, STICK, SWITCH } from './tokens';
+import { BUTTON, DROP, INK, SHADE, STICK, SWITCH } from './tokens';
 
 export type SwitchProps = {
   readonly value: boolean;
@@ -41,9 +41,10 @@ function SwitchImpl({ value, onChange, accessibilityLabel, disabled = false, bus
   return (
     <Pressable testID={testID} accessibilityRole="switch" accessibilityLabel={accessibilityLabel} accessibilityState={{ checked: value, disabled, busy }}
       disabled={inert} hitSlop={{ top: slop, bottom: slop }} onPress={inert ? undefined : () => { haptic('tapLight'); onChange?.(!value); }}
-      style={[{ width: SWITCH.width, height: SWITCH.height, opacity: disabled ? OFF.artOpacity : 1 }, style]}>
-      <View style={{ flex: 1, borderRadius: SWITCH.height / 2, borderWidth: SWITCH.line, borderColor: INK.navy, backgroundColor: INK.blueLip, overflow: 'hidden' }}>
-        <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }, gold]}><LinearGradient colors={GOLD} style={{ flex: 1 }} /></Animated.View>
+      style={[{ width: SWITCH.width, height: SWITCH.height }, style]}>
+      {/* Off (disabled): the one off look, a sky groove that keeps its knob (never a faded gold that reads olive). */}
+      <View style={{ flex: 1, borderRadius: SWITCH.height / 2, borderWidth: SWITCH.line, borderColor: INK.navy, backgroundColor: disabled ? INK.skyLip : INK.blueLip, overflow: 'hidden' }}>
+        {disabled ? null : <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }, gold]}><LinearGradient colors={GOLD} style={{ flex: 1 }} /></Animated.View>}
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 3, backgroundColor: SHADE.grooveInset }} />
         <Animated.View style={[{ position: 'absolute', left: 0, right: 0, top: 0, height: 3, backgroundColor: SHADE.switchOnInset }, gold]} />
         <Animated.View style={[{ position: 'absolute', left: 1, top: 0, width: SWITCH.knob, height: SWITCH.knob }, knob]}>

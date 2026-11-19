@@ -44,7 +44,8 @@ const DIGIT = { ...TEXT.name, maxScale: 1 };
 
 function SpotImpl({ state, art, size = SPOT.size, label, glyph, style }: SpotProps) {
   const { surface } = useStickerPlace();
-  const paper = surface === 'paper';
+  // On paper and on the map's tan streets a spot is the pale paper spot (a navy disc on tan reads gray).
+  const paper = surface !== 'blue';
   const a11y = label ? { accessible: true, accessibilityRole: 'image' as const, accessibilityLabel: label } : { accessible: false };
   if (state === 'yours' && glyph !== undefined) {
     // A typed digit: a white paper sticker with a navy line and a hard drop (level 2: no white edge).
@@ -69,7 +70,7 @@ function SpotImpl({ state, art, size = SPOT.size, label, glyph, style }: SpotPro
     );
   }
   const look = spotLook(state, paper);
-  const ghost = Math.round(size * 0.78);
+  const ghost = Math.round(size * 0.72);
   const innerInset = look.ringWidth;
   return (
     <View style={[{ width: size, height: size, borderRadius: size / 2, backgroundColor: look.fill, borderWidth: look.ringWidth, borderColor: look.ring,
@@ -78,8 +79,12 @@ function SpotImpl({ state, art, size = SPOT.size, label, glyph, style }: SpotPro
         <View pointerEvents="none" style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, borderRadius: size / 2 - innerInset, borderWidth: SPOT.nextInner, borderColor: look.inner }} />
       ) : null}
       {art && state !== 'empty' ? (
-        <Image source={art} resizeMode="contain" fadeDuration={0} accessible={false}
-          style={{ width: ghost, height: ghost, tintColor: look.ghostTint, opacity: look.ghostOpacity }} />
+        // The ghost: a blue-tinted silhouette of the art, with a faint trace of the art itself so its figure reads (never the
+        // art alone at low opacity: gold went olive gray).
+        <View style={{ width: ghost, height: ghost }} accessible={false}>
+          <Image source={art} resizeMode="contain" fadeDuration={0} style={{ position: 'absolute', width: ghost, height: ghost, tintColor: look.ghostTint, opacity: look.ghostOpacity }} />
+          <Image source={art} resizeMode="contain" fadeDuration={0} style={{ width: ghost, height: ghost, opacity: SPOT.ghostTrace }} />
+        </View>
       ) : null}
     </View>
   );
