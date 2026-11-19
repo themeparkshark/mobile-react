@@ -559,7 +559,8 @@ export default function LinePlayScreen() {
       // One catalog read answers both, side by side (never a second wait on a slow server).
       const [zone, rideType] = await Promise.all([
         ride.zone !== undefined ? ride.zone : lineZoneForRide(ride.parkId, ride.rideId),
-        ride.rideType !== undefined ? ride.rideType : rideTypeForRide(ride.parkId, ride.rideId)]);
+        // The type gets a little longer on a cold catalog: a show must never start a line story because /rides was slow.
+        ride.rideType !== undefined ? ride.rideType : rideTypeForRide(ride.parkId, ride.rideId, 6_000)]);
       const saved = playerId ? await readCheckpoint(playerId, ride.rideId).catch(() => null) : null;
       if (startedRef.current !== owner) return;
       const freshSample = latestLocationSampleRef.current;
