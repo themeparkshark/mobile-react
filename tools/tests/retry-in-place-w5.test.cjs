@@ -132,3 +132,7 @@ test('N04: the kept board resets under an instant ticket tear that hands over on
   assert.match(trivia, /<Rail key=\{`rail-\$\{runKey\}`\}/);
 });
 
+
+test('N04/T036: a just-started try never refreshes the player (an app-wide re-render at the hand-over)', () => {
+  assert.match(modal, /if \(attempt\.status !== 'started'\) refreshPlayer\?\.\(\)\.then\(fresh => \{/);
+});

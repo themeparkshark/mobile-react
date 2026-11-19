@@ -495,7 +495,10 @@ export default function RedeemRedeemableModal({
     setUsedRescuePass(!!attempt.rescue_pass);
     setRescueRetryAvailable(!!attempt.rescue_retry_available);
     setStartError(null);
-    refreshPlayer?.().then(fresh => {
+    // w5 N04, T036: a try that just started does not refresh the player. That refresh re-rendered the whole app
+    // (the map and its markers behind the sheet) right at the hand-over, holding the tear and the board for 0.4 to
+    // 0.6 s on device. The try's end (won, lost, expired) refreshes it, before the card or the map shows a count.
+    if (attempt.status !== 'started') refreshPlayer?.().then(fresh => {
       if (fresh && savedAttemptIdRef.current === attempt.id)
         setPostWinEnergy(fresh.energy ?? 0);
     }).catch(() => undefined);
