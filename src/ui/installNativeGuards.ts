@@ -12,6 +12,9 @@ if (Platform.OS === 'ios') {
   injection.unstable_Modal = require('./DoorModal').default;
   // In-tree sheets (fix pass w5): the screen behind a sheet is hidden from VoiceOver, and focus returns to its opener.
   const SheetScreenRoot = require('./SheetScreenRoot').default;
+  // react-native-modal's own leave tells the door, like CalmModal's and GameDialog's (ui/rnModalLeaving.ts).
+  const { installRnModalLeaving } = require('./rnModalLeaving');
+  installRnModalLeaving(require('react-native-modal').default, require('react-native').Modal);
   /* eslint-enable @typescript-eslint/no-require-imports */
   AppRegistry.setWrapperComponentProvider(() => SheetScreenRoot);
 }

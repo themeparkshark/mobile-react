@@ -162,3 +162,29 @@ test('N01: a tap on a card that its owner is already shrinking away is the scree
   assert.match(door, /now\.current\.props\.leaving === true, !now\.current\.nested\);/);
   assert.match(door, /pointerEvents=\{props\.leaving === true \? 'box-only' : undefined\}/);
 });
+
+test('N01 on every sibling: react-native-modal\'s own leave reaches the door as leaving, so a tap then is the screen\'s', () => {
+  // 34 sheets use react-native-modal: it keeps its Modal visible through its own out animation, so a tap then died on
+  // its backdrop with the door none the wiser. Fails on 104da83c (no rnModalLeaving, nothing installed it).
+  const isValidElement = v => !!v && typeof v === 'object' && 'type' in v;
+  const cloneElement = (el, extra) => ({ ...el, props: { ...el.props, ...extra } });
+  const R = loadTs('src/ui/rnModalLeaving.ts', { react: { default: { isValidElement, cloneElement }, isValidElement, cloneElement } });
+  assert.equal(R.rnModalLeaving({ isVisible: false }, { isVisible: true }), true, 'asked to hide, still on screen');
+  assert.equal(R.rnModalLeaving({ isVisible: true }, { isVisible: true }), false);
+  assert.equal(R.rnModalLeaving({ isVisible: false }, { isVisible: false }), false, 'gone: the door is off anyway');
+  assert.equal(R.rnModalLeaving({ isVisible: true }, { isVisible: false }), false, 'coming in is never leaving');
+  const NativeModal = function Modal() {};
+  const View = 'View';
+  class Fake { render() { return this.cover ? { type: NativeModal, props: { visible: this.state.isVisible } } : { type: View, props: {} }; } }
+  assert.equal(R.installRnModalLeaving(Fake, NativeModal), true);
+  assert.equal(R.installRnModalLeaving(Fake, NativeModal), false, 'wrapped once');
+  assert.equal(R.installRnModalLeaving(null, NativeModal), false, 'a missing package is left alone');
+  const leavingOf = (isVisible, shown, cover = true) => Object.assign(new Fake(), { cover, props: { isVisible }, state: { isVisible: shown } }).render().props.leaving;
+  assert.equal(leavingOf(false, true), true);
+  assert.equal(leavingOf(true, true), undefined, 'up: untouched');
+  assert.equal(leavingOf(false, true, false), undefined, 'coverScreen false renders a plain View: untouched');
+  const guards = src('src/ui/installNativeGuards.ts');
+  assert.match(guards, /installRnModalLeaving\(require\('react-native-modal'\)\.default, require\('react-native'\)\.Modal\)/);
+  const rnm = fs.readFileSync(path.join(root, 'node_modules/react-native-modal/dist/modal.js'), 'utf8');
+  assert.match(rnm, /React\.createElement\(Modal, Object\.assign\(\{ transparent: true, animationType: 'none', visible: this\.state\.isVisible/, 'the render this wraps');
+});
