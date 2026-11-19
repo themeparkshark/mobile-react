@@ -108,3 +108,33 @@ test('T040 hold-2: slips only exist on the bonk meter ride (queue, daily and par
   for (let i = 0; i < 6; i++) { S.simTap(s, i); S.simAdvance(s, 50); }
   assert.equal(s.slipUntil, -1);
 });
+
+/* T053 hold-2: every loss line has its pip row, the Whack bonk meter (the most common loss) included. */
+test('T053 hold-2: the Whack bonk-meter loss line carries have/need like Memory and trivia; every summary with a line has pips', () => {
+  const RT = loadTs('src/gamekit/results/rideTry.ts');
+  const tap = RT.rideTrySummary({ stars: 0, meta: { game: 'tap', rideBonks: 4, winBonks: 13, ridePercent: 30 } });
+  assert.equal(tap.line, '4 of 13 bonks.');
+  assert.deepEqual([tap.have, tap.need], [4, 13]);
+  const kid = RT.rideTrySummary({ stars: 0, meta: { game: 'tap', rideBonks: 9, winBonks: 10 } });
+  assert.deepEqual([kid.have, kid.need, kid.near], [9, 10, true]);
+  const runs = [
+    { meta: { game: 'tap', rideBonks: 0, winBonks: 13 } },
+    { meta: { game: 'tap', rideBonks: 20, winBonks: 13 } },
+    { meta: { game: 'tap', ridePercent: 62 } },
+    { meta: { game: 'memory', pairs: 2, pairsTotal: 6, bestPairs: 4 } },
+    { meta: { game: 'memory', pairs: 3, pairsTotal: 8 } },
+    { meta: { game: 'trivia', correctCount: 1 } },
+    { meta: { mode: 'task', correctCount: 0 } },
+  ];
+  for (const run of runs) {
+    const s = RT.rideTrySummary(run);
+    assert.ok(s.line, JSON.stringify(run));
+    assert.ok(Number.isInteger(s.need) && s.need > 0, `pips need for ${JSON.stringify(run)}`);
+    assert.ok(Number.isInteger(s.have) && s.have <= s.need, `pips have for ${JSON.stringify(run)}`);
+    const nums = s.line.match(/\d+/g).map(Number);
+    assert.equal(nums[0], s.have, 'the line and the pips say the same count');
+  }
+  // The card draws the row from the summary (RedeemRedeemableModal), so a Whack loss shows pips too.
+  const modal = require('node:fs').readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
+  assert.match(modal, /pips=\{rideTry\?\.need \? \{ have: rideTry\.have \?\? 0, need: rideTry\.need \} : null\}/);
+});
