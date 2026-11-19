@@ -194,7 +194,9 @@ export default function DailyGiftModal({ dailyGift, onMapOcclusionChange, onClos
   }, []);
 
   const displayedGift = confirmedGift ?? dailyGift;
-  const restartLine = chestRestartLine(displayedGift.streak_reset ?? dailyGift.streak_reset);
+  // T110: why today's chest started over (the ladder's own words; the flame stays the only streak).
+  const { streak_reset: resetShown } = displayedGift;
+  const restartLine = chestRestartLine(resetShown ?? dailyGift.streak_reset);
   const tomorrow = tomorrowChest(displayedGift);
   const ladder = displayedGift.ladder?.length ? displayedGift.ladder : fallbackLadder(displayedGift);
   const day = Math.min(ladder.length, Math.max(1, displayedGift.day ?? 1));

@@ -78,7 +78,7 @@ test('T110 (B06): a chest that started over says why, once, kindly; absent field
   assert.equal(row(3, cold), 'Day 1 of 7 is ready', 'the flame line says the welcome back: never twice');
   assert.equal(model.flameNote(cold, 3), 'Welcome back! Away 3 days, so your chest and flame start again. Finish Daily 3 to light a new one');
   const gift = read('src/components/DailyGiftModal.tsx');
-  assert.match(gift, /const restartLine = chestRestartLine\(displayedGift\.streak_reset \?\? dailyGift\.streak_reset\);/);
+  assert.match(gift, /const restartLine = chestRestartLine\(resetShown \?\? dailyGift\.streak_reset\);/);
   assert.match(gift, /!simple && !!restartLine && phase !== 'open' && <Text style=\{styles\.restart\}/);
   // The flame says the same kind thing in Rewards (fix round w3).
   assert.equal(model.flameNote({ flame: 0, best: 4, done: 0, total: 3, claimable: false, claimed: false }), 'Welcome back! Finish Daily 3 to light a new flame');

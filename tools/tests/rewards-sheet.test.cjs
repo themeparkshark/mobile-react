@@ -76,7 +76,7 @@ test('one flame: the Daily 3 streak is the only streak number', () => {
   assert.equal(flags.streakOwner({ dailyThree: false, levelChests: true }), null, 'no chest flame: never a second number');
   assert.equal(flags.streakOwner(null), null);
   const chest = read('src/components/DailyGiftModal.tsx');
-  assert.doesNotMatch(chest, /day streak|displayedGift\.streak(?!_reset)|GameIcon name="streak"/, 'the chest ladder never shows a streak');
+  assert.doesNotMatch(chest, /day streak|displayedGift\.streak|GameIcon name="streak"/, 'the chest ladder never shows a streak');
   assert.match(chest, /`Day \$\{day\} of \$\{ladder\.length\}`/, 'the chest says Day N of 7');
   // Profile reads the same server number as the Daily 3 sheet and friend rows (daily3_streak), and only after rung 4.
   const own = read('src/services/retention/useOwnStreak.ts');
