@@ -37,7 +37,7 @@ test('N04: TRY AGAIN resets the kept board only for the same game, from the loss
 });
 
 test('N04: the deal sends the kept board straight to play, any other game through the punch', () => {
-  assert.equal(R.flowAfterDeal({ replay: true, keptGame: 'tap', dealtGame: 'tap', known: true }), 'minigame');
+  assert.equal(R.flowAfterDeal({ replay: true, keptGame: 'tap', dealtGame: 'tap', known: true }), 'replay');
   assert.equal(R.flowAfterDeal({ replay: true, keptGame: 'tap', dealtGame: 'memory', known: true }), 'spinning');
   assert.equal(R.flowAfterDeal({ replay: false, keptGame: null, dealtGame: 'tap', known: true }), 'spinning');
   assert.equal(R.flowAfterDeal({ replay: true, keptGame: 'tap', dealtGame: 'photo', known: false }), 'wheel');
@@ -119,3 +119,16 @@ test('T038: the picture re-deal reaches the server as a new start, never a read 
   assert.match(modal, /redealStartRef\.current = true;\n\s+setRedealt\(true\);\n\s+await handleStartWheel\(\);/);
   assert.match(modal, /attemptId: redealStartRef\.current \? null : saved\?\.attemptId \?\? attemptRef\.current\?\.id \?\? savedAttemptIdRef\.current,/);
 });
+
+test('N04: the kept board resets under an instant ticket tear that hands over on the deal (no stale frame seen)', () => {
+  const punch = fs.readFileSync('src/components/TicketPunch.tsx', 'utf8');
+  assert.match(modal, /const boardHidden = flowState === 'spinning' \|\| flowState === 'lost' \|\| flowState === 'replay';/);
+  assert.match(modal, /\{flowState === 'replay' && \(\n\s+<TicketPunch\n\s+instant\n\s+gameName=\{replayDealt \? selectedGameData\?\.name \?\? null : null\}/);
+  assert.match(modal, /if \(next === 'replay'\) setReplayDealt\(true\);/);
+  assert.match(punch, /export const INSTANT_PUNCH_MS = \{ ready: 180, handOver: 200 \} as const;/);
+  assert.match(punch, /if \(instant\) \{\n(\s+\/\/.*\n)?\s+cancelAnimation\(bob\);[\s\S]{0,400}at\(INSTANT_PUNCH_MS\.handOver, finish\);\n\s+return;/);
+  // Beat the Buzzer's rail and scores are fresh at once (no roll down from the last try's points).
+  assert.match(trivia, /setScores\(\{ me: 0, opp: 0 \}\);\n\s+setLocks\(\{ me: null, opp: null \}\);/);
+  assert.match(trivia, /<Rail key=\{`rail-\$\{runKey\}`\}/);
+});
+

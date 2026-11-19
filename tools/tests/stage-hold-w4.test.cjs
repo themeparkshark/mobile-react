@@ -71,7 +71,8 @@ test('T036: the game mounts under the punch once the tear starts, so its mount n
   assert.match(modal, /onCardShown=\{\(\) => setPunchCard\(true\)\}/);
   assert.match(modal, /useEffect\(\(\) => \{ if \(flowState !== 'spinning'\) setPunchCard\(false\); \}, \[flowState\]\);/);
   // Called after the UI-thread tear and card springs are set, in both the full and the Reduce Motion punch.
-  assert.match(punch, /cardShown\.current = true;\n\s+if \(reduced\) \{\n\s+onCardShown\?\.\(\);/);
+  // w5: the kept board's instant tear returns first (it never pops a card); the full and Reduce Motion punch as before.
+  assert.match(punch, /cardShown\.current = true;\n\s+if \(instant\) \{[\s\S]{0,700}?\n\s+return;\n\s+\}\n\s+if \(reduced\) \{\n\s+onCardShown\?\.\(\);/);
   assert.match(punch, /at\(safetyMs\(PUNCH_T\.done - PUNCH_T\.punch \+ 400\), finish\); \/\/ safety net\n[^\n]*\n\s+onCardShown\?\.\(\);/);
 });
 

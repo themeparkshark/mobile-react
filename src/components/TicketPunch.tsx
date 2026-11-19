@@ -27,6 +27,11 @@ export const PUNCH_T = { ready: 420, punch: 520, card: 640, done: 1650 } as cons
 export const CARD_HOLD_MS = { first: 900, repeat: 450 } as const;
 /** Never wait longer than this after the tear for the board (a game that never reports drawn hands over anyway). */
 export const BOARD_WAIT_MAX_MS = 3000;
+/**
+ * Fix pass w5 (N04): TRY AGAIN on the kept board. The ticket slides in over the board while it resets, tears the
+ * moment the server deals the same game, and hands over with the tear (no game card: the player knows the game).
+ */
+export const INSTANT_PUNCH_MS = { ready: 180, handOver: 200 } as const;
 
 /**
  * Spending a Park Ticket is the "throw": the ticket slides in, gets punched in
@@ -44,6 +49,7 @@ export default function TicketPunch({
   onCardShown,
   boardReady,
   quick = false,
+  instant = false,
   onDone,
 }: {
   /**
@@ -71,6 +77,8 @@ export default function TicketPunch({
   readonly boardReady?: boolean;
   /** A repeat start of the same game (TRY AGAIN): the card's short stay (CARD_HOLD_MS.repeat). */
   readonly quick?: boolean;
+  /** TRY AGAIN on the kept board (w5 N04): tear on the deal and hand over with it, no game card. */
+  readonly instant?: boolean;
   readonly onDone: () => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -115,13 +123,13 @@ export default function TicketPunch({
       setReduced(isReduced);
       if (isReduced) {
         enter.value = 1;
-        at(PUNCH_T.ready, () => setTorn(true));
+        at(instant ? INSTANT_PUNCH_MS.ready : PUNCH_T.ready, () => setTorn(true));
         return;
       }
       playSfx('whoosh', 0.6);
       enter.value = withSpring(1, { damping: 12, stiffness: 170 });
       bob.value = withDelay(PUNCH_T.ready, withRepeat(withTiming(1, { duration: 700, easing: Easing.inOut(Easing.sin) }), -1, true));
-      at(PUNCH_T.ready, () => setTorn(true));
+      at(instant ? INSTANT_PUNCH_MS.ready : PUNCH_T.ready, () => setTorn(true));
     });
     return () => {
       cancelled = true;
@@ -136,6 +144,16 @@ export default function TicketPunch({
     if (!torn || !gameName || cardShown.current || reduced == null) return;
     pressTrace('punch.tear', () => gameName);
     cardShown.current = true;
+    if (instant) {
+      // The kept board under it is already drawn and reset: tear and hand over, no card.
+      cancelAnimation(bob);
+      tear.value = reduced ? 1 : withTiming(1, { duration: 320, easing: Easing.out(Easing.cubic) });
+      if (!reduced) flash.value = withSequence(withTiming(0.85, { duration: 30 }), withTiming(0, { duration: 220 }));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      if (!reduced) playSfx('hit');
+      at(INSTANT_PUNCH_MS.handOver, finish);
+      return;
+    }
     if (reduced) {
       onCardShown?.();
       tear.value = 1;

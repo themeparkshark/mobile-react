@@ -31,12 +31,13 @@ export function canRetryInPlace(i: RetryInPlaceInput): boolean {
 }
 
 /**
- * Where a dealt try goes. A kept board waiting for its deal ('replay') goes straight to play when the server dealt
- * the same game; any other game (or an unknown one) takes the ticket punch, which mounts it fresh.
+ * Where a dealt try goes. A kept board waiting for its deal ('replay', under the instant punch) stays there and
+ * hands over with the tear when the server dealt the same game; any other game (or an unknown one) takes the
+ * ticket punch, which mounts it fresh.
  */
-export function flowAfterDeal(i: { readonly replay: boolean; readonly keptGame: string | null; readonly dealtGame: string | null | undefined; readonly known: boolean }): 'minigame' | 'spinning' | 'wheel' {
+export function flowAfterDeal(i: { readonly replay: boolean; readonly keptGame: string | null; readonly dealtGame: string | null | undefined; readonly known: boolean }): 'replay' | 'spinning' | 'wheel' {
   if (!i.known) return 'wheel';
-  if (i.replay && !!i.keptGame && i.dealtGame === i.keptGame) return 'minigame';
+  if (i.replay && !!i.keptGame && i.dealtGame === i.keptGame) return 'replay';
   return 'spinning';
 }
 

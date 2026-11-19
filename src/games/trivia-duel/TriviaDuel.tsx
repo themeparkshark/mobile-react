@@ -1810,7 +1810,13 @@ export function TriviaDuel(props: TriviaDuelProps) {
     setRound(null);
     setTiles([]);
     setGhost(null);
+    setScores({ me: 0, opp: 0 });
+    setLocks({ me: null, opp: null });
+    setStakes({ me: null, opp: null });
+    setChip(null);
+    setRoundIdx(0);
     crown.value = 0;
+    // A new run key remounts the rail: its scores show 0 at once (never a roll down from the last try).
     setRunKey((k) => k + 1);
     setMusicBed(null);
     repeatStart.current = isRide;
@@ -2057,7 +2063,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           {/* While the results card is up it is the only thing to read: the rail
               dims and drops its lock times (TIME, 2.3s) and Final stake pills. */}
           <View style={[styles.railWrap, resultsUp && styles.railDim]}>
-            <Rail
+            <Rail key={`rail-${runKey}`}
               me={{ name: myName, score: scores.me, look: 'classic', lockLabel: resultsUp ? null : locks.me, stake: resultsUp ? null : stakes.me }}
               opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: resultsUp ? null : locks.opp, stake: resultsUp ? null : stakes.opp, ghost: !!ghost }}
               pips={pips}

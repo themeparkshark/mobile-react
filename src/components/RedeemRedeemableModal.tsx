@@ -347,6 +347,9 @@ export default function RedeemRedeemableModal({
   const sheetMargin = useWindowDimensions().width * 0.05;
   const [keepBoard, setKeepBoard] = useState(false);
   const [retryRound, setRetryRound] = useState(0);
+  /** The kept board's try is dealt: its instant punch tears and hands over (w5 N04). */
+  const [replayDealt, setReplayDealt] = useState(false);
+  useEffect(() => { if (flowState !== 'replay') setReplayDealt(false); }, [flowState]);
   /** TRY AGAIN is resetting the kept board (set on the press, read by the deal before the next render). */
   const replayRef = useRef<string | null>(null);
   useEffect(() => {
@@ -630,6 +633,8 @@ export default function RedeemRedeemableModal({
     const known = selectAssignedGameRef.current();
     const next = flowAfterDeal({ replay: !!kept, keptGame: kept, dealtGame: attemptRef.current?.game, known });
     if (next === 'spinning' && kept) repeatPunchRef.current = true;
+    // The kept board's instant punch tears now and hands over (w5 N04).
+    if (next === 'replay') setReplayDealt(true);
     pressTrace('card.deal.flow', () => `${next} kept=${kept}`);
     return next;
   };
@@ -1282,7 +1287,7 @@ export default function RedeemRedeemableModal({
   // TRY AGAIN shows it without a new layout. Held there (never seen or touched), shown and still held in 'replay'.
   const boardKept = keepBoard && (flowState === 'lost' || flowState === 'replay');
   const boardOutset = fullBleed ? null : { top: -sheetMargin, left: -sheetMargin, right: -sheetMargin, bottom: -sheetMargin };
-  const boardHidden = flowState === 'spinning' || flowState === 'lost';
+  const boardHidden = flowState === 'spinning' || flowState === 'lost' || flowState === 'replay';
   const boardHeld = flowState === 'spinning' || flowState === 'lost' || flowState === 'replay';
 
   return (
@@ -1539,6 +1544,18 @@ export default function RedeemRedeemableModal({
           )}
 
           {/* TICKET PUNCH: the spent Ticket tears and this ride's game pops up. */}
+          {/* w5 N04: TRY AGAIN on the kept board: the ticket tears over the board while it resets, and hands over. */}
+          {flowState === 'replay' && (
+            <TicketPunch
+              instant
+              gameName={replayDealt ? selectedGameData?.name ?? null : null}
+              gameColor={selectedGameData?.color ?? '#ffcf3b'}
+              rideName={taskName}
+              kicker={punchLines(taskName, playFlagsNow().retrySameGame).kicker}
+              winLine={punchLines(taskName).win}
+              onDone={() => setFlowState('minigame')}
+            />
+          )}
           {flowState === 'spinning' && (
             <TicketPunch
               gameName={selectedGameData?.name ?? null}
