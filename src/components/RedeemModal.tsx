@@ -142,15 +142,23 @@ export default function RedeemModal({
   };
   // Standing at a ride that is not open: the same spot says why (and when it is back), never a blank.
   const rawClosedReason = !available ? nearbyRideClosedReason(redeemable, liveStatus) : null;
-  // A find that moved on says so for a moment, then fades: nothing is left to do at that spot (T012).
+  // A find that moved on says so for a moment, then fades: nothing is left to do at that spot (T012). It stays its
+  // full moment even when the next range answer (no coin here any more) lands a second later.
   const movedOnKey = rawClosedReason?.kind === 'moved_on' && redeemable ? `${redeemable.type}:${redeemable.model.id}` : null;
-  const [movedOnDone, setMovedOnDone] = useState<string | null>(null);
+  const [movedOn, setMovedOn] = useState<{ key: string; showing: boolean } | null>(null);
   useEffect(() => {
-    if (!movedOnKey) return undefined;
-    const timer = setTimeout(() => setMovedOnDone(movedOnKey), MOVED_ON_SHOW_MS);
+    if (!movedOnKey || movedOn?.key === movedOnKey) return undefined;
+    setMovedOn({ key: movedOnKey, showing: true });
+    return undefined;
+  }, [movedOnKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!movedOn?.showing) return undefined;
+    const timer = setTimeout(() => setMovedOn(current => current && { ...current, showing: false }), MOVED_ON_SHOW_MS);
     return () => clearTimeout(timer);
-  }, [movedOnKey]);
-  const closedReason = rawClosedReason && !(movedOnKey && movedOnDone === movedOnKey) ? rawClosedReason : null;
+  }, [movedOn?.key, movedOn?.showing]); // eslint-disable-line react-hooks/exhaustive-deps
+  const movedOnShowing = !!movedOn?.showing && !available;
+  const closedReason = movedOnShowing ? { kind: 'moved_on' as const }
+    : rawClosedReason && rawClosedReason.kind !== 'moved_on' ? rawClosedReason : null;
   const closedLabel = closedReason ? closedRideCopy(closedReason) : null;
   const shown = (available && pillReady) || !!closedLabel;
   // Under the cover the lift waits for the pill art (never past the cover's hard cap).
@@ -262,15 +270,15 @@ export default function RedeemModal({
           </View>}
         </Animated.View>
       )}
-      {task && !available && closedLabel && (
+      {!available && closedLabel && (task || movedOnShowing) && (
         <Animated.View pointerEvents="none" style={entrance} accessible
-          accessibilityLabel={closedLabel.sub ? closedLabel.a11y : `${task.name}. ${closedLabel.a11y}`}>
+          accessibilityLabel={closedLabel.sub || !task ? closedLabel.a11y : `${task.name}. ${closedLabel.a11y}`}>
           <View style={styles.closedPill}>
             <GameIcon name={closedLabel.icon} size={30} />
             <Text style={styles.closedText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{closedLabel.text}</Text>
           </View>
           <View style={styles.caption}>
-            <Text style={styles.captionText} numberOfLines={1}>{closedLabel.sub ?? task.name}</Text>
+            <Text style={styles.captionText} numberOfLines={1}>{closedLabel.sub ?? task?.name}</Text>
           </View>
         </Animated.View>
       )}

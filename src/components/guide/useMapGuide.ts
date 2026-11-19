@@ -215,9 +215,12 @@ export default function useMapGuide(input: MapGuideInput) {
     return () => clearTimeout(timer);
   }, [nextCoin.arrivedAt, flowClosedAt]);
   const appOpenId = currentAppOpen();
+  // Walking to the guide's coin, or standing at a coin with PLAY! up: nothing opens by itself over the one next thing
+  // (fix round w3: the Ride Journal opened over PLAY! at the Castle mid-walk).
+  const busyWithCoin = !!park && (nextCoin.state === 'walk' || playableTaskId != null);
   const attentionFor = (kind: Parameters<typeof autoOpenAllowed>[0]) => autoOpenAllowed(kind, {
     atPark: !!park, now: attentionClock >= 0 ? Date.now() : 0, arrivedAt: nextCoin.arrivedAt,
-    walkingToTarget: !!park && nextCoin.state === 'walk', playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,
+    walkingToTarget: busyWithCoin, playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,
     autoOpenUsed: attentionQueue.used(appOpenId, kind),
   });
   // Other lanes ask the same rules through attentionGate (the ride question, the membership look).
@@ -225,9 +228,9 @@ export default function useMapGuide(input: MapGuideInput) {
   const placeKnown = parkLoaded && (!!park || homeLocationConfirmed);
   useEffect(() => {
     if (!placeKnown) { attentionGate.hold(); return; }
-    attentionGate.publish({ atPark: !!park, arrivedAt: nextCoin.arrivedAt, walkingToTarget: !!park && nextCoin.state === 'walk',
+    attentionGate.publish({ atPark: !!park, arrivedAt: nextCoin.arrivedAt, walkingToTarget: busyWithCoin,
       playing: redeemFlowOpen, winCardClosedAt: flowClosedAt }, appOpenId);
-  }, [placeKnown, park, nextCoin.arrivedAt, nextCoin.state, redeemFlowOpen, flowClosedAt, appOpenId]);
+  }, [placeKnown, park, nextCoin.arrivedAt, busyWithCoin, redeemFlowOpen, flowClosedAt, appOpenId]);
 
   // Today's Adventure ticket tab on the guide card while the guide points elsewhere: opens its sheet.
   const adventureStampsKey = adventure ? `${+!!adventure.discover}${+!!adventure.play}${+(adventure.phase === 'complete')}` : '';

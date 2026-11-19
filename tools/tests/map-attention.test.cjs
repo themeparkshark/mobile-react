@@ -337,7 +337,7 @@ test('state B at the gate through the first coin: the map wiring keeps chests, r
   assert.match(explore, /&& !\(chestUnclaimed && !!dailyGift && !chestDismissed\(dailyGift\.id\)\) && attentionFor\('reward'\),/, 'level chests and Daily 3 sheets');
   assert.match(explore, /eventsRung\.open && attentionFor\('event_recap'\)/);
   assert.doesNotMatch(explore, /<ParkDayOffer|<NextUpRail|<DwellCard|<MapSuggestionStub/, 'no offer, rail or extra card over the map');
-  assert.match(explore, /walkingToTarget: !!park && nextCoin\.state === 'walk', playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,/);
+  assert.match(explore, /walkingToTarget: busyWithCoin, playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,/);
 });
 
 test('the Rewards button: one chest, one number; the flame after rung 4, the Trail ring after rung 6', () => {

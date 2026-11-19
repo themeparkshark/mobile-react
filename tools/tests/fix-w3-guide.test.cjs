@@ -281,3 +281,23 @@ test('safety finding 2: a PLAY! press while the last card is still leaving waits
   const src = read('src/components/RedeemModal.tsx');
   assert.match(src, /const how = pressQueue\.press\(\(\) => openRef\.current\(\)\);/);
 });
+
+test('T009 and the walk: the card says Tap PLAY! only once PLAY! is drawn, and nothing opens by itself over PLAY!', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /playableTaskId: playRideShown \? playableTaskId : null,/);
+  assert.ok(explore.indexOf('const [playRideShown, setPlayRideShown] = useState(false);') < explore.indexOf('} = useMapGuide({'),
+    'declared before the guide reads it');
+  const hook = read('src/components/guide/useMapGuide.ts');
+  assert.match(hook, /const busyWithCoin = !!park && \(nextCoin\.state === 'walk' \|\| playableTaskId != null\);/);
+  assert.match(hook, /attentionGate\.publish\(\{ atPark: !!park, arrivedAt: nextCoin\.arrivedAt, walkingToTarget: busyWithCoin,/);
+  const Q = loadTs('src/screens/ExploreScreen/mapPresentationQueue.ts');
+  const base = { atPark: true, now: 100_000, arrivedAt: 0, walkingToTarget: true, playing: false, winCardClosedAt: null, autoOpenUsed: false };
+  assert.equal(Q.autoOpenAllowed('ride_question', base), false, 'PLAY! up at a coin: the Ride Journal waits');
+});
+
+test('T012: "This coin moved on" keeps its full moment even when the next range answer drops the coin', () => {
+  const src = read('src/components/RedeemModal.tsx');
+  assert.match(src, /const movedOnShowing = !!movedOn\?\.showing && !available;/);
+  assert.match(src, /\{!available && closedLabel && \(task \|\| movedOnShowing\) && \(/);
+  assert.match(src, /setTimeout\(\(\) => setMovedOn\(current => current && \{ \.\.\.current, showing: false \}\), MOVED_ON_SHOW_MS\)/);
+});

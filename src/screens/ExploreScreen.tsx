@@ -1181,6 +1181,9 @@ export function ExploreScreenBody() {
   const queueDwell = useQueueDwell(park?.id ?? null, mapFocused && !!player, undefined, undefined, location ?? null);
 
   // The Next Coin guide, its card and tab actions and the attention clock (core loop 4.1 and 4.3): useMapGuide.
+  // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it, and the guide card
+  // says "Tap PLAY!" only once PLAY! is really drawn (its art in), never a beat before it (fix round w3 T009).
+  const [playRideShown, setPlayRideShown] = useState(false);
   const {
     guideFlags, coinLevelsRung, dailyRung, trailRung, eventsRung, claimable, claimableTicketCount, claimTickets, wallet, welcome,
     levelUpTaskId, setAdventureWonTaskId, nextCoin, guideShown, guideCoinUrl, hasWonACoin, guideTargetId, setGuidePathRequest, guideMapTarget, lineStoryIsland, adventureSheetRequest,
@@ -1189,9 +1192,9 @@ export function ExploreScreenBody() {
   } = useMapGuide({
     player, park, mapFocused, location, redeemables, visibleTasks, livePark, adventure, tripGoalData, queueDwell, starRides,
     rushes, rangeChecked,
-    // Another ride is selected: PLAY! hides (RedeemModal), so the guide must not say Tap PLAY! either.
-    // PLAY! always rises for the coin in range, whatever island is selected (T001): the guide hears the same answer.
-    playableTaskId,
+    // PLAY! always rises for the coin in range, whatever island is selected (T001): the guide hears the same answer,
+    // once PLAY! is drawn.
+    playableTaskId: playRideShown ? playableTaskId : null,
     adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
   });
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
@@ -1212,8 +1215,6 @@ export function ExploreScreenBody() {
   const leftSlotSwapGuard = useSwapTapGuard(leftSlotKey);
   // The Daily 3 / level chest overlay is up: other map moments wait their turn.
   const [retentionOccluding, setRetentionOccluding] = useState(false);
-  // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it.
-  const [playRideShown, setPlayRideShown] = useState(false);
   // Finn's "Let's hunt!" line closed on a first visit: free hunting starts now, and the chest may come 30 s later.
   const huntFree = caughtThisSession && !isActive && !firstLineGap && hasCompleted('home_first_find');
   useEffect(() => {
