@@ -160,3 +160,10 @@ test('T039 the shell art the coin card requires exists', () => {
   const rel = modal.match(/const SHELL_ART = require\('([^']+)'\)/)[1];
   assert.ok(fs.existsSync(path.join(root, 'src/components', rel)), rel);
 });
+
+test('T194 the credited coin is named like every other screen names it', () => {
+  const api = read('src/api/endpoints/gym-battle/index.ts');
+  assert.match(api, /ride_control_credit: withPlainField\(data\.ride_control_credit, 'ride_name'\)/);
+  const names = loadTs('src/helpers/plainRideName.ts');
+  assert.equal(names.plainRideName('Tiki Room'), 'Enchanted Tiki Room');
+});
