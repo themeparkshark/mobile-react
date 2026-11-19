@@ -92,3 +92,38 @@ test('T098 home shows no raid before the first ride coin and coin levels', () =>
   assert.equal(bar.homeLiveBar(quiet, false), null);
   assert.match(read('src/components/home/HomeLive.tsx'), /const live = sentLive && !raidsAllowed \? withoutRaids\(sentLive\) : sentLive;/);
 });
+
+/* T101: Ticket grants are seen, and the meter math reads right. */
+test('T101 one treat meter line everywhere: the count is the most it takes', () => {
+  const free = loadTs('src/services/guide/freeTickets.ts');
+  assert.equal(free.treatMeterLine(3), 'Up to 3 treats = 1 Ticket');
+  assert.equal(free.treatMeterLine(2), 'Up to 2 treats = 1 Ticket');
+  assert.equal(free.treatMeterLine(1), '1 more treat = 1 Ticket', 'the next one is the sure one');
+  assert.equal(free.treatMeterLine(null), 'Up to 3 treats = 1 Ticket');
+  for (const file of ['src/services/guide/guideCopy.ts', 'src/screens/ExploreScreen/homeFindCopy.ts', 'src/screens/ExploreScreen/HomeTicketProgress.tsx']) {
+    const src = read(file);
+    assert.match(src, /treatMeterLine\(/, `${file} uses the one meter line`);
+    assert.doesNotMatch(src, /more \$\{[^}]+\} = 1 Ticket|treats = 1 Ticket`/, `${file} has no second copy`);
+  }
+});
+
+test('T101 the park day starter plays as a moment: fly to the header with its reason, banner folded', () => {
+  const g = loadTs('src/services/rewards/ticketGrants.ts');
+  g.resetTicketGrantsForTests();
+  let heard = 0;
+  g.onTicketGrant(() => { heard += 1; });
+  g.announceTicketGrant({ amount: 2, reason: 'Park day starter' });
+  g.announceTicketGrant({ amount: 0, reason: 'nothing' });
+  assert.equal(heard, 1, 'a zero grant is never a moment');
+  const next = g.takeTicketGrant();
+  assert.equal(g.ticketGrantLine(next), '+2 Tickets: Park day starter');
+  assert.equal(g.takeTicketGrant(), null);
+  assert.match(read('src/context/LocationProvider.tsx'), /announceTicketGrant\(\{ amount: newPark\?\.welcome_tickets_granted \?\? 0, reason: 'Park day starter' \}\);/);
+  const b = loadTs('src/api/broadcastFilter.ts');
+  assert.deepEqual(plain(b.visibleBroadcasts(['Park day starter: +2 Tickets. Start a ride challenge!', 'Welcome to Disneyland Park!'], true)),
+    ['Welcome to Disneyland Park!']);
+  const host = read('src/components/rewards/TicketGrantMoment.tsx');
+  assert.match(host, /targetPosition: 'tickets'/);
+  assert.match(host, /gap\.current = setTimeout/, 'the gap timer survives re-renders');
+  assert.match(read('src/screens/ExploreScreen.tsx'), /<TicketGrantMoment calm=\{mapFocused && !isActive/);
+});

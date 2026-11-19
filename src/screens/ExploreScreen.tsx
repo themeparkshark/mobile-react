@@ -84,6 +84,7 @@ import { frightHelpChoices, frightOwnsParkTips, hideEveryRideOpen } from '../ser
 import type { FrightMapInput } from '../components/map/fright';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
+import TicketGrantMoment from '../components/rewards/TicketGrantMoment';
 import LiveEventsPill from '../components/LiveEventsPill';
 import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
@@ -2042,6 +2043,9 @@ export function ExploreScreenBody() {
         {/* T013: one small chip at the right, beside Rewards; the guide card owns the top-left. A boss moment
             on the map or an attack to check opens it as the full pill (the player is in that moment). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} compact={!bossMap.moment && !receiptNeedsCheck} />}
+        {/* Fix w4 T101: a Ticket grant with no card of its own (the park day starter) flies to the header with its reason. */}
+        <TicketGrantMoment calm={mapFocused && !isActive && !redeemFlowOpen && !retentionOccluding && !showPrepItemModal
+          && !bossOpen && !showTooFarModal && !showCommunityCenterModal} />
         {/* Shark Events (after their rung): the sweep and the gain toast sit under the guide card, never over it or PLAY!. */}
         {player && liveEvt.event && eventsShown && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>

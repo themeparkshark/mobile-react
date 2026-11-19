@@ -431,7 +431,7 @@ test('card words for every state: one title, one line, one button, in the 4.5 vo
   assert.equal(C.guideCardCopy('level_up', tgt({ reason: 'level_up', name: 'Haunted Mansion' }), ctx()).title, 'Haunted Mansion is ready to level up');
   const home = C.guideCardCopy('home', tgt({ reason: 'plan' }), ctx({ treatsToTicket: 2, planName: 'Jungle Cruise' }));
   assert.equal(home.title, 'Disneyland: 6 Tickets ready');
-  assert.equal(home.line, 'Next coin: Jungle Cruise. 2 more treats = 1 Ticket');
+  assert.equal(home.line, 'Next coin: Jungle Cruise. Up to 2 treats = 1 Ticket');
   assert.equal(home.button.action, 'plan');
   const back = C.guideCardCopy('welcome_back', tgt(), ctx({ shelf: { owned: 9, total: 35 } }));
   assert.equal(back.title, 'Your Disneyland shelf: 9 of 35');

@@ -1,4 +1,5 @@
 import { HOME_PREP_PICKUP_RADIUS_METERS } from './homePickupRange';
+import { treatMeterLine } from '../../services/guide/freeTickets';
 
 /**
  * Plain words for the home map. Every string a player reads about a find
@@ -87,7 +88,6 @@ export function findActionLine(distanceMeters: number): string {
  */
 export function ticketLine(findsUntilTicket: number | null | undefined, capped = false): string | null {
   if (capped || findsUntilTicket == null || !Number.isFinite(findsUntilTicket)) return null;
-  const finds = Math.max(1, Math.min(3, Math.round(findsUntilTicket)));
-  // Fix w3 T126: home pickups are treats everywhere ("3 treats at home = 1 Ticket").
-  return finds === 1 ? '1 more treat = 1 Ticket' : `${finds} more treats = 1 Ticket`;
+  // Fix w3 T126: home pickups are treats everywhere. Fix w4 T101: one meter line for every surface.
+  return treatMeterLine(findsUntilTicket);
 }

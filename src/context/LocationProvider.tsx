@@ -1,4 +1,5 @@
 import { openAppSettings } from '../services/external';
+import { announceTicketGrant } from '../services/rewards/ticketGrants';
 import * as Location from 'expo-location';
 import { createContext, FC, ReactNode, MutableRefObject, useContext, useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { AppState, Platform } from 'react-native';
@@ -430,6 +431,8 @@ export const LocationProvider: FC<{ children: ReactNode }> = ({ children }) => {
         setParkState(presenceRef.current.park);
         setParkLoaded(true);
         if ((newPark?.welcome_tickets_granted ?? 0) > 0) {
+          // Fix w4 T101: the park day starter has its moment on the map (fly to the header, one line why).
+          announceTicketGrant({ amount: newPark?.welcome_tickets_granted ?? 0, reason: 'Park day starter' });
           try {
             await refreshPlayer();
           } catch (error) {

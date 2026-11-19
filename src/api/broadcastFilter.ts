@@ -11,7 +11,9 @@ export const QUIET_COIN_BROADCAST = 'quietCoinBroadcast';
 // The server says "You earned 25 coins!" (HasCurrency) and older copy said "Shark Coins"; tickets the same way.
 // "You won a ride coin!" lands over the map a beat before the win card says the same thing (core loop row 329).
 // Fix W3 T068: a win's "You earned 1 Main Street U.S.A. Ride Parts!" is on the win card's reward row now, so it folds too.
-const COIN_EARNED = /^You earned \d+ (?:Shark )?(?:coins?|tickets?)!$|^You won a ride coin!$|^You earned \d+ .+ Ride Parts?!$/i;
+// Fix w4 T101: the park day starter ("Park day starter: +2 Tickets. Start a ride challenge!") has its own moment on the
+// map (services/rewards/ticketGrants): the Tickets fly to the header with that reason, so the banner folds too.
+const COIN_EARNED = /^You earned \d+ (?:Shark )?(?:coins?|tickets?)!$|^You won a ride coin!$|^You earned \d+ .+ Ride Parts?!$|^Park day starter: \+\d+ Tickets?\b/i;
 
 export function visibleBroadcasts<T>(broadcasts: readonly T[], quietCoins: boolean): T[] {
   if (!quietCoins) return [...broadcasts];
