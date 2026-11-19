@@ -90,6 +90,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     }),
     './checkpointCredit': require('./helpers/lineplay-checkpoint-credit.cjs'),
     './lineZone': require('./helpers/lineplay-zone.cjs'),
+    '../../constants/queueRideTypes': { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] },
     './queuePedometer': { prepareQueuePedometer: async () => {}, readQueueSteps: async () => null },
   };
   const moduleRef = { exports: {} };
@@ -1130,4 +1131,44 @@ test('T089: "Sign said" is the posted wait when the line started, never an hours
   b.dispose();
   const screen = fs.readFileSync(path.join(root, 'src/screens/LinePlay/LinePlayScreen.tsx'), 'utf8');
   assert.match(screen, /postedMinutes: snapshot\.signAtStartMinutes,/);
+});
+
+test('T081: a walk-in show (catalog type show) plays games only: no line story, no line session, no timed wait', async () => {
+  const chapter = { id: 'dl-lincoln', navigationPanel: false };
+  const { Session, calls } = makeHarness(null, server, chapter);
+  const session = new Session();
+  const sample = { latitude: 1, longitude: 2, timestamp: Date.now() };
+  await session.start({ ...ride, rideName: 'Great Moments with Mr. Lincoln', rideType: 'show' }, sample, 12);
+  await session.heartbeat(sample);
+  const snap = session.snapshot();
+  assert.equal(snap.chapter, null, 'never a line story');
+  assert.equal(calls.chapterArgs.length, 0);
+  assert.equal(calls.start, 0, 'never asks the server for a line session');
+  assert.equal(snap.rewardUnavailable, true);
+  assert.equal(snap.waitTimed, false, 'so the recap never reports a wait');
+  assert.ok(snap.playlist.length > 0, 'the games are still there');
+  assert.ok(!snap.playlist.some(item => item.kind === 'chapter_intro'));
+  session.dispose();
+  // A queue ride (or an unknown type, as before) still looks for its story.
+  for (const rideType of ['attraction', undefined]) {
+    const queue = makeHarness(null, server, null);
+    const s2 = new queue.Session();
+    await s2.start({ ...ride, rideType }, sample, 12);
+    assert.equal(queue.calls.chapterArgs.length, 1, String(rideType));
+    s2.dispose();
+  }
+});
+
+test('T081: the server saying NOT_A_QUEUE_RIDE (B04) ends the timed wait on the phone too', async () => {
+  const { Session, calls } = makeHarness(null, () => { throw { response: { status: 422, data: { code: 'NOT_A_QUEUE_RIDE' } } }; });
+  const session = new Session();
+  const sample = { latitude: 1, longitude: 2, timestamp: Date.now() };
+  await session.start(ride, sample, 12);
+  await session.heartbeat(sample);
+  const snap = session.snapshot();
+  assert.equal(calls.start, 1, 'asked once, never retried');
+  assert.equal(snap.rewardUnavailable, true);
+  assert.equal(snap.waitTimed, false);
+  assert.equal(snap.rewardConnectionIssue, null, 'not a network problem');
+  session.dispose();
 });

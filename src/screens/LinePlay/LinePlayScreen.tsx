@@ -47,7 +47,7 @@ import { keepRideStepLog, releaseRideLogHold } from '../../services/rideLogOutbo
 import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
 import { slotPartsShown, waitingSlotParts } from '../../services/lineplay/slotParts';
 import { celebrateAdventureTicket, getTripGoal } from '../../api/endpoints/me/trip-goal';
-import { lineZoneForRide, loadParkRides } from '../../services/lineplay/resolveRide';
+import { lineZoneForRide, loadParkRides, rideTypeForRide } from '../../services/lineplay/resolveRide';
 import { startAwayCopy, startAwayMeters } from '../../services/lineplay/lineZone';
 import { readCheckpoint } from '../../services/lineplay/checkpoint';
 import { guide } from '../../services/guide/nextCoin';
@@ -548,11 +548,13 @@ export default function LinePlayScreen() {
     void (async () => {
       // Honesty (T071): the ride's line zone rides along, so the session claims a wait only with evidence of it.
       const zone = ride.zone !== undefined ? ride.zone : await lineZoneForRide(ride.parkId, ride.rideId);
+      // T081: a walk-in show or walk-through (the catalog's type) plays games only, never a line story or wait recap.
+      const rideType = ride.rideType !== undefined ? ride.rideType : await rideTypeForRide(ride.parkId, ride.rideId);
       const saved = playerId ? await readCheckpoint(playerId, ride.rideId).catch(() => null) : null;
       if (startedRef.current !== owner) return;
       const freshSample = latestLocationSampleRef.current;
       const sample = isRecentQueueSample(freshSample) ? freshSample : undefined;
-      const zoned: RideContext = { ...ride, zone };
+      const zoned: RideContext = { ...ride, zone, rideType };
       // A fresh start from outside the line asks first; a wait already running here reopens as it was.
       const away = saved?.state === 'active' ? null : startAwayMeters(sample, zone);
       if (away != null) { setAwayAsk({ meters: away, ride: zoned, playerId }); return; }

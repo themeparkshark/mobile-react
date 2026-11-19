@@ -106,6 +106,30 @@ export async function lineZoneForRide(parkId: number | null | undefined, rideId:
 }
 
 /**
+ * The ride's catalog type (T081), cached with the catalog, or undefined when the catalog does not answer in time
+ * (LinePlay then starts as before). The server retypes walk-in shows and walk-throughs (B04), so a show never
+ * gets a line story or a wait recap.
+ */
+export async function rideTypeForRide(parkId: number | null | undefined, rideId: number, timeoutMs = 3_000): Promise<string | undefined> {
+  if (!parkId || !(rideId > 0)) return undefined;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const rides = await Promise.race([loadParkRides(parkId),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); })]);
+    return rides?.find(item => item.id === rideId)?.type;
+  } catch {
+    return undefined;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/** A catalog type that has a line to wait in (QUEUE_RIDE_TYPES). Unknown (undefined or null) counts as a line, as today. */
+export function rideHasQueue(type: string | null | undefined): boolean {
+  return type == null || QUEUE_TYPES.has(type);
+}
+
+/**
  * The coin task for each wait-times row (by the same name matching as LinePlay), so Wait Times can say
  * "Make this my next coin" through the guide. Rows with no coin are left out.
  */
@@ -149,6 +173,7 @@ export async function resolveRideContext(
       waitFeedRideId,
       imageUrl: ride.image_url,
       lineRewardsReady: ride.line_rewards_ready,
+      rideType: ride.type,
     };
   } catch {
     return null;
@@ -173,6 +198,7 @@ export async function resolveRideContextById(parkId: number, rideId: number): Pr
         postedWaitMinutes: null,
         imageUrl: ride.image_url,
         lineRewardsReady: ride.line_rewards_ready,
+        rideType: ride.type,
       };
     }
     return null;
