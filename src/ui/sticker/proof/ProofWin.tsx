@@ -208,7 +208,7 @@ function WinCard({ coins }: { readonly coins: Readonly<Record<string, ImageSourc
                     </View>
                     <PrizeCount value={p.count} delay={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap + WIN_BEATS.countLead} reduced={reduced} />
                     {/* Two lines at large text sizes ("Shark / Coins"), never an ellipsis. */}
-                    <Body size="small" soft lines={2}>{p.name}</Body>
+                    <Body size="small" soft lines={2} style={{ alignSelf: 'stretch' }}>{p.name}</Body>
                   </>
                 )}
               </Arrive>
