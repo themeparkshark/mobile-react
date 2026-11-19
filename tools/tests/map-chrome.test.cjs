@@ -227,5 +227,5 @@ test('(c, h) a hidden find never draws or takes a tap: the catch hand-off style 
   const marker = read('src/screens/ExploreScreen/HomeFindMarker.tsx');
   assert.match(marker, /touchEnabled=\{!hidden\}/);
   // The group's count never sits under the hand.
-  assert.match(item, /cues\.finger && leftSide && !below && styles\.countBadgeRight/);
+  assert.match(item, /cues\.finger && leftSide && !below && styles\.countBadgeLow/);
 });
