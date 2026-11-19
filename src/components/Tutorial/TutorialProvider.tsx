@@ -9,7 +9,7 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TutorialContextType, TutorialSequence, TutorialStep, SpotlightTarget } from './types';
 import { getStepsForSequence, HOME_LOOKING_MS } from './steps';
-import { guideShowsOn, teacherBottomOffset } from './tutorialLayout';
+import { guideLeftItsScreen, guideShowsOn, teacherBottomOffset } from './tutorialLayout';
 import { navigationRef } from '../../RootNavigation';
 import { Dimensions } from 'react-native';
 import SpotlightOverlay from './SpotlightOverlay';
@@ -295,7 +295,17 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     sync();
     try { return navigationRef.addListener('state', sync); } catch { return undefined; }
   }, []);
-  const guideOnScreen = guideShowsOn(MAP_SEQUENCES.has(currentSequence as TutorialSequence), routeName);
+  const guideOnScreen = guideShowsOn(isActive ? currentSequence : null, routeName);
+  // A screen tip whose screen was left ends unseen (it greets the next visit), never blocking the screen below.
+  const leftItsScreen = isActive && !firstPlayOpen && guideLeftItsScreen(currentSequence, routeName);
+  useEffect(() => {
+    if (!leftItsScreen) return;
+    setIsActive(false);
+    setCurrentSequence(null);
+    setCurrentSteps([]);
+    setCurrentIndex(0);
+    setSpotlightTarget(null);
+  }, [leftItsScreen]);
 
   const currentStep = isActive && currentSteps.length > 0 ? currentSteps[currentIndex] : null;
 

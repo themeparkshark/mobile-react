@@ -66,15 +66,20 @@ test('N05: the bubble does not pop on its own UI timer before any word can show'
   assert.doesNotMatch(src, /bubbleValue\.value = withDelay\(/, 'no bubble pop scheduled apart from the words');
 });
 
-test('N05: map guides wait while another screen is on top of the map', () => {
-  assert.equal(layout.guideShowsOn(true, 'Explore'), true);
-  assert.equal(layout.guideShowsOn(true, 'Store'), false, "Finn's home hello never draws over the Shark Shop");
-  assert.equal(layout.guideShowsOn(true, 'SharkPass'), false);
-  assert.equal(layout.guideShowsOn(true, undefined), true, 'before navigation is ready');
-  assert.equal(layout.guideShowsOn(false, 'Store'), true, "the shop's own tip shows on the shop");
+test('N05: a guide draws only over its own screen; a left screen tip ends unseen', () => {
+  assert.equal(layout.guideShowsOn('onboarding', 'Explore'), true);
+  assert.equal(layout.guideShowsOn('onboarding', 'Store'), false, "Finn's home hello never draws over the Shark Shop");
+  assert.equal(layout.guideShowsOn('park_arrival', 'SharkPass'), false);
+  assert.equal(layout.guideShowsOn('onboarding', undefined), true, 'before navigation is ready');
+  assert.equal(layout.guideShowsOn('store', 'Store'), true, "the shop's own tip shows on the shop");
+  assert.equal(layout.guideShowsOn('store', 'Profile'), false, 'the shop tip never follows the player back to Profile');
+  assert.equal(layout.guideLeftItsScreen('store', 'Profile'), true);
+  assert.equal(layout.guideLeftItsScreen('store', 'Store'), false);
+  assert.equal(layout.guideLeftItsScreen('onboarding', 'Store'), false, 'map guides pause, they never end unseen');
   const provider = read('src/components/Tutorial/TutorialProvider.tsx');
-  assert.match(provider, /guideShowsOn\(MAP_SEQUENCES\.has/);
+  assert.match(provider, /guideShowsOn\(isActive \? currentSequence : null, routeName\)/);
   assert.match(provider, /!firstPlayOpen && guideOnScreen &&/);
+  assert.match(provider, /if \(!leftItsScreen\) return;\s*setIsActive\(false\);/);
 });
 
 test('N05: the Shark Shop tip waits for a loaded, painted shop (no fixed 800 ms timer)', () => {
