@@ -66,7 +66,8 @@ test('T077: the story tells this ride’s own checked fact, and a ride with no f
   // A Main Street ride with no fact: on the street, its true street line, no fan fact, no other ride's name.
   const vehicles = chapters.getLinePlayChapter(8, 'main-street-vehicles-8', 'Main Street Vehicles', 0, 597);
   const street = chapters.chapterStoryText(vehicles, []);
-  assert.match(street, /^Main Street Vehicles, on Main Street, U\.S\.A\./);
+  assert.match(street, /^Main Street Vehicles, on Main Street, U\.S\.A\. Your shark crew/);
+  assert.doesNotMatch(street, /\.\./, 'never a double stop');
   assert.match(street, /small American town from around 1900/);
   assert.doesNotMatch(street, /Fan fact|Autopia/);
 });

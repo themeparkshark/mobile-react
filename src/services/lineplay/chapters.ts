@@ -346,7 +346,9 @@ export function adaptiveEpisodeCountForRide(rideName: string, parkId?: number): 
 /** "Autopia, in Tomorrowland." The ride and where it stands, in plain words. */
 function rideIntro(name: string, land: string | null, park: string | null): string {
   // A street takes "on" (on Main Street, U.S.A.); every other land takes "in".
-  return land ? `${name}, ${/^Main Street/.test(land) ? 'on' : 'in'} ${land}.` : park ? `${name}, at ${park}.` : `${name}.`;
+  const line = land ? `${name}, ${/^Main Street/.test(land) ? 'on' : 'in'} ${land}` : park ? `${name}, at ${park}` : name;
+  // One stop, even when the place ends in one (U.S.A.).
+  return /[.!?]$/.test(line) ? line : `${line}.`;
 }
 
 /** A checked fact short enough for a story line; long ones only when nothing shorter exists. */
