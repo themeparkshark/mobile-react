@@ -15,7 +15,7 @@
  * map (the baseline for measuring what the chrome covers).
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, StyleSheet, View } from 'react-native';
+import { Image, StyleSheet, View, useWindowDimensions } from 'react-native';
 import CurrencyChip from '../CurrencyChip';
 import Lift from '../Lift';
 import Page from '../Page';
@@ -27,7 +27,7 @@ import Tag from '../Tag';
 import { Body, Caps, Name } from '../Text';
 import { showToast } from '../Toast';
 import { ART, ART_RATIO } from '../art';
-import { toastLane } from '../layout';
+import { screenFrameWidth, toastLane } from '../layout';
 import { DROP, SPACE, TAG } from '../tokens';
 import { useParkCoinArt } from './proofCoins';
 
@@ -45,7 +45,11 @@ const FOOTER_ITEMS = [
 /** A tag's laid-out height on the map: the pill and its 3 pt map drop. */
 const TAG_ON_MAP = TAG.height + DROP.tagOnMap;
 /** The guide coin hangs 8 pt off the card's left end (kept 8 pt from the screen edge). */
-const GUIDE_COIN = 58;
+const GUIDE_COIN = 52;
+/** The guide card hugs its words (no wider than this): every point it does not take is park. */
+const GUIDE_W = 272;
+/** Room the discs beside it keep (their column and the gap). */
+const DISC_COLUMN = 62;
 
 /** The real park, full screen, under everything (the ground, never content). */
 export function ParkMap() {
@@ -66,6 +70,7 @@ function ParkTag() {
 }
 
 export default function ProofMap({ toastOnOpen = false, bare = false }: { readonly toastOnOpen?: boolean; readonly bare?: boolean }) {
+  const { width } = useWindowDimensions();
   const [tab, setTab] = useState('map');
   const coins = useParkCoinArt(useMemo(() => [COIN], []));
   const coin = coins[COIN];
@@ -82,9 +87,9 @@ export default function ProofMap({ toastOnOpen = false, bare = false }: { readon
     <Screen testID="proof-map" ground="map" mapLayer={<ParkMap />} scroll={false}
       header={{ children: [<CurrencyChip key="c" kind="coins" value={350} />, <CurrencyChip key="t" kind="tickets" value={2} />] }}
       footer={{ items: FOOTER_ITEMS, picked: tab, onPick: setTab }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: SPACE.cardGap, marginTop: toastLane() }}>
-        <View style={{ flex: 1 }}>
-          <Page small padding="snug" onEdge={{ end: { node: <ParkTag />, height: TAG_ON_MAP } }}
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginTop: toastLane() }}>
+        <View>
+          <Page small padding="snug" width={Math.min(GUIDE_W, screenFrameWidth(width) - DISC_COLUMN)} onEdge={{ end: { node: <ParkTag />, height: TAG_ON_MAP } }}
             sideArt={coin ? { source: coin, width: GUIDE_COIN, height: GUIDE_COIN, along: 12 } : undefined}>
             <View accessible accessibilityLabel={`Next coin: ${COIN}. You're here! Tap PLAY! One ticket plays it.`} style={{ paddingTop: SPACE.base }}>
               <Caps gold role="none">Next coin</Caps>
@@ -99,24 +104,24 @@ export default function ProofMap({ toastOnOpen = false, bare = false }: { readon
           </Page>
         </View>
         <View style={{ gap: SPACE.cardGap, alignItems: 'center' }}>
-          <RoundButton kind="base" accessibilityLabel="Follow my shark" size={52} art={ART.followShark} onPress={noop} />
-          <RoundButton kind="base" accessibilityLabel="Daily chest, 2 ready" size={54} art={ART.chestClosed} badge={2} onPress={noop} />
+          <RoundButton kind="base" accessibilityLabel="Follow my shark" size={48} art={ART.followShark} onPress={noop} />
+          <RoundButton kind="base" accessibilityLabel="Daily chest, 2 ready" size={50} art={ART.chestClosed} badge={2} onPress={noop} />
         </View>
       </View>
       <View style={{ flex: 1 }} />
       <View style={{ flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between' }}>
         <View style={{ gap: SPACE.base * 2, alignItems: 'center' }}>
-          <RoundButton kind="help" accessibilityLabel="How to play at the park" size={48} onPress={noop} />
-          <RoundButton kind="disc" accessibilityLabel="Wait Times" size={60} art={ART.queueTimes} artRatio={ART_RATIO.queueTimes} onPress={noop} />
+          <RoundButton kind="help" accessibilityLabel="How to play at the park" size={44} onPress={noop} />
+          <RoundButton kind="disc" accessibilityLabel="Wait Times" size={54} art={ART.queueTimes} artRatio={ART_RATIO.queueTimes} onPress={noop} />
         </View>
         <View style={{ alignItems: 'center', gap: SPACE.base * 2, paddingBottom: SPACE.base }}>
-          <StickerButton label="PLAY!" variant="primary" size="large" width={196} accessibilityLabel={`Play for the ${COIN} coin, 1 ticket`} onPress={play} />
+          <StickerButton label="PLAY!" variant="primary" size="large" width={164} accessibilityLabel={`Play for the ${COIN} coin, 1 ticket`} onPress={play} />
           <Tag label={`${COIN}, 1 ticket`} leading={(
             coin ? <Lift source={coin} width={18} height={18} flat /> : <Spot state="next" size={18} />
           )} after={{ icon: ART.ticket, iconRatio: ART_RATIO.ticket, text: '1' }}>{COIN}</Tag>
         </View>
         <View style={{ alignItems: 'center' }}>
-          <RoundButton kind="base" accessibilityLabel="Shelf: your coins at this park" size={60} art={ART.pinShark} onPress={noop} />
+          <RoundButton kind="base" accessibilityLabel="Shelf: your coins at this park" size={54} art={ART.pinShark} onPress={noop} />
           <Tag style={{ marginTop: -SPACE.base * 2 }}>Shelf</Tag>
         </View>
       </View>
