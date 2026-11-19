@@ -334,7 +334,7 @@ test('every phone: the one-time Map spin hint sits where the map chrome layout f
   assert.match(src, /hint && hintDrop > 0 && \{ top: hintDrop \}/);
   const map = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/Map.tsx'), 'utf8');
   assert.match(map, /tipSpot\(anchor, /);
-  assert.match(map, /hintDrop=\{hintDropRef\.current\}/);
+  assert.match(map, /hintDrop=\{hintDropRef\.current \?\? 0\}/);
 });
 
 test('standing at a ride, its timer chip and gift rise clear of the shark and its view cone', () => {

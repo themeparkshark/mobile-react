@@ -923,8 +923,9 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   compassHintRef.current = compassHint.visible ? compassHint.dismiss : null;
   useEffect(() => { if (compassTip.visible) markMapTipShown(currentAppOpen(), 'map_compass'); }, [compassTip.visible]);
   // The spot the hint was claimed in stays put while it shows (no jump if a marker drifts in later).
-  const hintDropRef = useRef(0);
-  if (compassGate && !compassHint.visible) hintDropRef.current = compassGate.drop;
+  const hintDropRef = useRef<number | null>(null);
+  if (!compassHint.visible) hintDropRef.current = null;
+  else if (hintDropRef.current == null) hintDropRef.current = compassGate?.drop ?? 0;
   const chromeOff = chromeHidden ? 1 : 0;
   // Round 5: every Map commit re-sends the rail's style for a moment (commitHeal), so it never shows a stale frame.
   useCommitHeal(chromeHeal);
@@ -980,7 +981,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* The compass: how the map turns (with you, or north up); panned away, back to the shark. */}
         <FollowButton state={focusedOnPlayer || followHold ? shownMode : 'away'} bearing={cam.bearing} onPress={onFollowButton}
           compassAvailable={haveHeading}
-          reducedMotion={reducedMotion} hint={compassHint.visible && (haveHeading || devHint)} hintDrop={hintDropRef.current} onHintDone={compassHint.dismiss}
+          reducedMotion={reducedMotion} hint={compassHint.visible && (haveHeading || devHint)} hintDrop={hintDropRef.current ?? 0} onHintDone={compassHint.dismiss}
           noCompassFlash={noCompassFlash}
           awayArt={hasDressedShark(lookInventory) ? <View style={styles.awaySharkScale}><MapSharkLook inventory={lookInventory} t={fxClock} kick={fxKick} animate={false} playing={false} /></View> : undefined} />
         {/* The extras always sit in this one wrapper (beside the compass on a short phone, under it
