@@ -234,3 +234,11 @@ test('T120 the first catch shows a 2 s toast (no card, no button); later catches
   assert.match(provider, /const completeSequence = useCallback\(\(sequence: TutorialSequence\) => \{/);
   assert.match(provider, /persistCompleted\(newCompleted\);\n  \}, \[completedSequences, persistCompleted\]\);/, 'saved like a finished card');
 });
+
+test('T100 a slow stamp read never leaves CLAIM ALL doing nothing: the newest read shows the stamps, else a line says so', () => {
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /try \{ read = await getStamps\(\); lastStampsRead\.current = read; \} catch \{ read = lastStampsRead\.current; \}/);
+  assert.match(hook, /if \(!read\) \{ setRewardsNote\(`Your stamps did not load\. \$\{tryAgainLine\(\)\}`\); return; \}/);
+  assert.match(hook, /for \(const st of current\.claims\) \{/, 'the stamps on screen are the ones claimed');
+  assert.match(hook, /catch \{ left = Math\.max\(failed, stamps - claimed\); \}/);
+});

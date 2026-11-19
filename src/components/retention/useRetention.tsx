@@ -80,7 +80,7 @@ type View_ =
   | { k: 'sheet' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean }
   /** Fix w4 T100: the stamps being claimed, face up; a tap claims them all and the prizes land one by one. */
-  | { k: 'stamps'; faces: readonly StampFace[]; rewards: PaidRewards | null; opening: boolean; title: string | null; worn: boolean; waiting: number }
+  | { k: 'stamps'; faces: readonly StampFace[]; claims: readonly StampClaim[]; rewards: PaidRewards | null; opening: boolean; title: string | null; worn: boolean; waiting: number }
   | { k: 'freeze' }
   | { k: 'freezeSaved'; days: number; streak: number }
   | { k: 'push' }
@@ -297,12 +297,15 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     if (playerId == null) return;
     void daily3SeenDate(playerId).then(d => { if (mounted.current) setSeenDate(d); });
   }, [playerId]);
+  // The newest stamp read (fix w4 T100): CLAIM ALL shows the waiting stamps at once from it when a fresh read is slow.
+  const lastStampsRead = useRef<Awaited<ReturnType<typeof getStamps>> | null>(null);
   const refreshStamps = useCallback(async (force = false) => {
     if (playerId == null) return;
     const cached = force ? null : readStampDotCache(playerId);
     if (cached != null) { setStamps(cached); return; }
     try {
       const r = await getStamps();
+      lastStampsRead.current = r;
       // The Stamp Book's own count (it honors the server's summary.claimable), so the row and Profile agree.
       const n = stampClaimableCount(r);
       writeStampDotCache(playerId, n);
@@ -609,14 +612,19 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const openStampClaim = async () => {
     if (rewardsBusy) return;
     setRewardsBusy('stamps');
-    let faces: StampFace[] = [];
-    try { faces = stampFaces(await getStamps()); } catch { faces = []; }
+    // A fresh read, or (slow server) the newest read this map already made: the server still checks every claim.
+    let read: Awaited<ReturnType<typeof getStamps>> | null = null;
+    try { read = await getStamps(); lastStampsRead.current = read; } catch { read = lastStampsRead.current; }
     if (!mounted.current) return;
     setRewardsBusy(null);
+    // No read at all says so on the card (never a tap that does nothing); the row keeps CLAIM ALL.
+    if (!read) { setRewardsNote(`Your stamps did not load. ${tryAgainLine()}`); return; }
+    const faces = stampFaces(read);
+    const claims = stampsToClaim(read);
     // Nothing was waiting after all (an old count): the row just updates quietly.
-    if (faces.length === 0) { setRewardsNote(null); void refreshStamps(true); return; }
+    if (faces.length === 0 || claims.length === 0) { setRewardsNote(null); void refreshStamps(true); return; }
     backToRewards.current = true;
-    setView({ k: 'stamps', faces, rewards: null, opening: false, title: null, worn: false, waiting: 0 });
+    setView({ k: 'stamps', faces, claims, rewards: null, opening: false, title: null, worn: false, waiting: 0 });
   };
 
   const claimStamps = async () => {
@@ -630,8 +638,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     let left: number | null = null;
     let title: string | null = null; let worn = false;
     try {
-      const r = await getStamps();
-      for (const st of stampsToClaim(r)) {
+      // The stamps on screen are the ones claimed (no second read before the first claim).
+      for (const st of current.claims) {
         // T094: a claim whose answer was lost is read back (the server may still be paying); only a stamp the
         // server still holds after its window counts as failed, and that stamp stays on the row with RETRY.
         const res = await claimOrReconcile(
@@ -651,9 +659,11 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         if (res.lost && res.answered) continue;
         sum.tickets += res.paid.tickets ?? 0; sum.coins += res.paid.coins ?? 0; sum.energy += res.paid.energy ?? 0; sum.xp += res.paid.xp ?? 0;
       }
-      // Read back what is still waiting (the server's own count), so the row is honest after every claim.
-      left = claimed > 0 || failed > 0 ? stampClaimableCount(await getStamps()) : stampClaimableCount(r);
     } catch { failed += 1; }
+    // Read back what is still waiting (the server's own count), so the row is honest after every claim; a slow
+    // read counts down from what was on the row.
+    try { const after = await getStamps(); lastStampsRead.current = after; left = stampClaimableCount(after); }
+    catch { left = Math.max(failed, stamps - claimed); }
     opening.current = false;
     if (!mounted.current) return;
     const waiting = left ?? Math.max(failed, stamps);
@@ -1015,6 +1025,9 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
 
   return { button, overlay, occluding: visible, openRewards, rewards: settledSummary };
 }
+
+/** A stamp to claim and what it pays (the Stamp Book's rule, stampsToClaim). */
+type StampClaim = { readonly id: number; readonly rewards: { energy: number; tickets: number; xp: number; coins: number } };
 
 /** A stamp shown face up in the claim (fix w4 T100). */
 export interface StampFace { readonly id: number; readonly name: string; readonly art: string | null }
