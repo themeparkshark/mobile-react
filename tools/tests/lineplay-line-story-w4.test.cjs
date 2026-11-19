@@ -192,3 +192,9 @@ test('T077: cachedRideFacts reads only rows keyed to this ride', async () => {
   assert.deepEqual([...triviaDeck.cachedRideFacts(8, 584)], []);
   assert.deepEqual([...triviaDeck.cachedRideFacts(8, undefined)], []);
 });
+
+test('T075: a new puzzle round starts clean in the same update that deals it (no locked first tap)', () => {
+  const card = read('src/screens/LinePlay/components/PicturePuzzleCard.tsx');
+  assert.match(card, /const nextRound = \(value: number\) => \{ setWrong\(\[\]\); setRight\(null\); setRound\(value\); \};/);
+  assert.doesNotMatch(card, /useEffect\(\(\) => \{ setWrong\(\[\]\); setRight\(null\); \}/);
+});

@@ -130,7 +130,9 @@ export default function PicturePuzzleCard({ kind, deckId, seed, title, completed
   const twin = useMemo(() => kind === 'twin' ? twinRound(dealSeed, Math.min(round, rounds - 1), deck.symbols.length) : null,
     [kind, dealSeed, round, rounds, deck.symbols.length]);
 
-  useEffect(() => { setWrong([]); setRight(null); }, [round, replay]);
+  // A new round starts clean in the same update that deals it (no frame where the new pictures are locked
+  // or a picture from the last round still shows its check).
+  const nextRound = (value: number) => { setWrong([]); setRight(null); setRound(value); };
 
   // Sizes come from the page's real width and height, so a whole round fits the first screen on every phone.
   const usable = Math.max(0, width);
@@ -160,12 +162,12 @@ export default function PicturePuzzleCard({ kind, deckId, seed, title, completed
         setSolvedHere(true);
         if (!completed) onSolved();
       } else {
-        setRound(value => value + 1);
+        nextRound(round + 1);
       }
     }, reduced ? 250 : 650);
   };
 
-  const again = () => { setSolvedHere(false); setRound(0); setReplay(value => value + 1); };
+  const again = () => { setSolvedHere(false); nextRound(0); setReplay(value => value + 1); };
   const onLayout = (event: LayoutChangeEvent) => {
     const next = Math.round(event.nativeEvent.layout.width);
     if (next !== width) setWidth(next);
