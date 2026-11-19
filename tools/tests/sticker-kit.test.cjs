@@ -268,3 +268,47 @@ test('the shelf grid never renders React while scrolling: memoised cells, no onS
   assert.match(text, /const ShelfRow = memo\(/);
   assert.doesNotMatch(text, /onScroll|useAnimatedScrollHandler/);
 });
+
+// ---------- top bar fix (Dustin, Nov 19): straight edge, no taller than today, covers nothing ----------
+const jsxStub = { jsx: () => null, jsxs: () => null, Fragment: 'F' };
+const header = loadTs('src/ui/sticker/Header.tsx', {
+  react: { memo: x => x, useRef: v => ({ current: v }) },
+  'react-native': { View: 'View', useWindowDimensions: () => ({ width: 402 }) },
+  'react-native-safe-area-context': { useSafeAreaInsets: () => ({ top: 62, bottom: 34 }) },
+  'react-native-svg': {},
+  'react/jsx-runtime': jsxStub,
+  './RoundButton': {}, './StickerContext': {}, './StickerText': {}, './art': { ART: {} }, './level': { WORLD: 1 },
+});
+
+test('the Header draws no wave: its outline is a straight rectangle and it never calls bandPath', () => {
+  assert.equal(header.headerPath(402, 108), 'M0,0 L402,0 L402,108 L0,108 Z');
+  const text = source(path.join(dir, 'Header.tsx'));
+  const body = text.slice(text.indexOf('function HeaderImpl'));
+  assert.doesNotMatch(body, /bandPath|wavePath|WAVE\./, 'the Header component draws a wave');
+  assert.doesNotMatch(body, /<Path d=\{d\} transform/, 'the line, edge or drop follows a shaped path');
+  assert.match(body, /headerPath\(width, crest\)/);
+});
+
+test('the Header is never taller than today\'s top bar for the same safe area', () => {
+  const topbar = source(path.join(root, 'src/components/Topbar.tsx'));
+  const today = Number(/height: (\d+) \+ Constants\.statusBarHeight/.exec(topbar)[1]);
+  assert.equal(header.TOPBAR_TODAY, today, 'TOPBAR_TODAY matches src/components/Topbar.tsx');
+  for (const inset of [20, 47, 54, 59, 62]) {
+    assert.ok(header.headerHeight(inset) <= inset + today, `inset ${inset}: ${header.headerHeight(inset)} > ${inset + today}`);
+  }
+  // iPhone 17 Pro: safe area 62, status bar 54, so today's bar is 124 pt and the Header 118.5.
+  assert.ok(header.headerHeight(62) <= 54 + today);
+});
+
+test('content starts below the bar: the proof screens take their top from headerContentTop', () => {
+  assert.equal(header.headerContentTop(62), header.headerHeight(62) + tokens.HEADER.gap);
+  assert.equal(header.headerContentTop(62, 36), header.headerHeight(62) + tokens.HEADER.gap + 36);
+  for (const name of ['ProofGate.tsx', 'ProofRewards.tsx', 'ProofShelf.tsx']) {
+    const text = source(path.join(dir, 'proof', name));
+    assert.match(text, /headerContentTop\(insets\.top/, `${name} does not start its content at headerContentTop`);
+    assert.doesNotMatch(text, /headerHeight\(/, `${name} places content from the bar height by hand`);
+  }
+  const shelf = source(path.join(dir, 'proof', 'ProofShelf.tsx'));
+  assert.match(shelf, /headerContentTop\(insets\.top, SHARK_HANG\)/, 'the shelf leaves room for the shark above its page');
+  assert.match(shelf, /top: -SHARK_HANG/);
+});

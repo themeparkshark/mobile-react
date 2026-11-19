@@ -14,12 +14,18 @@ import { INK } from './tokens';
 /** Side margin of a floating sheet or dialog (the board: 24 on a 390 phone). */
 export const OVERLAY_MARGIN = 24;
 
-function OverlayImpl({ children, top = 0 }: { readonly children: ReactNode; /** Extra room at the top (a ribbon above the sheet). */ readonly top?: number }) {
+function OverlayImpl({ children, top = 0, contentTop }: {
+  readonly children: ReactNode;
+  /** Extra room at the top (a ribbon above the sheet). */
+  readonly top?: number;
+  /** Where the room starts. Under a Header pass `headerContentTop(insets.top)`, so the sheet and its label art stay below the bar. */
+  readonly contentTop?: number;
+}) {
   const insets = useSafeAreaInsets();
   return (
     <View style={[StyleSheet.absoluteFill, { zIndex: 50 }]} pointerEvents="box-none">
       <View style={[StyleSheet.absoluteFill, { backgroundColor: INK.scrim }]} />
-      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: OVERLAY_MARGIN, paddingTop: insets.top + 12 + top, paddingBottom: Math.max(insets.bottom, 12) + 8 }} pointerEvents="box-none">
+      <View style={{ flex: 1, justifyContent: 'center', paddingHorizontal: OVERLAY_MARGIN, paddingTop: (contentTop ?? insets.top + 12) + top, paddingBottom: Math.max(insets.bottom, 12) + 8 }} pointerEvents="box-none">
         <PlaceProvider value={WORLD}>{children}</PlaceProvider>
       </View>
     </View>

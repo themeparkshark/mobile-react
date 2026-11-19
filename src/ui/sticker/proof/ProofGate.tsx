@@ -7,10 +7,11 @@
 import { useCallback, useState } from 'react';
 import { View } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Card from '../Card';
 import Glyph from '../Glyph';
 import GhostButton from '../GhostButton';
-import Header from '../Header';
+import Header, { headerContentTop } from '../Header';
 import Overlay from '../Overlay';
 import Page from '../Page';
 import Spot from '../Spot';
@@ -28,6 +29,7 @@ const LOCK_H = 66;
 const noop = () => undefined;
 
 export default function ProofGate() {
+  const insets = useSafeAreaInsets();
   const [typed, setTyped] = useState('');
   const [busy, setBusy] = useState(false);
   const press = useCallback((key: string) => {
@@ -44,7 +46,7 @@ export default function ProofGate() {
     <View style={{ flex: 1, backgroundColor: INK.blue }}>
       <LinearGradient colors={[INK.blueBright, INK.blue]} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
       <Header title="SHARK SHOP" onBack={noop} onHelp={noop} />
-      <Overlay>
+      <Overlay contentTop={headerContentTop(insets.top)}>
         <Page floating arrive
           label={{ text: 'Ask a grown-up', large: true, left: 42, width: 212, art: { source: ART.locked, width: Math.round(LOCK_H * ART_RATIO.locked), height: LOCK_H, left: -24, top: -16, rotate: -6 } }}
           foot={<WaveFoot height={FOOT}><GhostButton label="Not now" onPress={noop} /></WaveFoot>} footHeight={FOOT}>

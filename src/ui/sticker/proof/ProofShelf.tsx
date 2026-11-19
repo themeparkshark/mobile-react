@@ -19,7 +19,7 @@ import type { TaskType } from '../../../models/task-type';
 import { fetchParkShelf, type ParkShelfData } from '../../../services/collection/parkShelfPrefetch';
 import Card from '../Card';
 import CurrencyChip from '../CurrencyChip';
-import Header, { headerHeight } from '../Header';
+import Header, { headerContentTop } from '../Header';
 import Lift from '../Lift';
 import Page from '../Page';
 import ProgressBar from '../ProgressBar';
@@ -36,6 +36,8 @@ const PARK = 8;
 const PARK_NAME = 'DISNEYLAND';
 const TOTAL = 35;
 const PER_ROW = 5;
+/** How far the shark rises above the summary page's top edge (it starts below the bar too). */
+const SHARK_HANG = 36;
 const noop = () => undefined;
 
 type Coin = { readonly id: number; readonly name: string; readonly source: ImageSourcePropType; readonly state: ProofSpotState; readonly limited: boolean };
@@ -115,14 +117,14 @@ export default function ProofShelf() {
     <View style={{ flex: 1, backgroundColor: INK.blue }}>
       <Image source={ART.parkBackground} resizeMode="cover" fadeDuration={0} style={{ position: 'absolute', left: 0, top: 0, width, height: '100%' }} />
       <StickerGround level="world">
-        <ScrollView contentContainerStyle={{ paddingTop: headerHeight(insets.top) + 14, paddingBottom: insets.bottom + 32, paddingHorizontal: SPACE.margin }}
+        <ScrollView contentContainerStyle={{ paddingTop: headerContentTop(insets.top, SHARK_HANG), paddingBottom: insets.bottom + 32, paddingHorizontal: SPACE.margin }}
           accessibilityLabel={sample ? 'Coin shelf, sample found coins' : 'Coin shelf'}>
           <Page padding={12}>
             <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 9, paddingLeft: 4 }}>
               <StickerText size={TYPE.hero} tone="gold" spacing={0.06} lineHeight={40} align="left">{`${found} of ${coins.length || TOTAL}`}</StickerText>
               <View style={{ paddingBottom: 7 }}><StickerText size={TYPE.body} stroke={0} spacing={0.08} lineHeight={18}>COINS</StickerText></View>
             </View>
-            <Lift source={ART.pinShark} width={100} height={Math.round(100 / ART_RATIO.pinShark)} style={{ position: 'absolute', right: -18, top: -36 }} />
+            <Lift source={ART.pinShark} width={100} height={Math.round(100 / ART_RATIO.pinShark)} style={{ position: 'absolute', right: -18, top: -SHARK_HANG }} />
             <ProgressBar value={coins.length ? found / coins.length : 0} label={`${found} of ${coins.length} coins`}
               prize={{ source: ART.bronze, width: 38, height: Math.round(38 / ART_RATIO.bronze) }} style={{ marginTop: 6, marginLeft: 4, width: pageWidth - 140 }} />
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, paddingLeft: 4 }}>

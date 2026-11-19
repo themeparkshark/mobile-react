@@ -7,9 +7,10 @@
  */
 import { View, useWindowDimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import CurrencyChip from '../CurrencyChip';
 import GhostButton from '../GhostButton';
-import Header from '../Header';
+import Header, { headerContentTop } from '../Header';
 import Lift from '../Lift';
 import ListRow from '../ListRow';
 import Overlay, { OVERLAY_MARGIN } from '../Overlay';
@@ -26,6 +27,7 @@ const TODAY = 3;
 const noop = () => undefined;
 
 export default function ProofRewards() {
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const pageWidth = width - OVERLAY_MARGIN * 2;
   // Room the week row has on the Daily Chest row: card inner width less the art, the button and gaps.
@@ -40,7 +42,7 @@ export default function ProofRewards() {
         <CurrencyChip art={ART.energy} artRatio={ART_RATIO.energy} artHeight={36} artOver={8} value={935} label="935 energy" />
         <CurrencyChip art={ART.ticket} artRatio={ART_RATIO.ticket} artHeight={30} artOver={18} value={6} label="6 tickets" minWidth={70} />
       </Header>
-      <Overlay top={40}>
+      <Overlay top={40} contentTop={headerContentTop(insets.top)}>
         <Page floating arrive ribbon={{ text: 'REWARDS', width: pageWidth + 8 }}
           foot={<WaveFoot height={FOOT}><GhostButton label="BACK TO MAP" size={20} spacing={0.06} art={{ source: ART.arrow, width: 26, height: Math.round(26 / ART_RATIO.arrow), mirror: true }} onPress={noop} /></WaveFoot>}
           footHeight={FOOT}>

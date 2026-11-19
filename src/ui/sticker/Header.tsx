@@ -1,12 +1,14 @@
 /**
  * Header: the water band at the top of a screen, level 1 (DIRECTION.md kit: Header). Alex's
- * original-top-bar water, cut at the bottom with the same soft wave as the foot, then the navy
- * line, the white cut edge and a hard drop. Two kinds: a title (back disc, name, help disc) or
- * the map's chips (`children`).
+ * original-top-bar water, then the navy line, the white cut edge and a hard drop, all with a
+ * STRAIGHT bottom edge. No wave on the top bar (Dustin, Nov 19: a wavy edge on a fixed bar
+ * cuts across what sits or scrolls under it). The wave stays on the sheet foot and the footer.
+ * Two kinds: a title (back disc, name, help disc) or the map's chips (`children`).
  *
  * One SVG whose size comes from the safe area and the window, never from a layout pass
- * (kit rule: no measured SVG). It sits over the screen; `headerHeight` tells content where
- * the band ends.
+ * (kit rule: no measured SVG). It sits over the screen and covers nothing at rest: every
+ * screen starts its content at `headerContentTop`, art that hangs off a card included.
+ * Its full height is never more than today's top bar (`TOPBAR_TODAY` under the status bar).
  */
 import { memo, useRef, type ReactNode } from 'react';
 import { View, useWindowDimensions } from 'react-native';
@@ -19,7 +21,13 @@ import { ART } from './art';
 import { WORLD } from './level';
 import { DROP, HEADER, INK, SHADE, STROKE, WAVE } from './tokens';
 
-/** The band's outline: flat top, the soft wave along the bottom at `crest`. */
+/** Today's top bar (src/components/Topbar.tsx): 70 pt of art under the status bar. The Header is never taller. */
+export const TOPBAR_TODAY = 70;
+
+/**
+ * A wave outline (flat top, the soft wave along the bottom at `crest`). Not used by the Header:
+ * kept for the footer band, which flips it.
+ */
 export function bandPath(width: number, crest: number, period: number = HEADER.period, amplitude: number = WAVE.amplitude): string {
   const halves = Math.max(2, Math.round((width / period) * 2));
   const step = width / halves;
@@ -32,14 +40,28 @@ export function bandPath(width: number, crest: number, period: number = HEADER.p
   return `${d} L${width},0 L0,0 Z`;
 }
 
-/** Where the band's crest line sits for a safe area top (content starts under it). */
+/** The band's outline: a plain rectangle, straight bottom edge at `bottom`. */
+export function headerPath(width: number, bottom: number): string {
+  return `M0,0 L${width},0 L${width},${bottom} L0,${bottom} Z`;
+}
+
+/** Where the water ends (the straight bottom edge) for a safe area top. */
 export function headerCrest(insetTop: number): number {
   return insetTop + HEADER.crest;
 }
 
-/** The band's full height: crest, line, edge and drop. */
+/** The band's full height: water, line, edge and drop, all straight. */
 export function headerHeight(insetTop: number): number {
-  return headerCrest(insetTop) + WAVE.amplitude + HEADER.line + HEADER.edge + HEADER.drop;
+  return headerCrest(insetTop) + HEADER.line + HEADER.edge + HEADER.drop;
+}
+
+/**
+ * Where a screen's content starts: the bar's full height plus the standard gap. `overhang` is how
+ * far art rises above its own card (the shelf's shark, a ribbon, a label's lock), so the art
+ * starts below the bar too. Every screen under a Header takes its top from here.
+ */
+export function headerContentTop(insetTop: number, overhang: number = 0): number {
+  return headerHeight(insetTop) + HEADER.gap + overhang;
 }
 
 export type HeaderProps = {
@@ -60,7 +82,7 @@ function HeaderImpl({ title, onBack, backLabel = 'Back', onHelp, helpLabel = 'Ho
   const id = useRef(`band${(nextId += 1)}`).current;
   const crest = headerCrest(insets.top);
   const height = headerHeight(insets.top);
-  const d = bandPath(width, crest);
+  const d = headerPath(width, crest);
   const navyAt = HEADER.line;
   const whiteAt = HEADER.line + HEADER.edge;
   const dropAt = whiteAt + HEADER.drop;
@@ -75,12 +97,12 @@ function HeaderImpl({ title, onBack, backLabel = 'Back', onHelp, helpLabel = 'Ho
             <Stop offset="1" stopColor={INK.blueLip} stopOpacity={HEADER.shadeOpacity} />
           </LinearGradient>
         </Defs>
-        <Path d={d} transform={`translate(0,${dropAt})`} fill={DROP.color} />
-        <Path d={d} transform={`translate(0,${whiteAt})`} fill={INK.white} />
-        <Path d={d} transform={`translate(0,${navyAt})`} fill={INK.navy} />
+        <Rect x={0} y={0} width={width} height={crest + dropAt} fill={DROP.color} />
+        <Rect x={0} y={0} width={width} height={crest + whiteAt} fill={INK.white} />
+        <Rect x={0} y={0} width={width} height={crest + navyAt} fill={INK.navy} />
         <G clipPath={`url(#${id}c)`}>
           <SvgImage href={ART.topBar} x={-width * 0.51} y={0} width={width * 2.03} height={crest * 1.38} preserveAspectRatio="none" />
-          <Rect x={0} y={0} width={width} height={crest + WAVE.amplitude} fill={`url(#${id}g)`} />
+          <Rect x={0} y={0} width={width} height={crest} fill={`url(#${id}g)`} />
         </G>
       </Svg>
       <PlaceProvider value={WORLD}>
