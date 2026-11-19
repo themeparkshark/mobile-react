@@ -122,6 +122,8 @@ test('T101 the park day starter plays as a moment: fly to the header with its re
   const b = loadTs('src/api/broadcastFilter.ts');
   assert.deepEqual(plain(b.visibleBroadcasts(['Park day starter: +2 Tickets. Start a ride challenge!', 'Welcome to Disneyland Park!'], true)),
     ['Welcome to Disneyland Park!']);
+  // T097 (device run): the first coin's "You gained 10 Energy!" banner showed on the shelf; it folds like coins and Parts.
+  assert.deepEqual(plain(b.visibleBroadcasts(['You gained 10 Energy!', 'You reached Level 3!'], true)), ['You reached Level 3!']);
   const host = read('src/components/rewards/TicketGrantMoment.tsx');
   assert.match(host, /targetPosition: 'tickets'/);
   assert.match(host, /gap\.current = setTimeout/, 'the gap timer survives re-renders');
