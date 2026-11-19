@@ -102,7 +102,7 @@ function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean,
 }
 
 export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, onDotsPress, teachPlay = false,
-  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null }: {
+  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null, art: artOverride = null }: {
   readonly copy: GuideCardCopy;
   /** Standing in an open ride line (T074): "In line? LINEPLAY" as its own picture button under the card's words. */
   readonly lineOffer?: { readonly title: string; readonly label: string; readonly action?: GuideAction } | null;
@@ -125,6 +125,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   /** Today's Adventure is active here but the card points elsewhere: its ticket tab opens the Adventure sheet. */
   readonly adventureTab?: { readonly stamps: readonly [boolean, boolean, boolean]; readonly onPress: () => void } | null;
   readonly testID?: string;
+  /** Home: the picture of the step the card is about (a chest, a treat, the Daily 3 flame), when it is not a coin. */
+  readonly art?: number | null;
 }) {
   const reduced = useReducedGameMotion();
   const enter = useSharedValue(reduced ? 1 : 0);
@@ -136,7 +138,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   const wallet = state === 'claim' || state === 'free_try' || state === 'extra_try' || state === 'need_ticket';
   // The goodbye is about the park day, not a coin to win next: the house gold coin, never the next park's coin art.
   // At home with no coin planned yet, the card pictures the Tickets waiting for the next park day (T016).
-  const art = state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet || state === 'home' ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
+  const art = artOverride != null ? artOverride : state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet || state === 'home' ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
   return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}>
     {/* The park name chip and today's Adventure ticket tab sit on the card's top edge, so the kicker never shortens. */}
     {(adventureTab || (parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase())) && <View pointerEvents="box-none" style={styles.edgeRow}>

@@ -6,7 +6,7 @@ import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
   buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
-  setRetentionMode, type DailyThreeState, type LevelChest, type PaidRewards,
+  setRetentionMode, type DailyGoal, type DailyThreeState, type LevelChest, type PaidRewards,
 } from '../../api/endpoints/retention';
 import { claimStampReward, getStamps } from '../../api/endpoints/me/stamps';
 import { getSharkPass, type SharkPassEvent } from '../../api/endpoints/me/shark-pass';
@@ -117,6 +117,14 @@ export interface RetentionResult {
   readonly openRewards: () => void;
   /** What the Rewards button draws: one number, the flame after rung 4, the Trail ring after rung 6. */
   readonly rewards: RewardsSummary;
+  /**
+   * For the home guide's one next thing (fix pass w4, T007): the first Rewards row with something ready, and
+   * today's Daily 3 goals (null while Daily 3 is not on for this player, or once today's chest is claimed).
+   */
+  readonly homeNext: {
+    readonly readyReward: { readonly key: RewardsRowKey; readonly title: string; readonly line: string } | null;
+    readonly daily3: { readonly goals: readonly DailyGoal[]; readonly done: number; readonly total: number } | null;
+  };
 }
 
 /**
@@ -936,7 +944,14 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     </CalmModal>
   );
 
-  return { button, overlay, occluding: visible, openRewards, rewards: settledSummary };
+  // The home guide reads the settled count (the Rewards button's number), so the card and the button agree.
+  const readyRow = settledSummary.count > 0 ? rows.find(r => r.ready > 0 && r.action != null) ?? null : null;
+  const homeNext = {
+    readyReward: readyRow ? { key: readyRow.key, title: readyRow.title, line: readyRow.line } : null,
+    daily3: rewardsInput.daily3 && daily && !daily.claimed && !daily.claimable
+      ? { goals: shownGoals ?? daily.goals, done: rewardsInput.daily3.done, total: rewardsInput.daily3.total } : null,
+  };
+  return { button, overlay, occluding: visible, openRewards, rewards: settledSummary, homeNext };
 }
 
 /** Earned stamps whose prizes are still to claim (the Stamp Book's own rule). */

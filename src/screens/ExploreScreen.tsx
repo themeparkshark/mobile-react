@@ -148,7 +148,7 @@ import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
-import { retireRungTag, useRung } from '../services/reveal/revealLadder';
+import { retireRungTag, useLadderCounters, useRung } from '../services/reveal/revealLadder';
 import { linePlayRoute } from '../components/guide/guideCoins';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -159,6 +159,9 @@ import useParkDayLadder from '../components/guide/useParkDayLadder';
 import { applyLiveStub, liveStubMode } from '../components/guide/liveStub';
 import { useFlyAnchor, useProfileTabAnchor } from '../components/guide/flyAnchors';
 import { homeShelfPark } from '../components/guide/HomeShelfButton';
+import useHomeLimitedCoins from '../components/guide/useHomeLimitedCoins';
+import { homeLimitedCoin, homePartsCoin } from '../services/guide/homeNext';
+import { practiceInMenu } from '../components/QuickAccessMenu';
 import type { HomeGuide } from './ExploreScreen/HomeExplore';
 import { refreshFeatureFlags } from '../api/endpoints/platform/feature-flags';
 
@@ -1627,28 +1630,58 @@ export function ExploreScreenBody() {
     }
   }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, nextCoin.leavingParkId, openLinePlayFor, openLinePlayHere, claimTickets,
     guideFlags.queue_tickets, guideFlags.ride_rescue_pass, park, player, welcome]);
-  // The home guide card (core loop 4.1 "Home"): next park day, Tickets ready, the ticket meter, PLAN = your shelf.
+  // The home guide card (core loop 4.1 "Home", fix pass w4 T007): one true next thing at a time, built from what
+  // this player can do now (homeNextStep), never "nothing to do". HomeExplore adds the treats on its map.
   const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;
-  // At home, a coin that can level up now leads the card (fix round W1 item 17), once coin levels are unlocked.
-  const homeCoins = useCoinCollection(!park && coinLevelsRung.open ? player?.id : null);
+  // The owned coins (at home only): a coin that can level up now leads the card (fix round W1 item 17), once coin
+  // levels are unlocked; they also name the Ride Parts step and keep owned limited coins off the LIMITED step.
+  const homeCoins = useCoinCollection(!park ? player?.id : null);
   const homeLevelUp = !park && coinLevelsRung.open ? homeLevelUpCoin(homeCoins.coins, player?.energy ?? 0) : null;
-  const homeGuide = useMemo<HomeGuide | null>(() => player && !park ? {
-    parkName: tripGoal?.park_name ?? null, planName: homePlan?.ride_name ?? null,
-    // The card wears the coin it is about: the one to level up, else the planned coin.
-    planCoinUrl: (homeLevelUp ? homeLevelUp.coin_url : homePlan?.coin_url) || null,
-    levelUpName: homeLevelUp?.ride_name ?? null,
-    tickets: player.tickets ?? 0, welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
-    onAction: action => {
-      welcome.finish();
-      // LEVEL UP opens that coin on its park shelf (its level card); PLAN opens the next park day's shelf.
-      if (action === 'level_up' && homeLevelUp?.park_id) {
-        RootNavigation.navigate('Park', { park: homeLevelUp.park_id, player: player.id, focusCoin: { assetId: homeLevelUp.id } });
-        return;
-      }
-      // PLAN plans: the shelf opens with the next coin picker on top, never yesterday's park story (T016).
-      RootNavigation.navigate('Park', { park: tripGoal?.park_id ?? homeShelfPark(player.current_park_id), player: player.id, plan: true });
-    },
-  } : null, [player, park, tripGoal, homePlan, welcome, homeLevelUp]);
+  const homeParkId = !park && player ? tripGoal?.park_id ?? homeShelfPark(player.current_park_id) : null;
+  const homeLimitedTasks = useHomeLimitedCoins(homeCoins.coins.length > 0 ? homeParkId : null);
+  const ladderCounters = useLadderCounters();
+  const homeGuide = useMemo<HomeGuide | null>(() => {
+    if (!player || park) return null;
+    const owned = new Set(homeCoins.coins.map(coin => Number(coin.id)));
+    const ref = (name: string, coinUrl: string | null | undefined, assetId: number | null | undefined, parkId: number | null | undefined) =>
+      ({ name, coinUrl: coinUrl || null, assetId: assetId ?? null, parkId: parkId ?? null });
+    const next: HomeGuide['next'] = {
+      levelUp: homeLevelUp ? ref(homeLevelUp.ride_name, homeLevelUp.coin_url, homeLevelUp.id, homeLevelUp.park_id) : null,
+      readyReward: retention.homeNext.readyReward,
+      daily3: retention.homeNext.daily3,
+      limited: homeCoins.coins.length > 0 ? homeLimitedCoin(homeLimitedTasks, owned, homeParkId) : null,
+      parts: coinLevelsRung.open ? homePartsCoin(homeCoins.coins.filter(coin => coin.park_id === homeParkId)) : null,
+      practice: practiceInMenu(ladderCounters.homeDays, player.completed_tasks_count ?? player.ride_coins_collected ?? 0),
+      park: { parkName: tripGoal?.park_name ?? null, tickets: player.tickets ?? 0,
+        plan: homePlan ? ref(homePlan.ride_name, homePlan.coin_url, homePlan.asset_id, homePlan.park_id) : null },
+      welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
+    };
+    return {
+      next,
+      onAction: (action, step) => {
+        welcome.finish();
+        const coin = step.coin;
+        switch (action) {
+          // LEVEL UP opens that coin on its park shelf (its level card); SEE IT opens the limited or Ride Parts coin there.
+          case 'level_up': case 'coin':
+            if (coin?.parkId != null) {
+              RootNavigation.navigate('Park', { park: coin.parkId, player: player.id, ...(coin.assetId != null ? { focusCoin: { assetId: coin.assetId } } : {}) });
+              return;
+            }
+            break;
+          case 'rewards': openRewards(); return;
+          case 'find': setHighlightNearestFind(Date.now()); return;
+          case 'closet': RootNavigation.navigate('Inventory'); return;
+          case 'friends': RootNavigation.navigate('Friends'); return;
+          case 'coin_shelf': RootNavigation.navigate('CoinShelf'); return;
+          default: break;
+        }
+        // PLAN plans: the shelf opens with the next coin picker on top, never yesterday's park story (T016).
+        RootNavigation.navigate('Park', { park: tripGoal?.park_id ?? homeShelfPark(player.current_park_id), player: player.id, plan: true });
+      },
+    };
+  }, [player, park, tripGoal, homePlan, welcome, homeLevelUp, homeCoins.coins, homeLimitedTasks, homeParkId, coinLevelsRung.open,
+    retention.homeNext.readyReward, retention.homeNext.daily3, ladderCounters.homeDays, openRewards]);
 
   // The HUD row is whole from the first map frame (the team bar says its plain no-leader line until
   // today's standings answer); a later lead change cross-fades inside MapStatusStack.

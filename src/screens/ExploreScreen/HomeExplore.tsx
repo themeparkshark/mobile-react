@@ -25,7 +25,9 @@ import HomeHuntChip, { chipWidthFor, type HuntChipMessage } from './HomeHuntChip
 import { createMapAutoRetry } from './mapAutoRetry';
 import HomeHudChips, { type ParkStoryChip } from './HomeHudChips';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../../components/guide/NextCoinCard';
-import { guideCardCopy, type GuideAction } from '../../services/guide/guideCopy';
+import { homeNextStep, type HomeAction, type HomeArt, type HomeNextInput, type HomeStep } from '../../services/guide/homeNext';
+import { BOX_ART } from '../../components/trail/TrailBoxArt';
+import HomeArcade from '../../components/HomeArcade';
 import HomeCatchMoment, { type CatchRequest, type HomeCatchHandle } from './HomeCatchMoment';
 import { pickupFix } from './homeCatch';
 import { catchStyleFor } from './ridePhoto';
@@ -48,6 +50,21 @@ import { reportHomeSpot, type HuntReportReason } from '../../api/endpoints/me/ho
 import { HOME_HUNT_COPY } from '../../constants/homeHuntCopy';
 import { gameAlert } from '../../ui';
 import { getHomeHuntRankLine, setHomeHuntRankLine, subscribeHomeHuntRankLine } from './homeHuntRankStore';
+
+/** The home guide's picture per step: the art the player already sees for that thing (Rewards rows, treats, icons). */
+const HOME_ART: Record<HomeArt, number | null> = {
+  coin: null,
+  ticket: null,
+  chest: require('../../../assets/images/daily/chest-closed.png'),
+  level_chest: require('../../../assets/images/retention/level-chest-closed.png'),
+  weekly: require('../../../assets/images/retention/weekly-box-closed.png'),
+  trail: BOX_ART.blue,
+  stamps: require('../../../assets/images/screens/profile/shortcut_stamp_book.png'),
+  events: require('../../../assets/images/daily/chest-closed.png'),
+  treat: require('../../../assets/images/prep-items/churros/churro_18.png'),
+  flame: require('../../../assets/icons/game/streak.png'),
+  play: require('../../../assets/icons/game/play.png'),
+};
 
 // ── Layout ───────────────────────────────────────────────────────────
 // Home Hunt v3: the map is the screen. Top row: the live bar (only for a live
@@ -157,14 +174,10 @@ interface Props {
 }
 
 export interface HomeGuide {
-  readonly parkName: string | null;
-  readonly planName: string | null;
-  readonly planCoinUrl: string | null;
-  /** A coin that can level up now (Ride Parts and Energy in hand, coin levels unlocked): the card says so. */
-  readonly levelUpName?: string | null;
-  readonly tickets: number;
-  readonly welcomeBack: boolean;
-  readonly onAction: (action: GuideAction) => void;
+  /** What the player can do now, except the treats on this map (HomeExplore adds them): see homeNextStep. */
+  readonly next: Omit<HomeNextInput, 'treats'>;
+  /** The card's button (practice opens here, on the home map). */
+  readonly onAction: (action: HomeAction, step: HomeStep) => void;
 }
 
 /**
@@ -481,6 +494,9 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const placed = useMemo(() => allPlaced.filter(entry => !isRodeOff(entry.item)),
   // eslint-disable-next-line react-hooks/exhaustive-deps
     [allPlaced, rodeOff]);
+  // The home guide's FIND (fix pass w4, T007) asks the same glide as How to Play's hand-off: the newest request wins.
+  const [ownHighlight, setOwnHighlight] = useState<number | null>(null);
+  const highlightRequest = Math.max(highlightNearestFind ?? 0, ownHighlight ?? 0) || null;
   // How to Play hand-off: glide to the nearest find once per request (waits for the first finds to load).
   const [findFocus, setFindFocus] = useState<{ latitude: number; longitude: number; requestId: number } | null>(null);
   const handledHighlight = useRef<number | null>(null);
@@ -488,23 +504,23 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const pulseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (pulseTimer.current) clearTimeout(pulseTimer.current); }, []);
   useEffect(() => {
-    if (highlightNearestFind == null || handledHighlight.current === highlightNearestFind || !homeLocationConfirmed) return;
+    if (highlightRequest == null || handledHighlight.current === highlightRequest || !homeLocationConfirmed) return;
     // A request older than ~10 s (finds took that long, or the screen came back later) is dropped, not replayed.
-    if (isStaleHighlight(highlightNearestFind, Date.now())) { handledHighlight.current = highlightNearestFind; return; }
+    if (isStaleHighlight(highlightRequest, Date.now())) { handledHighlight.current = highlightRequest; return; }
     const nearest = nearestFind(placed);
     if (!nearest) return;
-    handledHighlight.current = highlightNearestFind;
-    setFindFocus({ latitude: nearest.latitude, longitude: nearest.longitude, requestId: highlightNearestFind });
+    handledHighlight.current = highlightRequest;
+    setFindFocus({ latitude: nearest.latitude, longitude: nearest.longitude, requestId: highlightRequest });
     queueHaptic('tickSelection', 1);
     // ...and the find itself pulses once with a soft sound as the camera arrives (no motion under Reduce Motion).
     const target = placed.find(entry => entry.item.latitude === nearest.latitude && entry.item.longitude === nearest.longitude);
     if (target?.item.pivot_id != null) {
       const pivot = target.item.pivot_id;
-      const key = highlightNearestFind;
+      const key = highlightRequest;
       if (pulseTimer.current) clearTimeout(pulseTimer.current);
       pulseTimer.current = setTimeout(() => { pulseTimer.current = null; setPulse({ pivot, key }); catchSound('tick', { volume: 0.55, pitch: 7 }); }, 650);
     }
-  }, [highlightNearestFind, placed, homeLocationConfirmed]);
+  }, [highlightRequest, placed, homeLocationConfirmed]);
   useEffect(() => {
     if (safetyLineShown || !homeLocationConfirmed || quiet) return;
     const top = activePrepItems.reduce((best, item) => Math.max(best, item.rarity ?? 0), 0);
@@ -752,11 +768,19 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     ? hudRowTop(obstacles, rowTop, containerSize.width - GUIDE_CARD_RIGHT - 12) : rowTop), [guideShown, obstacles, rowTop, containerSize.width]);
   const chipsTop = guideShown ? cardTop + guideBlock : rowTop;
   const hudTop = useMemo(() => (hudWidth > 0 ? hudRowTop(obstacles, chipsTop, hudWidth) : chipsTop), [obstacles, chipsTop, hudWidth]);
-  const homeCopy = useMemo(() => homeGuide ? guideCardCopy(homeGuide.welcomeBack ? 'welcome_back' : 'home', null, {
-    parkName: homeGuide.parkName, ridesResting: false, allOwned: false, tickets: homeGuide.tickets, freeStep: null,
-    queueTicketsOn: false, adventureDots: null, planName: homeGuide.planName, levelUpName: homeGuide.levelUpName ?? null,
-    treatsToTicket: ticket.capped ? null : ticket.until == null ? null : Math.max(1, Math.min(3, Math.round(ticket.until))),
-  }) : null, [homeGuide, ticket.until, ticket.capped]);
+  // The one next thing (fix pass w4, T007): the treats on this map join what ExploreScreen knows.
+  const treatsOnMap = placed.length;
+  const homeStep = useMemo(() => homeGuide ? homeNextStep({ ...homeGuide.next,
+    treats: { onMap: treatsOnMap, toTicket: ticket.until, capped: ticket.capped } }) : null, [homeGuide, treatsOnMap, ticket.until, ticket.capped]);
+  const homeCopy = homeStep?.copy ?? null;
+  const [arcadeOpen, setArcadeOpen] = useState(false);
+  const onHomeAction = useCallback((action: HomeAction) => {
+    if (!homeStep || !homeGuide) return;
+    // Sit-still play opens right here; FIND glides to the nearest treat on this map.
+    if (action === 'practice') { setArcadeOpen(true); return; }
+    if (action === 'find') { setOwnHighlight(Date.now()); return; }
+    homeGuide.onAction(action, homeStep);
+  }, [homeStep, homeGuide]);
   // A tapped find's peek docks low, or higher until it covers no find (never another find's timer).
   const slotBottom = chip && containerSize.width > 0 ? peekBottom(obstacles, containerSize, BOTTOM_SLOT, hudTop + 30 + 8, chipWidthFor(chip)) : BOTTOM_SLOT;
 
@@ -810,8 +834,9 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       {/* The home guide card: next park day, Tickets ready, the ticket meter and PLAN (core loop 4.1). */}
       {guideShown && homeCopy && homeGuide && (
         <Animated.View style={[StyleSheet.absoluteFill, chipsBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
-          <NextCoinCard testID="home-guide-card" copy={homeCopy} state={homeGuide.welcomeBack ? 'welcome_back' : 'home'} parkName={null}
-            coinUrl={homeGuide.planCoinUrl} top={cardTop} onAction={homeGuide.onAction} />
+          <NextCoinCard testID="home-guide-card" copy={homeCopy} state={homeStep?.key === 'welcome_back' ? 'welcome_back' : 'home'} parkName={null}
+            coinUrl={homeStep?.art === 'coin' ? homeStep.coin?.coinUrl ?? null : null} art={homeStep ? HOME_ART[homeStep.art] : null}
+            top={cardTop} onAction={onHomeAction} onCardPress={homeCopy.button ? () => onHomeAction(homeCopy.button!.action) : undefined} />
         </Animated.View>
       )}
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
@@ -849,6 +874,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
 
 
       {introOpen && <HomeIntro onDone={markIntroSeen} />}
+      {/* The home guide's PLAY: the practice games (the same arcade as the menu's Practice games). */}
+      {arcadeOpen && <HomeArcade visible onClose={() => setArcadeOpen(false)} />}
     </View>
   );
 }
