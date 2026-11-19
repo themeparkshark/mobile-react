@@ -31,7 +31,7 @@ export const BOARD_WAIT_MAX_MS = 3000;
  * Fix pass w5 (N04): TRY AGAIN on the kept board. The ticket slides in over the board while it resets, tears the
  * moment the server deals the same game, and hands over with the tear (no game card: the player knows the game).
  */
-export const INSTANT_PUNCH_MS = { ready: 180, handOver: 200 } as const;
+export const INSTANT_PUNCH_MS = { ready: 120, handOver: 150 } as const;
 
 /**
  * Spending a Park Ticket is the "throw": the ticket slides in, gets punched in

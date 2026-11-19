@@ -125,7 +125,7 @@ test('N04: the kept board resets under an instant ticket tear that hands over on
   assert.match(modal, /const boardHidden = flowState === 'spinning' \|\| flowState === 'lost' \|\| flowState === 'replay';/);
   assert.match(modal, /\{flowState === 'replay' && \(\n\s+<TicketPunch\n\s+instant\n\s+gameName=\{replayDealt \? selectedGameData\?\.name \?\? null : null\}/);
   assert.match(modal, /if \(next === 'replay'\) setReplayDealt\(true\);/);
-  assert.match(punch, /export const INSTANT_PUNCH_MS = \{ ready: 180, handOver: 200 \} as const;/);
+  assert.match(punch, /export const INSTANT_PUNCH_MS = \{ ready: 120, handOver: 150 \} as const;/);
   assert.match(punch, /if \(instant\) \{\n(\s+\/\/.*\n)?\s+cancelAnimation\(bob\);[\s\S]{0,400}at\(INSTANT_PUNCH_MS\.handOver, finish\);\n\s+return;/);
   // Beat the Buzzer's rail and scores are fresh at once (no roll down from the last try's points).
   assert.match(trivia, /setScores\(\{ me: 0, opp: 0 \}\);\n\s+setLocks\(\{ me: null, opp: null \}\);/);
