@@ -9,6 +9,7 @@ import Animated, {
   cancelAnimation,
   useAnimatedStyle,
   useSharedValue,
+  withDelay,
   withSequence,
   withSpring,
   withTiming,
@@ -34,7 +35,7 @@ import { playSfx } from '../gamekit/SFX';
 import GameIcon from '../ui/GameIcon';
 import {
   type TrophyMoment, BACK_TO_MAP_LABEL, flyTargetFor, milestoneHeadline, nextCoinButton, partsProgress, silentEnergy, teamSentence, winButtonLabel, winShelfLine,
-  winRewardChips, WIN_FLY_ROUTES,
+  winRewardChips, WIN_FLY_ROUTES, chipAmountText, chipLandMs,
   type NextCoinButton, type WinCardExit, type WinChip, type WinFlyTarget,
 } from './rewards/postWinModel';
 import { watchForReward } from '../services/ads';
@@ -48,6 +49,7 @@ import type { LimitedWindow } from '../models/task-type';
 import PerkChipRow from './coin/PerkChip';
 import { flyAfterTeamStep, type WinFlyWhen } from './rewards/teamOffer';
 import WinTeamStep from './rewards/WinTeamStep';
+import { markTrophyExplained, trophyExplained } from './rewards/trophyExplain';
 import useResultInputLock from './rewards/useResultInputLock';
 import { WinOfferSlot } from './rewards/offerSlots';
 import RideFactLine from './collection/RideFactLine';
@@ -148,26 +150,25 @@ interface Props {
   lineParts?: number;
 }
 
-/* ─── Count-up number (JS timer, lands exactly on the confirmed amount) ─── */
-function CountUp({ value, start, reduced, style }: { value: number; start: boolean; reduced: boolean; style: object }) {
-  const [shown, setShown] = useState(reduced ? value : 0);
+/*
+ * ─── A chip's number (fix w4 N08) ───
+ * A chip shows its real amount from its first visible frame: never "+0" or a number on its way up.
+ * The number lands with a small pop and a tick as its chip settles on the entrance clock (UI thread).
+ */
+function LandedAmount({ value, index, start, reduced, style }: {
+  value: number; index: number; start: boolean; reduced: boolean; style: object;
+}) {
+  const pop = useSharedValue(1);
   useEffect(() => {
-    if (reduced || !start) { setShown(reduced ? value : 0); return undefined; }
-    let step = 0;
-    const steps = 14;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      step += 1;
-      const t = step / steps;
-      setShown(Math.round(value * (1 - Math.pow(1 - t, 3))));
-      if (step < steps) timer = setTimeout(tick, 34);
-      // The number lands with a tick, so each chip is felt, not just seen.
-      else if (value > 0) { haptic('tickSelection'); playSfx('tick', 0.45); }
-    };
-    timer = setTimeout(tick, 34);
-    return () => clearTimeout(timer);
-  }, [value, start, reduced]);
-  return <Text style={style}>+{countText(shown)}</Text>;
+    if (!start || reduced) { pop.value = 1; return undefined; }
+    const delay = chipLandMs(index);
+    pop.value = withDelay(delay, withSequence(withTiming(1.18, { duration: 110, easing: EASE.out }), withSpring(1, SPRING.pop)));
+    // The number lands with a tick, so each chip is felt, not just seen.
+    const timer = setTimeout(() => { if (value > 0) { haptic('tickSelection'); playSfx('tick', 0.45); } }, delay);
+    return () => { clearTimeout(timer); cancelAnimation(pop); };
+  }, [value, index, start, reduced, pop]);
+  const popStyle = useAnimatedStyle(() => ({ transform: [{ scale: pop.value }] }));
+  return <Animated.Text style={[style, popStyle]}>+{countText(chipAmountText(value))}</Animated.Text>;
 }
 
 /* ─── The trophy this win earned (fix round W1 item 17): the trophy itself pops onto the card ─── */
@@ -219,7 +220,7 @@ function RewardChip({ chip, index, enter, reduced, started, wide = false }: {
     <Animated.View style={[styles.chip, wide && styles.chipThird, chip.quiet && styles.chipQuiet, style]} accessible accessibilityLabel={`${chip.amount} ${chip.label}`}>
       <GameIcon name={chip.icon} size={22} />
       <View style={{ flexShrink: 1 }}>
-        <CountUp value={chip.amount} start={started} reduced={reduced} style={styles.chipAmount} />
+        <LandedAmount value={chip.amount} index={index} start={started} reduced={reduced} style={styles.chipAmount} />
         <Text style={[styles.chipLabel, chip.quiet && styles.chipLabelQuiet]} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.7}>{chip.label}</Text>
       </View>
     </Animated.View>
@@ -345,6 +346,20 @@ export default function PostWinRewardsModal({
   const headline = milestoneHeadline(milestones ?? null);
   // The shelf line, or for a limited coin (no park shelf count) its own home: "Limited coin. Yours to keep!"
   const shelf = winShelfLine(milestones ?? null, limited, isNewCoin, parkWins);
+  // T054: the first card that names a trophy says what a trophy is; a tap on the line swaps it after that.
+  const [trophyHelp, setTrophyHelp] = useState(false);
+  const hasTrophyHelp = !!shelf?.explain && !shelf.trophy;
+  useEffect(() => {
+    if (!visible) { setTrophyHelp(false); return undefined; }
+    if (!hasTrophyHelp) return undefined;
+    let alive = true;
+    void trophyExplained(player?.id).then(seen => {
+      if (!alive || seen) return;
+      setTrophyHelp(true);
+      void markTrophyExplained(player?.id);
+    });
+    return () => { alive = false; };
+  }, [visible, hasTrophyHelp, player?.id]);
   const team = teamSentence(rideControl as Parameters<typeof teamSentence>[0], name => (isTeam(name) ? teamName(name) : name));
   const next = nextCoinButton(nextTarget, wonTaskId, adventureLineStory);
 
@@ -564,14 +579,20 @@ export default function PostWinRewardsModal({
               </View>}
               {/* The shelf count and the next trophy in wins ("1 of 35 coins. 11 more wins for Bronze"), or the trophy this win earned. */}
               {shelf?.trophy ? <TrophyMomentRow trophy={shelf.trophy} started={caught} reduced={reducedMotion} />
-                : shelf && <View style={styles.shelfLine} accessibilityRole="text">
+                : shelf && <Pressable style={styles.shelfLine} disabled={!shelf.explain}
+                  onPress={() => { void Haptics.selectionAsync().catch(() => undefined); setTrophyHelp(on => !on); }}
+                  accessibilityRole={shelf.explain ? 'button' : 'text'}
+                  accessibilityLabel={[shelf.text, shelf.sub, shelf.explain?.line].filter(Boolean).join('. ')}>
                   <GameIcon name={shelf.icon} size={22} />
-                  {/* Coins and the trophy each on their own line (fix w3 T123). */}
+                  {/* Coins and the trophy each on their own line (fix w3 T123); the trophy line says what a
+                      trophy is the first time, and a tap swaps the two (fix w4 T054). */}
                   <View style={{ flexShrink: 1 }}>
-                    <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.text}</Text>
-                    {!!shelf.sub && <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{shelf.sub}</Text>}
+                    <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+                      {trophyHelp && shelf.explain?.replaces === 'text' ? shelf.explain.line : shelf.text}</Text>
+                    {!!shelf.sub && <Text style={styles.shelfText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75}>
+                      {trophyHelp && shelf.explain?.replaces === 'sub' ? shelf.explain.line : shelf.sub}</Text>}
                   </View>
-                </View>}
+                </Pressable>}
             </Animated.View>
 
             {/* ── The one reward row, counting up ── */}

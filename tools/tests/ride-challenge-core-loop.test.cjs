@@ -444,7 +444,8 @@ test('the win that reaches a trophy is its moment on the win card (fix round W1 
   assert.equal(win.winShelfLine(shelf, null, true, 13).trophy, undefined, 'the next win is a normal line');
   assert.equal(win.trophyMoment(null), null);
   // A repeat win names the trophy it counts toward in the shelf's own words.
-  assert.deepEqual({ ...win.winShelfLine(null, null, false, 11) }, { text: 'Bronze trophy: 11 of 12 wins', icon: 'trophyBronze' });
+  assert.deepEqual(JSON.parse(JSON.stringify(win.winShelfLine(null, null, false, 11))), { text: 'Bronze trophy: 11 of 12 wins', icon: 'trophyBronze',
+    explain: { line: '12 wins here put a Bronze trophy on your shelf.', replaces: 'text' } });
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.match(card, /shelf\?\.trophy \? <TrophyMomentRow trophy=\{shelf\.trophy\}/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /parkShelfRequest\(park\.id, player\.id\)\?\.then/, 'the wins come from the shelf the win already loads');
@@ -871,7 +872,8 @@ test('the win card answers a tap at once, and its shelf picture never depends on
   assert.equal(win.winButtonLabel(story, 'primary'), 'One moment', 'a story lookup never looks like a dead tap');
   assert.equal(win.winButtonLabel({ kind: 'map', label: 'Back to Map', detail: null }, 'primary'), 'Back to Map');
   const shelf = { milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 0, collected: 1, available: 35 }, next: null };
-  assert.deepEqual({ ...win.winShelfLine(shelf, null, true, 1) }, { text: '1 of 35 coins on your shelf', sub: 'Bronze trophy: 11 more wins', icon: 'trophyBronze' });
+  assert.deepEqual(JSON.parse(JSON.stringify(win.winShelfLine(shelf, null, true, 1))), { text: '1 of 35 coins on your shelf', sub: 'Bronze trophy: 11 more wins', icon: 'trophyBronze',
+    explain: { line: '12 wins here put a Bronze trophy on your shelf.', replaces: 'sub' } });
   assert.deepEqual({ ...win.winShelfLine(null, { active: true }, true) }, { text: 'Limited coin. Yours to keep!', icon: 'sparkle' });
   assert.equal(win.winShelfLine(null, { active: true }, false), null, 'a limited coin won again keeps quiet');
   assert.equal(win.winShelfLine(null, null, true), null);

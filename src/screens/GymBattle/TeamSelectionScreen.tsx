@@ -23,6 +23,7 @@ import { QUESTION_BANK } from './teamQuiz';
 import { teamExit, teamStepGone, teamStepLeaving, teamStepShown, type TeamSelectionParams } from '../../components/rewards/teamOffer';
 import { tryAgainLine } from '../../services/connectionCopy';
 import ForKeepsNote, { FOR_KEEPS_LONG } from '../../components/rewards/ForKeepsNote';
+import { teamCreditLine } from '../../components/rewards/winTeamModel';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
@@ -50,6 +51,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
   // A 375 x 667 phone (iPhone SE) fits the three teams, Finn's quiz and LATER with tighter spacing.
   const compact = useWindowDimensions().height < 720;
   const [stage, setStage] = useState<Stage>('pick');
+  const [credit, setCredit] = useState<string | null>(null);
   const [team, setTeam] = useState<TeamId | null>(null);
   const [suggested, setSuggested] = useState<TeamId | null>(null);
   const [held, setHeld] = useState<Record<TeamId, number> | null>(null);
@@ -99,7 +101,9 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
     if (!team) return;
     setStage('joining');
     try {
-      await joinTeam(team);
+      const answer = await joinTeam(team);
+      // T194: coins won today before the pick now count for this team, when the server says so.
+      setCredit(teamCreditLine(answer?.ride_control_credit, teamName(team)));
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setStage('done');
     } catch (error: any) {
@@ -219,7 +223,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
           </View>
         )}
 
-        {stage === 'done' && team && <Welcome team={team} onGo={finish} />}
+        {stage === 'done' && team && <Welcome team={team} credit={credit} onGo={finish} />}
       </SafeScreen>
     </View>
   );
@@ -247,7 +251,7 @@ function TeamCard({ team, held, leader, underdog, onPress }: {
   );
 }
 
-function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
+function Welcome({ team, credit, onGo }: { team: TeamId; credit: string | null; onGo: () => void }) {
   const glow = useSharedValue(0);
   const pop = useSharedValue(0.4);
   useEffect(() => {
@@ -270,7 +274,7 @@ function Welcome({ team, onGo }: { team: TeamId; onGo: () => void }) {
         {teamName(team).toUpperCase()}!
       </Animated.Text>
       <Animated.Text entering={FadeInUp.delay(450)} style={s.line}>
-        Every ride coin you win now takes that ride for your team.
+        {credit ?? 'Every ride coin you win now takes that ride for your team.'}
       </Animated.Text>
       <Animated.View entering={FadeInUp.delay(600)} style={{ width: '100%' }}>
         <Pressable style={[s.join, { backgroundColor: TEAMS[team].color }]} onPress={onGo} accessibilityRole="button">

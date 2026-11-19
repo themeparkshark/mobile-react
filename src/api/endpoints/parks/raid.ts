@@ -29,6 +29,11 @@ export interface BossRaid {
   readonly boss: BossId;
   readonly task_id: number;
   readonly ride_name: string | null;
+  /**
+   * Why this boss is at this ride, in one plain line that names the ride ("The Kraken loves the
+   * water. It rose up at Storybook Land Canal Boats."). Core-loop servers only (fix w3 T203).
+   */
+  readonly why?: string | null;
   /** Only sent to players checked in at this park. */
   readonly latitude: number | null;
   readonly longitude: number | null;

@@ -25,7 +25,7 @@ import countText from '../../helpers/countText';
 /** Hand-drawn house (Codex, Alex style): playing from home. */
 const HOUSE = require('../../assets/games/boss/bash/house.webp');
 import { BossHpBar } from './BossSheetParts';
-import { afterWords, costWords, joinCost, joinLabel, type RewardPreview } from './joinModel';
+import { afterWords, bossWhereLine, costWords, joinCost, joinLabel, type RewardPreview } from './joinModel';
 import { endsAtWords } from '../../helpers/calmTime';
 
 export function Wallet({ energy, tickets, showTickets, short }: {
@@ -92,7 +92,9 @@ export default function BossJoinCard({ raid, remote, walkCloser, energy, tickets
         </Animated.View>
         <View style={{ flex: 1 }}>
           <Text style={styles.headline} accessibilityRole="header" maxFontSizeMultiplier={1.25}>{name} attacks!</Text>
-          <Text style={styles.where} numberOfLines={2} maxFontSizeMultiplier={1.3}>at {raid.ride_name ?? 'the park'}</Text>
+          {/* Under the title, why this boss is at this ride (T203); it names the ride itself. */}
+          <Text style={styles.where} numberOfLines={3} adjustsFontSizeToFit minimumFontScale={0.85}
+            maxFontSizeMultiplier={1.3}>{bossWhereLine(raid)}</Text>
         </View>
       </View>
 

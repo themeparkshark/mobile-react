@@ -75,3 +75,13 @@ export function minutesLeft(endsAt: string, now: number): number {
   const ms = new Date(endsAt).getTime() - now;
   return ms <= 0 ? 0 : Math.max(1, Math.ceil(ms / 60000));
 }
+
+/**
+ * The line under the boss title (fix w4 T203): the server's reason this boss is at this ride when it
+ * sends one ("The Kraken loves the water. It rose up at Storybook Land Canal Boats."), else "at <ride>".
+ */
+export function bossWhereLine(raid: Pick<BossRaid, 'ride_name' | 'why'>): string {
+  const why = typeof raid.why === 'string' ? raid.why.trim() : '';
+  if (why) return why;
+  return `at ${raid.ride_name?.trim() || 'the park'}`;
+}

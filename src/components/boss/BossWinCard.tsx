@@ -13,6 +13,7 @@ import { BRAND, GameButton, GameIcon, type GameIconName } from '../../ui';
 import { BOSS_ART } from './bossArt';
 import { BossHpBar } from './BossSheetParts';
 import countText from '../../helpers/countText';
+import { chipAmountText } from '../rewards/postWinModel';
 
 const CARD_W = 340, CARD_H = 520;
 
@@ -30,34 +31,23 @@ export function lootFor(raid: BossRaid): Loot[] {
   ].filter(item => item.amount > 0);
 }
 
-/** Counts up from 0 on the JS thread (a few frames per chip), instantly under reduced motion. */
-function CountUp({ to, start, reduced }: { readonly to: number; readonly start: boolean; readonly reduced: boolean }) {
-  const [value, setValue] = useState(reduced ? to : 0);
-  useEffect(() => {
-    if (reduced) { setValue(to); return; }
-    if (!start) return;
-    const began = Date.now(), duration = Math.min(700, 250 + to * 4);
-    const id = setInterval(() => {
-      const t = Math.min(1, (Date.now() - began) / duration);
-      setValue(Math.round(to * (1 - (1 - t) ** 3)));
-      if (t >= 1) clearInterval(id);
-    }, 33);
-    return () => clearInterval(id);
-  }, [to, start, reduced]);
-  return <Text style={styles.lootAmount}>+{countText(value)}</Text>;
+/**
+ * A loot chip's number (fix w4 N08, same rule as the win card): the real amount from the chip's first
+ * visible frame. Counting up from 0 flashed "+0" as the chip popped in; the pop and the tick carry the landing.
+ */
+function LootAmount({ to }: { readonly to: number }) {
+  return <Text style={styles.lootAmount}>+{countText(chipAmountText(to))}</Text>;
 }
 
 function LootChip({ item, index, reduced, collecting }: { readonly item: Loot; readonly index: number; readonly reduced: boolean; readonly collecting: boolean }) {
   const pop = useSharedValue(0);
   const fly = useSharedValue(0);
-  const [counting, setCounting] = useState(reduced);
   const delay = 950 + index * 170;
   useEffect(() => {
-    if (reduced) { pop.value = 1; setCounting(true); return; }
+    if (reduced) { pop.value = 1; return; }
     pop.value = 0;
-    setCounting(false);
     pop.value = withDelay(delay, withSequence(withSpring(1.15, { damping: 8, stiffness: 360 }), withSpring(1, { damping: 12, stiffness: 240 })));
-    const id = setTimeout(() => { setCounting(true); haptic('tickSelection'); playSfx('coin', 0.5); }, delay);
+    const id = setTimeout(() => { haptic('tickSelection'); playSfx('coin', 0.5); }, delay);
     return () => { clearTimeout(id); cancelAnimation(pop); };
   }, [reduced]);
   useEffect(() => {
@@ -70,13 +60,12 @@ function LootChip({ item, index, reduced, collecting }: { readonly item: Loot; r
     transform: [{ translateY: -420 * fly.value }, { translateX: (index % 2 ? 1 : -1) * 40 * fly.value },
       { scale: pop.value * (1 - 0.5 * fly.value) }],
   }));
-  // Motion on the outer view only; the card's own fill stays on a plain view so a
-  // count-up re-render never drops it.
+  // Motion on the outer view only; the card's own fill stays on a plain view.
   return <Animated.View style={style} accessibilityLabel={`${item.amount} ${item.label}${item.detail ? ` for ${item.detail}` : ''}`}>
     <View style={styles.loot}>
       <GameIcon name={item.icon} size={30} />
       <View>
-        <CountUp to={item.amount} start={counting} reduced={reduced} />
+        <LootAmount to={item.amount} />
         <Text style={styles.lootLabel} numberOfLines={1}>{item.label}</Text>
         {item.detail ? <Text style={styles.lootDetail} numberOfLines={1}>{item.detail}</Text> : null}
       </View>
@@ -87,7 +76,7 @@ function LootChip({ item, index, reduced, collecting }: { readonly item: Loot; r
 /**
  * The raid result. Defeated: the HP bar drains to zero, the boss takes a KO
  * wobble and tips over, confetti, "BOSS DEFEATED!" pops, the MVP crown lands,
- * loot chips count up one by one, and COLLECT flies them up to the header.
+ * loot chips pop in one by one with their real numbers, and COLLECT flies them up to the header.
  * Escaped: the boss swims off and fighters get their thank-you.
  */
 export default function BossWinCard({ raid, lastHp, onDone }: {
