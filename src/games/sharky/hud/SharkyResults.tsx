@@ -48,6 +48,7 @@ import { SavedStamp } from '../../../gamekit/results/SavedStamp';
 import { nextStarGoal, type StarThresholds } from '../../../gamekit/core/scoring';
 import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
 import { ResultButtonRow, ResultPrimaryButton, ResultSecondaryButton } from '../../../gamekit/results/ResultButtons';
+import LockedResultActions from '../../../gamekit/results/LockedResultActions';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { bestAwareTitle } from '../../../gamekit/results/feelings';
 import { missionIcon } from './missionIcons';
@@ -342,6 +343,8 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
           </Animated.View>
         ) : null}
 
+        {/* N03: one shared input lock: a kid still holding to swim never presses a button by accident. */}
+        <LockedResultActions style={styles.lockWrap}>
         <Animated.View style={[styles.playWrap, short && styles.playWrapShort, btnStyle]}>
           <ResultPrimaryButton label={primaryLabel} icon={againFirst ? 'retry' : undefined} disabled={!tapReady} onPress={primary} style={styles.playBtn} />
         </Animated.View>
@@ -355,6 +358,7 @@ export function SharkyResults({ data, playAgain, playAgainFirst = true, saved = 
             {challenge ? <ResultSecondaryButton label={challengeLabel ?? 'RACE GHOSTS'} icon="rush" onPress={challenge} /> : null}
           </ResultButtonRow>
         ) : null}
+        </LockedResultActions>
 
       </Animated.View>
       <FxStage ref={fx} width={box.w} height={box.h} reducedMotion={reducedMotion} style={StyleSheet.absoluteFill} />
@@ -391,6 +395,7 @@ const styles = StyleSheet.create({
   feelingGold: { backgroundColor: REWARD },
   feelingText: { fontFamily: 'Knockout', fontSize: 16, color: INK, letterSpacing: 1 },
   playWrap: { width: '100%', marginTop: 12 },
+  lockWrap: { width: '100%' },
   playBtn: { marginTop: 0 },
   // One row above the buttons: the unlock or missions, tokens and the medal side by side.
   below: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', alignItems: 'center', columnGap: 8, marginTop: 8 },

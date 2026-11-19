@@ -23,6 +23,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import LockedResultActions from '../../gamekit/results/LockedResultActions';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -219,7 +220,8 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
           <Reveal show={step >= 5}><Rewards data={data} reducedMotion={reducedMotion} startMs={reducedMotion ? 0 : sched.rewards} /></Reveal>
           <Reveal show={step >= 6}>{(
             panel === 'actions' ? (
-              <View style={styles.actions}>
+              // N03: one shared input lock: a kid still flipping cards never presses PLAY AGAIN or DONE by accident.
+              <LockedResultActions style={styles.actions} active={step >= 6}>
                 {/* Gold first, white under it: the same buttons as every other results card. */}
                 {again && data.againLabel ? (
                   <Pressable onPress={() => { Haptic.tapLight(); again(); }} style={({ pressed }) => [styles.bigBtn, pressed && styles.pressed]} accessibilityRole="button" accessibilityLabel={data.againLabel.toLowerCase()}>
@@ -245,7 +247,7 @@ export function MemoryResults({ data, claim, again, reducedMotion }: {
                     <Text style={styles.doneText}>DONE</Text>
                   </Pressable>
                 ) : null}
-              </View>
+              </LockedResultActions>
             ) : panel === 'album' && data.rewards ? (
               <View style={styles.panel}>
                 <AlbumBody album={data.rewards.album} focusDeck={data.rewards.deckId} compact />

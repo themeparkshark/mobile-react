@@ -22,6 +22,7 @@ import { WORDMARK_SRC } from './CalloutLayer';
 import { STICKERS, type StickerId } from './localMeta';
 import { BossPortrait } from './BossPortrait';
 import countText from '../../helpers/countText';
+import LockedResultActions from '../../gamekit/results/LockedResultActions';
 
 const STAR = require('../../assets/games/boss/fx_small_dizzy_star.png');
 const RIBBON = require('../../../assets/images/ribbon.png');
@@ -226,7 +227,8 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
           </View>
         </Animated.View>
       </Pressable>
-      <View style={styles.actions}>
+      {/* N03: one shared input lock: a kid still tapping the boss never presses FIGHT AGAIN or CONTINUE by accident. */}
+      <LockedResultActions style={styles.actions}>
         {rematch ? (
           <Pressable accessibilityRole="button" onPress={rematch} style={[styles.btn, styles.fightBtn]}>
             <Text style={styles.fightText}>FIGHT AGAIN</Text>
@@ -235,7 +237,7 @@ export function BossResults({ result, extras, reducedMotion, claim, rematch }: P
         <Pressable accessibilityRole="button" onPress={claim} style={[styles.btn, styles.contBtn]}>
           <Text style={styles.contText}>{rematch ? 'DONE' : 'CONTINUE'}</Text>
         </Pressable>
-      </View>
+      </LockedResultActions>
     </Animated.View>
   );
 }

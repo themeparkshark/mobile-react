@@ -10,6 +10,7 @@
 import { openExternal } from '../../../services/external';
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import LockedResultActions from '../../../gamekit/results/LockedResultActions';
 import Animated, {
   Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
 } from 'react-native-reanimated';
@@ -344,7 +345,8 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
           </View>
         ) : null}
         {fact ? <FactRow card={fact} /> : null}
-        <View style={styles.buttons}>
+        {/* N03: one shared input lock: a kid still tapping answers never presses REMATCH or DONE by accident. */}
+        <LockedResultActions style={styles.buttons}>
           {onRematch ? (
             <Animated.View style={pulseStyle}>
               <Pressable style={[styles.btn, styles.primary]} onPress={onRematch} accessibilityRole="button">
@@ -365,7 +367,7 @@ export function DuelResults({ model, beatMs, onRematch, onGhost, onContinue, red
               <Text style={onRematch ? styles.secondaryText : styles.primaryText}>{model.ride?.won ? 'CONTINUE' : 'DONE'}</Text>
             </Pressable>
           </View>
-        </View>
+        </LockedResultActions>
       </Animated.View>
       {/* It waits for the card's real height, so it never drops onto the card. */}
       {model.best && !polGone && cardH > 0 ? (
