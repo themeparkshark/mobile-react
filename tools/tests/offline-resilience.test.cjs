@@ -113,6 +113,7 @@ test('useAxiosSetup registers once, reads fresh callbacks and has no em dash toa
     '../utils/toast': { showToast: message => toasts.push(message) },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
     '../api/broadcastFilter': loadTs('src/api/broadcastFilter.ts'),
+    '../services/rewards/levelUps': loadTs('src/services/rewards/levelUps.ts'),
   });
   mod.useAxiosSetup();
   assert.equal(effects.length, 1);
@@ -188,6 +189,7 @@ function realStack(transport) {
     '../utils/toast': { showToast: message => toasts.push(message) },
     '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
     '../api/broadcastFilter': loadTs('src/api/broadcastFilter.ts'),
+    '../services/rewards/levelUps': loadTs('src/services/rewards/levelUps.ts'),
   });
   setup.useAxiosSetup();
   return { client, events, captured, broadcasts, toasts, AxiosError: realAxios.AxiosError, SERVER_TROUBLE_TOAST: setup.SERVER_TROUBLE_TOAST };
@@ -344,6 +346,7 @@ test('a 401 signs out only a request that carried a token (guests keep playing)'
     '../api/client': {}, '../context/AuthProvider': { AuthContext: {} }, '../context/BroadcastProvider': { BroadcastContext: {} },
     '../utils/toast': { showToast() {} }, '../utils/standalonePreview': { isStandalonePreviewMode: () => false },
     '../api/broadcastFilter': loadTs('src/api/broadcastFilter.ts'),
+    '../services/rewards/levelUps': loadTs('src/services/rewards/levelUps.ts'),
   });
   // The real axios build: a 401 from a client with and without a default token.
   const failed = async token => {

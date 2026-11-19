@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { treatMeterLine } from '../../services/guide/freeTickets';
 import { Image } from 'expo-image';
 import { Animated, StyleSheet, Text, View } from 'react-native';
 
@@ -28,7 +29,7 @@ export default function HomeTicketProgress({ findsUntilTicket }: {
   }, [remaining, ticketScale]);
 
   return <View style={styles.card} accessible accessibilityRole="text"
-    accessibilityLabel={`${remaining} more ${remaining === 1 ? 'treat' : 'treats'} = 1 Ticket`}>
+    accessibilityLabel={treatMeterLine(remaining)}>
     <Animated.View style={[styles.ticketIcon, { transform: [{ scale: ticketScale }] }]}>
       <Image source={require('../../../assets/images/ticket-icon.png')}
         style={styles.ticketImage} contentFit="contain" />

@@ -56,6 +56,7 @@ test('a slot that stays outside the viewport produces a retry, never a pretend d
 });
 test('arrival actions remain usable immediately; land feedback happens once and cleanup cancels motion',()=>{
  let lands=0,inspections=0;const view=runtime('src/components/CoinShelfArrival.tsx',{
+  '../services/reveal/revealLadder':{useRung:()=>({open:true,isNew:false,markSeen(){}}),rungState:()=>({open:true,isNew:false}),recordProgress(){}},/* fix w4 T097: coin levels open */
   '../hooks/useReducedGameMotion':{default:()=>false},'../gamekit/SFX':{playSfx(){}}
  },{target:{x:120,y:170,width:60,height:60,frameWidth:390,frameHeight:650},coinUrl:'coin',rideName:'Snowball',firstCollection:true,
  onLand(){lands++;},onInspect(){inspections++;},onClose(){}});
@@ -74,6 +75,7 @@ test('reduced-motion arrival immediately marks its real slot with no entrance mo
 test('explicit mastery opens once and cannot present a late response after its action is cancelled',async()=>{
  let reads=0,resolve;
  const view=runtime('src/components/TaskCoinModal.tsx',{
+  '../services/reveal/revealLadder':{useRung:()=>({open:true,isNew:false,markSeen(){}}),rungState:()=>({open:true,isNew:false}),recordProgress(){}},/* fix w4 T097: coin levels open */
   '../context/AuthProvider':{AuthContext:{value:{player:{id:5,energy:185},refreshPlayer:async()=>{}}}},
   '../helpers/haptics':{impactAsync(){},ImpactFeedbackStyle:{}},
   '../constants/coinTiers':require('./helpers/ts-module.cjs').loadTs('src/constants/coinTiers.ts'),

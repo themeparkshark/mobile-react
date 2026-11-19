@@ -50,6 +50,16 @@ export type FreeTicketStep =
 /** Every 3 treats at home make 1 Ticket (blueprint section 2). */
 export const TREATS_PER_TICKET = 3;
 
+/**
+ * Fix w4 T101: the one treat meter line, everywhere it shows (guide card, home chips, hunt card). The server's count
+ * is the most treats it takes; a Ticket can drop sooner, so the line says so and never reads like wrong math.
+ */
+export function treatMeterLine(treatsLeft: number | null | undefined): string {
+  const n = typeof treatsLeft === 'number' && Number.isFinite(treatsLeft) && treatsLeft > 0
+    ? Math.max(1, Math.min(TREATS_PER_TICKET, Math.round(treatsLeft))) : TREATS_PER_TICKET;
+  return n === 1 ? '1 more treat = 1 Ticket' : `Up to ${n} treats = 1 Ticket`;
+}
+
 const SOURCE_ORDER: readonly ClaimSourceKind[] = ['stamp', 'set', 'chest', 'pass', 'other'];
 
 const count = (value: unknown): number =>

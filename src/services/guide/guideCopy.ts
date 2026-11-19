@@ -10,7 +10,7 @@
 import type { GuideState, GuideTarget } from './nextCoin';
 import { shortParkName } from '../../helpers/parkName';
 import { plainRideName } from '../../helpers/plainRideName';
-import { TREATS_PER_TICKET, type FreeTicketStep } from './freeTickets';
+import { TREATS_PER_TICKET, treatMeterLine, type FreeTicketStep } from './freeTickets';
 
 /** What the card's one button does. */
 export type GuideAction =
@@ -209,8 +209,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
   switch (state) {
     case 'home': {
       const shelf = ctx.shelf;
-      const meter = ctx.treatsToTicket && ctx.treatsToTicket > 0
-        ? `${ctx.treatsToTicket} more ${ctx.treatsToTicket === 1 ? 'treat' : 'treats'} = 1 Ticket` : `${TREATS_PER_TICKET} treats = 1 Ticket`;
+      const meter = treatMeterLine(ctx.treatsToTicket);
       // Tonight's real goal first (fix round W1 item 17): a coin that can level up now says so, and the one
       // button opens it. Otherwise the plan, the shelf and the ticket meter, as before.
       if (ctx.levelUpName) {

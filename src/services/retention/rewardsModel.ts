@@ -96,11 +96,15 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
       rows.push({ key: 'trail', title: 'Trail Boxes', line: t.atPark ? 'Walk the park to open them' : 'They walk open on your next park day', ready: 0, action: door ? 'go' : null });
     }
   }
-  if (i.stamps && i.stamps.claimable > 0) {
+  // Fix w4 T115 and N12: one thing to claim at a time. While today's chest (or the Daily 3 chest) waits, the stamps
+  // wait behind it (they come back the moment it is open), and every stamp waiting is one row with one reveal, so
+  // it counts once on the Rewards button (never "5 to claim" on day one). A RETRY row always shows.
+  const chestReady = !!i.dailyChest?.unclaimed || !!i.daily3?.claimable;
+  if (i.stamps && i.stamps.claimable > 0 && (!chestReady || i.stamps.retry)) {
     // Fix w3 T094 (retry) and T126 (stamp Tickets, one name): never "stamp prizes".
     rows.push(i.stamps.retry
-      ? { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} still waiting`, ready: i.stamps.claimable, action: 'retry' }
-      : { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
+      ? { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} still waiting`, ready: 1, action: 'retry' }
+      : { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} to claim`, ready: 1, action: 'claim_all' });
   }
   if (i.events && i.events.chests > 0) {
     rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: i.events.door !== false ? 'open' : null });
@@ -254,6 +258,20 @@ export function stampClaimNote(paid: { readonly coins: number; readonly tickets:
     return got ? `${got}. ${wait}` : wait;
   }
   return got || 'Claimed!';
+}
+
+/** Fix w4 T100: the stamp claim's line under the face-up stamps. Names them, then says to tap. */
+export function stampRevealSubtitle(names: readonly string[]): string {
+  const clean = names.map(n => String(n ?? '').trim()).filter(Boolean);
+  if (clean.length === 0) return 'Tap your stamp!';
+  if (clean.length === 1) return `${clean[0]} stamp. Tap it!`;
+  const shown = clean.length > 3 ? `${clean.slice(0, 3).join(', ')} and ${clean.length - 3} more` : clean.join(', ');
+  return `${shown}. Tap to claim!`;
+}
+
+/** Fix w4 T224 and T242: a stamp's title, and that it is on when the server put it on. */
+export function stampTitleLine(title: string, worn: boolean): string {
+  return worn ? `New title: ${title}. You're wearing it!` : `New title: ${title}`;
 }
 
 /**

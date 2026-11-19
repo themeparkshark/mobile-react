@@ -138,7 +138,7 @@ test('item 17: at home the guide says which coin can level up now, and LEVEL UP 
   assert.equal(ready.title, "Level up Roger Rabbit's Car Toon Spin!");
   assert.equal(ready.button.action, 'level_up');
   assert.equal(ready.button.label, 'LEVEL UP');
-  assert.match(ready.line, /2 more treats = 1 Ticket/, 'the ticket meter stays');
+  assert.match(ready.line, /Up to 2 treats = 1 Ticket/, 'the ticket meter stays');
   assert.ok(ready.line.length <= 56, `two lines on the card: ${ready.line}`);
   assert.match(read('src/screens/ExploreScreen.tsx'), /levelUp: homeLevelUp \? ref\(homeLevelUp\.ride_name, homeLevelUp\.coin_url, homeLevelUp\.id, homeLevelUp\.park_id\) : null,/, 'the card wears that coin');
   assert.equal(guideCopy.guideCardCopy('home', null, ctx).button.action, 'plan', 'nothing ready: the plan card as before');

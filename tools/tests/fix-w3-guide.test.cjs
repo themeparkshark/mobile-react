@@ -223,7 +223,7 @@ test('T016: PLAN plans: the shelf opens with the next coin picker on top, and th
   assert.equal(home.button.label, 'PLAN');
   assert.equal(home.line, 'Pick your next coin. 1 more treat = 1 Ticket');
   assert.equal(C.guideCardCopy('home', null, ctx({ planName: 'Astro Blasters', treatsToTicket: 2 })).line,
-    'Next coin: Astro Blasters. 2 more treats = 1 Ticket');
+    'Next coin: Astro Blasters. Up to 2 treats = 1 Ticket');
   assert.match(read('src/screens/ExploreScreen.tsx'), /player: player\.id, plan: true \}\);/);
   assert.match(read('src/screens/ParkScreen.tsx'), /const storyTop = !planVisit && canChooseGoal/);
   assert.match(read('src/components/guide/NextCoinCard.tsx'), /wallet \|\| state === 'home' \? TICKET : COIN_FALLBACK/);

@@ -155,7 +155,10 @@ test('daily chest at home: "Back to map" puts it away, and the Rewards button op
   await app.settle(); await app.settle();
   assert.equal(app.find(named('DailyGiftModal')), undefined, 'and does not come back on the next render');
   // One Rewards button: one chest, one number (core loop 4.2).
-  const button = app.find(named('HomeExplore')).props.chestButton;
+  // Fix w4 T114: the button sits inside its Trail Box pulse.
+  const pulse = app.find(named('HomeExplore')).props.chestButton;
+  assert.equal(pulse?.type?.name, 'TrailReadyPulse');
+  const button = pulse.props.children;
   assert.equal(button?.type?.name, 'RewardsButton', 'the Rewards button holds the chest while unclaimed');
   button.props.onPress(); app.render();
   assert.equal(sheetOpens, 1, 'the button opens the Rewards sheet (its chest row opens the chest)');

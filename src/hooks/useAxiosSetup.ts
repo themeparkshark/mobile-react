@@ -9,6 +9,7 @@ export const REWARD_BANNERS_FOLDED = true;
 import { AuthContext } from '../context/AuthProvider';
 import { BroadcastContext } from '../context/BroadcastProvider';
 import { showToast } from '../utils/toast';
+import { takeLevelUps } from '../services/rewards/levelUps';
 
 /** Consecutive server-error counter: only toast after 3 in a row. */
 let signingOut = false;
@@ -54,7 +55,8 @@ export const useAxiosSetup = () => {
           // server's "You earned N coins!" and "You earned N Tickets!" banners never show; server news still does.
           const shown = visibleBroadcasts<string>(response.data.broadcasts, REWARD_BANNERS_FOLDED || Boolean(cfg?.[QUIET_COIN_BROADCAST]));
           // A ride challenge holds server news while its game and win card are up (fix W3 T068).
-          routeBroadcasts(shown, messages => enqueueRef.current(messages));
+          // Fix w4 T102: "You reached Level N!" becomes its own moment (LevelUpMoment), in its turn after the hold.
+          routeBroadcasts(shown, messages => { const banners = takeLevelUps(messages); if (banners.length) enqueueRef.current(banners); });
         }
         return response;
       },

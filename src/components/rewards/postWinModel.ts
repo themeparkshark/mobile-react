@@ -204,10 +204,10 @@ export interface WinChip extends RewardChipModel {
 
 /**
  * The one reward row (fix W3 T048: everything the server granted that a player keeps an eye on). Shark Coins and
- * Tickets always; the member's VIP coins as one chip; the Ride Parts that landed on this coin and the XP always,
- * whenever the server granted them; Energy as its own chip once coin levels are open (before that it is not
- * named on the card: it still flies to the Shelf button, so a first coin never shows a fifth chip or a
- * "saved for growing coins" riddle). Never a "+0".
+ * Tickets always; the member's VIP coins as one chip; XP whenever the server granted it. Ride Parts and Energy are
+ * the coin levels idea (rung 3): before it opens they are not named on the card (fix w4 T097, one new idea per
+ * win), they still fly to the Shelf button and the server keeps counting them, and the day the rung opens the
+ * card teaches both in one pictured line (coinLevelsIntro). Never a "+0".
  */
 export function winRewardChips(input: WinRowInput): WinChip[] {
   const chips: WinChip[] = [];
@@ -215,11 +215,12 @@ export function winRewardChips(input: WinRowInput): WinChip[] {
   if (n(input.coins)) chips.push({ icon: 'coins', amount: n(input.coins), label: 'Shark Coins', flyTo: 'coins' });
   if (n(input.vipCoins)) chips.push({ icon: 'member', amount: n(input.vipCoins), label: 'VIP', flyTo: 'coins' });
   if (n(input.tickets)) chips.push({ icon: 'ticket', amount: n(input.tickets), label: n(input.tickets) === 1 ? 'Ticket' : 'Tickets', flyTo: 'tickets' });
-  if (n(input.parts)) chips.push({ icon: 'parts', amount: n(input.parts), label: n(input.parts) === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
-  // T070: the Parts this coin already earned in its line get their own quiet chip that says where they came from
-  // (already in the balance, so they never fly again: a separate kind the card's fly loop skips).
+  if (input.coinLevelsOpen && n(input.parts)) chips.push({ icon: 'parts', amount: n(input.parts), label: n(input.parts) === 1 ? 'Ride Part' : 'Ride Parts', flyTo: 'energy' });
+  // Line Parts are already in the balance, so they never fly again: a separate kind the card's fly loop skips.
   const lineParts = n(input.lineParts);
-  if (lineParts) chips.push({ icon: 'parts', amount: lineParts, label: 'From your line', flyTo: 'energy', quiet: true, noFly: true });
+  // T097: Ride Parts get a chip only once coin levels are open (before that they fly to the Shelf chipless).
+  // T070: the Parts this coin already earned in its line get their own quiet chip that says where they came from.
+  if (input.coinLevelsOpen && lineParts) chips.push({ icon: 'parts', amount: lineParts, label: 'From your line', flyTo: 'energy', quiet: true, noFly: true });
   if (input.coinLevelsOpen && n(input.energy)) chips.push({ icon: 'energy', amount: n(input.energy), label: 'Energy', flyTo: 'energy' });
   if (n(input.xp)) chips.push({ icon: 'xp', amount: n(input.xp), label: 'XP', flyTo: 'xp' });
   return chips;
@@ -246,6 +247,23 @@ export function chipLandMs(index: number, enterMs = 900): number {
 export function silentEnergy(input: Pick<WinRowInput, 'energy' | 'coinLevelsOpen'>): number {
   const value = Number.isFinite(input.energy) && input.energy > 0 ? Math.floor(input.energy) : 0;
   return input.coinLevelsOpen ? 0 : value;
+}
+
+/** Ride Parts that fly to the Shelf button with no chip on the card (before coin levels open, fix w4 T097). */
+export function silentParts(input: Pick<WinRowInput, 'parts' | 'lineParts' | 'coinLevelsOpen'>): number {
+  const n = (value: number | undefined) => (Number.isFinite(value) && (value as number) > 0 ? Math.floor(value as number) : 0);
+  return input.coinLevelsOpen ? 0 : n(input.parts) + n(input.lineParts);
+}
+
+/**
+ * The day coin levels open (rung 3 wears its NEW tag), the win card teaches them in one pictured line, once:
+ * the Parts and Energy chips sit right above it. Null on every other win.
+ */
+export function coinLevelsIntro(input: { readonly rungNew: boolean; readonly parts: number; readonly energy: number }): string | null {
+  if (!input.rungNew) return null;
+  const has = (v: number) => Number.isFinite(v) && v > 0;
+  if (!has(input.parts) && !has(input.energy)) return null;
+  return '[icon:parts] [icon:energy] Ride Parts and Energy level up your coins';
 }
 
 /**

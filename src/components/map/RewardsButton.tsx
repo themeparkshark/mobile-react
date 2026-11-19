@@ -89,6 +89,11 @@ export function rewardsLabel(model: RewardsButtonModel): string {
   return parts.join(', ');
 }
 
+/** Pure (fix w4 T114): a Trail Box finished walking since the last look, so the button pulses once (TrailReadyPulse). */
+export function trailBoxJustReady(previous: number | null, ready: number, trailOpen: boolean): boolean {
+  return trailOpen && previous !== null && Number.isFinite(ready) && ready > previous;
+}
+
 export default function RewardsButton({ model, onPress, isNew = false }: {
   readonly model: RewardsButtonModel; readonly onPress: () => void;
   /** The flame (rung 4) or the Trail ring (rung 6) just unlocked: the button wears NEW until tapped. */

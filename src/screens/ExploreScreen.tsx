@@ -86,6 +86,8 @@ import { frightHelpChoices, frightOwnsParkTips, hideEveryRideOpen } from '../ser
 import type { FrightMapInput } from '../components/map/fright';
 import { getParkLive, type LivePark, type LiveRide } from '../api/endpoints/parks/live';
 import type { RushPick } from '../components/RushCallout';
+import TicketGrantMoment from '../components/rewards/TicketGrantMoment';
+import TrailReadyPulse from '../components/map/TrailReadyPulse';
 import LiveEventsPill from '../components/LiveEventsPill';
 import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
@@ -93,7 +95,7 @@ import { BOSS_ART } from '../components/boss/bossArt';
 import { BOSS_NAMES } from '../api/endpoints/parks/raid';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
-import RewardsButton, { rewardsNewRungs, rewardsButtonModel, withRewardsSummary } from '../components/map/RewardsButton';
+import RewardsButton, { rewardsNewRungs, rewardsButtonModel, trailBoxJustReady, withRewardsSummary } from '../components/map/RewardsButton';
 import useRetention from '../components/retention/useRetention';
 import { chestDismissed, chestShouldShow, markChestDismissed } from './ExploreScreen/dailyChestPresence';
 import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
@@ -120,6 +122,8 @@ import { GymMarker, SwordMarker } from '../components/GymBattle';
 import { useMapFlags } from '../services/mapFlags';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
+import { HOME_FIRST_FIND_COPY } from '../components/Tutorial/steps';
+import { useToast } from '../components/Toast';
 import SignInButtons from '../components/SignInButtons';
 import { GameIcon, GameRichText, gameAlert } from '../ui';
 import type { FrightShopStall } from '../api/endpoints/fright/types';
@@ -151,7 +155,7 @@ import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
-import { retireRungTag, useLadderCounters, useRung } from '../services/reveal/revealLadder';
+import { retireRungTag, useLadderCounters, useLadderVeteran, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
 import { linePlayRoute } from '../components/guide/guideCoins';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -175,6 +179,10 @@ import { refreshFeatureFlags } from '../api/endpoints/platform/feature-flags';
 const SHOPS_ROW_SHIPPED = false;
 /** The home guide reads an empty shelf until the coin read answers. */
 const NO_COINS: readonly CollectedRideCoin[] = [];
+/** Fix w4 T120: the first catch's line shows this long, then hunting goes on (no card, no button). */
+const FIRST_CATCH_TOAST_MS = 2000;
+/** Fix w4 T098: no Rush before the day's first coin (one stable empty list, so memo inputs hold still). */
+const NO_RUSHES: RushPick[] = [];
 /** Dev-only live feed stub for lane walks (state D: feed off; or a daytime park at night). Never in a store or OTA bundle. */
 const LIVE_STUB = liveStubMode(__DEV__, process.env.EXPO_PUBLIC_GUIDE_LIVE_STUB);
 /** The camera follows the shark again this long after the player pans away (core loop 5.1, must-fix 28). */
@@ -430,7 +438,8 @@ export function ExploreScreenBody() {
   }, [homeLocationConfirmed]);
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
-  const { startTutorial, hasCompleted, isReady, isActive, findLanded } = useTutorial();
+  const { startTutorial, hasCompleted, isReady, isActive, findLanded, completeSequence } = useTutorial();
+  const { showToast: showMapToast } = useToast();
   const { explain, openHelpSheet, activeTip } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
@@ -537,6 +546,9 @@ export function ExploreScreenBody() {
   // Finn's home intro is still owed: it goes first, and the daily chest waits for it (core loop 4.3 rule 1).
   const [homeIntroOwed, setHomeIntroOwed] = useState(false);
   const introThisOpen = useRef(false);
+  // Fix w4 T106: the app open whose one lesson (the park help pages) already showed; the treats intro waits for another.
+  const lessonOpen = useRef<string | null>(null);
+  const veteran = useLadderVeteran();
   // The generic park tip is on screen: the Fin-ister intro waits for it (never two first-run cards at once).
   const [parkTipShowing, setParkTipShowing] = useState(false);
   // The right column's widest pill (Energy, or Trail Boxes above it) and the column's height: Finn's
@@ -667,12 +679,20 @@ export function ExploreScreenBody() {
     setShowPrepItemModal(false);
     setActivePrepItem(null);
     setActivePrepItemPivotId(null);
-    // After the very first catch, Finn says why it matters (once).
+    // After the very first catch, one short line says what to do next (once). Fix w4 T120: a 2 s toast, never a
+    // blocking card between the kid and the next treat; later catches show nothing.
     if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
       setFirstLineGap(true);
-      setTimeout(() => { startTutorial('home_first_find'); setFirstLineGap(false); }, 500);
+      setTimeout(() => {
+        if (completeSequence) {
+          completeSequence('home_first_find');
+          showMapToast({ type: 'reward', icon: 'sparkle', duration: FIRST_CATCH_TOAST_MS,
+            message: `${HOME_FIRST_FIND_COPY.title} ${HOME_FIRST_FIND_COPY.text}` });
+        } else startTutorial('home_first_find');
+        setFirstLineGap(false);
+      }, 500);
     }
-  }, [hasCompleted, startTutorial]);
+  }, [hasCompleted, startTutorial, completeSequence, showMapToast]);
 
   // Handler for Community Center tap - check if in range
   const handleCommunityCenterPress = useCallback(() => {
@@ -1246,6 +1266,10 @@ export function ExploreScreenBody() {
   // PLAY RIDE (or a closed ride's sign) is on screen: the declutter keeps ride art out from under it, and the guide card
   // says "Tap PLAY!" only once PLAY! is really drawn (its art in), never a beat before it (fix round w3 T009).
   const [playRideShown, setPlayRideShown] = useState(false);
+  // Fix w4 T098: live events (a boss raid, a Rush, an event) wait for the day's first coin, for everyone (preview
+  // ids too): a park day starts with a coin, never with a raid, a timed find and four reward systems.
+  const liveDayStarted = useWonCoinToday();
+  const liveRushes = liveDayStarted ? rushes : NO_RUSHES;
   const {
     guideFlags, coinLevelsRung, dailyRung, trailRung, eventsRung, claimable, claimableTicketCount, claimTickets, wallet, welcome,
     levelUpTaskId, setAdventureWonTaskId, nextCoin, guideShown, guideCoinUrl, hasWonACoin, guideTargetId, setGuidePathRequest, guideMapTarget, lineStoryIsland, adventureSheetRequest,
@@ -1253,20 +1277,23 @@ export function ExploreScreenBody() {
     playRequest, atParkNow,
   } = useMapGuide({
     player, park, mapFocused, location, redeemables, visibleTasks, livePark, adventure, tripGoalData, queueDwell, starRides,
-    rushes, rangeChecked,
+    rushes: liveRushes, rangeChecked,
     // PLAY! always rises for the coin in range, whatever island is selected (T001): the guide hears the same answer,
     // once PLAY! is drawn.
     playableTaskId: playRideShown ? playableTaskId : null,
     adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
   });
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
-  const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow;
-  const liveSlotShown = (coinLevelsRung.open && (raidOnMap || !!rushes.length)) || receiptNeedsCheck || !!bossMap.moment;
+  // Fix w4 T098: and only after the day's first coin.
+  const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow && liveDayStarted;
+  const eventsShown = eventsRung.open && liveDayStarted;
+  const liveSlotShown = (coinLevelsRung.open && (raidOnMap || !!liveRushes.length)) || receiptNeedsCheck
+    || (!!bossMap.moment && liveDayStarted);
   // The one NEW goes to a surface that wears it. The team step and LinePlay in a real line are their own moment
   // and wear none; coin levels wear theirs only on a raid or Rush pill. Those rungs never hold the slot.
   const teamRung = useRung('team');
   const linePlayRung = useRung('lineplay');
-  const coinLevelsCanWearNew = raidOnMap || rushes.length > 0;
+  const coinLevelsCanWearNew = raidOnMap || liveRushes.length > 0;
   useEffect(() => { if (teamRung.isNew) retireRungTag('team'); }, [teamRung.isNew]);
   useEffect(() => { if (linePlayRung.isNew) retireRungTag('lineplay'); }, [linePlayRung.isNew]);
   useEffect(() => { if (coinLevelsRung.isNew && !coinLevelsCanWearNew) retireRungTag('coin_levels'); }, [coinLevelsRung.isNew, coinLevelsCanWearNew]);
@@ -1374,6 +1401,15 @@ export function ExploreScreenBody() {
   const trailBox = headlineBox(trail.state ? { ready: trail.state.ready, walking: trail.state.walking } : null);
   const dailyOpen = dailyRung.open && (guideFlags.daily_three === true || guideFlags.level_chests === true);
   const trailOpen = trailRung.open && trail.enabled && !!trail.state;
+  // Fix w4 T114: a Trail Box that finishes walking pulses the Rewards button once, with a short "Box ready!" label.
+  const trailReadyNow = trail.state?.ready.length ?? 0;
+  const trailReadySeen = useRef<number | null>(null);
+  const [trailPulse, setTrailPulse] = useState(0);
+  useEffect(() => {
+    if (!trail.state) return;
+    if (trailBoxJustReady(trailReadySeen.current, trailReadyNow, trailRung.open)) setTrailPulse(n => n + 1);
+    trailReadySeen.current = trailReadyNow;
+  }, [trail.state, trailReadyNow, trailRung.open]);
   const rewardsModel = withRewardsSummary(rewardsButtonModel({
     chestUnclaimed: chestUnclaimed && !chestShowing, trailReady: trail.state?.ready.length ?? 0,
     dailyOpen, flame: player?.daily3_streak ?? 0, trailOpen,
@@ -1411,7 +1447,7 @@ export function ExploreScreenBody() {
     flags: guideFlags,
   });
   // The event recap comes through the attention queue (after its rung; never in the park's quiet moments).
-  const recapShown = !!liveEvt.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsRung.open && attentionFor('event_recap');
+  const recapShown = !!liveEvt.event && recapDue && mapFocused && !eventOpen && !finnOwnsMap && eventsShown && attentionFor('event_recap');
   useEffect(() => { if (recapShown) attentionQueue.take(appOpenId, 'event_recap'); }, [recapShown, appOpenId]);
   // A brand new player's first 30 s of hunting: no Rewards button yet, just the treats (the chest comes after).
   const mapControlsCount = firstVisitHold || !player ? 0 : 1;
@@ -1425,14 +1461,16 @@ export function ExploreScreenBody() {
     if (rewardsNewKey.includes('trail')) trailRung.markSeen();
     openRewards();
   }, [rewardsNewKey, dailyRung, trailRung, openRewards]);
-  const mapControls = mapControlsCount > 0 ? <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} /> : null;
+  const mapControls = mapControlsCount > 0 ? <TrailReadyPulse pulseKey={trailPulse}>
+    <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} />
+  </TrailReadyPulse> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
     tutorialActive: isActive, findOpen: showPrepItemModal, findPending: !!pendingFind,
     otherModalOpen: showTooFarModal || showCommunityCenterModal, chestShowing: dailyGiftOccluded,
     caughtThisSession, firstFindLineDone: hasCompleted('home_first_find'),
   };
-  const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue);
+  const homeIntroAllowed = homeIntroMayPresent(homeIntroQueue) && !veteran && lessonOpen.current !== appOpenId;
   // While Fin-ister Nights is on (or its exit / Marquee card is up) the generic park tip stays away.
   const parkTip = frightOwnsParkTips({ modeOn: frightNight.modeOn, recapUp: !!frightEngine.recapOffer || !!frightEngine.marquee })
     ? null : parkTipFor({ inPark: atParkNow, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
@@ -1467,12 +1505,16 @@ export function ExploreScreenBody() {
       .catch(() => { if (live) setHelpPageSeen(true); });
     return () => { live = false; };
   }, [helpPageKey]);
-  const helpPageDue = !!park && helpPageSeen === false && isReady && hasCompleted('onboarding') && hasCompleted('park_arrival')
+  // Fix w4 T106: a veteran never gets the beginner pages; the park pages open only in a real park reading (never
+  // on the way home), and never in an app open that already showed the home treats intro (one lesson per open).
+  const helpPageDue = !!park && atParkNow && !veteran && !introThisOpen.current && helpPageSeen === false && isReady
+    && hasCompleted('onboarding') && hasCompleted('park_arrival')
     && !parkLessonRan.current && !isActive && parkTipReady && !parkTipShowing && attentionFor('help_page');
   useEffect(() => {
     if (!helpPageDue || !helpPageKey) return undefined;
     const timer = setTimeout(() => {
       if (!attentionQueue.take(appOpenId, 'help_page')) return;
+      lessonOpen.current = appOpenId;
       setHelpPageSeen(true);
       void AsyncStorage.setItem(helpPageKey, '1').catch(() => undefined);
       openHelpSheet('park_map');
@@ -1480,7 +1522,8 @@ export function ExploreScreenBody() {
     return () => clearTimeout(timer);
   }, [helpPageDue, helpPageKey, appOpenId, openHelpSheet]);
   // Would present but for a find: home finds hold their auto-open until the intro is seen.
-  const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false });
+  const homeIntroEligible = homeIntroMayPresent({ ...homeIntroQueue, findOpen: false, findPending: false }) && !veteran
+    && lessonOpen.current !== appOpenId;
 
   // Declutter inputs, rebuilt only when what the solver sees changes (the camera side runs in Map).
   // The opportunity clock and GPS fixes tick often; they reach the layout only through these
@@ -1711,15 +1754,15 @@ export function ExploreScreenBody() {
   const statusEntries: StatusEntry[] = player && park ? statusOrder({
     live: liveSlotShown, show: nightPill ? (nightShow.phase === 'live' ? 'live' : 'teaser') : null,
     nightMode: frightNight.modeOn, control: hasTeam,
-    event: liveEvt.event && eventsRung.open ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
+    event: liveEvt.event && eventsShown ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
   }).map(key => {
     if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, icon: <GameIcon name="star" size={28} />, node: withNewTag(eventsRung,
       <EventStatusChip inline event={liveEvt.event} onPress={() => setEventOpen(true)} />) };
     if (key === 'live') return { key, label: raidOnMap && raid ? `Boss raid: ${BOSS_NAMES[raid.boss]}` : 'Rush in the park',
-      tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park,
+      tone: liveRushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park,
       icon: raidOnMap && raid ? <Image source={BOSS_ART[raid.boss]} style={HUD_CHIP_ART} contentFit="contain" /> : <GameIcon name="rush" size={30} />,
       node: withNewTag(
-      raidOnMap || rushes.length > 0 ? coinLevelsRung : null, <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? rushes : []} onBoss={() => setBossOpen(true)}
+      raidOnMap || liveRushes.length > 0 ? coinLevelsRung : null, <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? liveRushes : []} onBoss={() => setBossOpen(true)}
       mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
       onMapMoment={() => {
         const task = visibleTasks.find(task => task.id === bossMap.moment?.impact.taskId);
@@ -2082,8 +2125,12 @@ export function ExploreScreenBody() {
         {/* T013: one small chip at the right, beside Rewards; the guide card owns the top-left. A boss moment
             on the map or an attack to check opens it as the full pill (the player is in that moment). */}
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} compact={!bossMap.moment && !receiptNeedsCheck} />}
+        {/* Fix w4 T101: a Ticket grant with no card of its own (the park day starter) flies to the header with its reason. */}
+        {/* It waits for a settled map with Finn done (a first open's warm-up comes first, the grant right after). */}
+        <TicketGrantMoment calm={mapFocused && mapCalm && !finnOwnsMap && !mapCovered && !redeemFlowOpen && !retentionOccluding
+          && !showPrepItemModal && !bossOpen && !showTooFarModal && !showCommunityCenterModal} />
         {/* Shark Events (after their rung): the sweep and the gain toast sit under the guide card, never over it or PLAY!. */}
-        {player && liveEvt.event && eventsRung.open && <>
+        {player && liveEvt.event && eventsShown && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>
           <View pointerEvents="none" style={{ position: 'absolute', top: slotTop + GUIDE_CARD_HEIGHT + 10, left: 0, right: 0, alignItems: 'center', zIndex: 39 }}>
             <EventGainToast gained={liveEvt.gained} gainedAt={liveEvt.gainedAt} artKey={liveEvt.event.art_key ?? null} />

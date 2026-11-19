@@ -335,7 +335,7 @@ test('state B at the gate through the first coin: the map wiring keeps chests, r
   const explore = mapSource();
   assert.match(explore, /const chestReady = !firstVisitHold && !\(homeIntroOwed && !park\) && attentionFor\('daily_chest'\) && chestMayPresent\(/);
   assert.match(explore, /&& !\(chestUnclaimed && !!dailyGift && !chestDismissed\(dailyGift\.id\)\) && attentionFor\('reward'\),/, 'level chests and Daily 3 sheets');
-  assert.match(explore, /eventsRung\.open && attentionFor\('event_recap'\)/);
+  assert.match(explore, /eventsShown && attentionFor\('event_recap'\)/);
   assert.doesNotMatch(explore, /<ParkDayOffer|<NextUpRail|<DwellCard|<MapSuggestionStub/, 'no offer, rail or extra card over the map');
   assert.match(explore, /walkingToTarget: busyWithCoin, playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,/);
 });

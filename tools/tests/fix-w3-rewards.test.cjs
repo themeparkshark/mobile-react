@@ -66,7 +66,7 @@ test('T094: a stamp that did not come through stays on the row with RETRY, and t
   assert.equal(model.stampClaimNote({ coins: 55, tickets: 0, energy: 20, xp: 95 }, 0), '+55 Shark Coins, +20 Energy, +95 XP');
   assert.match(read('src/components/retention/RewardsSheet.tsx'), /retry: 'RETRY'/);
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /claimOrReconcile\(\s*async \(\) => \(await claimStampReward\(st\.id\)\)/, 'each stamp claim reconciles a lost answer');
+  assert.match(hook, /claimOrReconcile\(\s*async \(\) => \{\s*const answer = await claimStampReward\(st\.id\);/, 'each stamp claim reconciles a lost answer');
   assert.match(hook, /setStampRetry\(failed > 0 && waiting > 0\)/);
   assert.doesNotMatch(hook, /Those stamps did not go through/);
   assert.doesNotMatch(hook, /Check your internet and try again\.'\);\n    \} finally/, 'the reveal never blames the internet for a slow server');
