@@ -124,9 +124,15 @@ test('T180: shelf and closet loads retry once quietly, then show his shark with 
   assert.match(banner, /TOP_LEFT_DOCK_ROUTES: ReadonlySet<string> = new Set\(\['TeamSelection'\]\)/, 'the team pick title is never covered');
 });
 
-test('T186: the team card pictures "for keeps" with a lock', () => {
-  const src = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
-  assert.match(src, /<GameIcon name="lock" size=\{26\} \/>\n\s*<Text style=\{s\.warnText\}>This is for keeps/);
+test('T186: both team picks picture "for keeps" with a lock (one shared note; hold-2 found the in-card step had none)', () => {
+  const note = read('src/components/rewards/ForKeepsNote.tsx');
+  assert.match(note, /<GameIcon name="lock" size=\{iconSize\} \/>\n\s*<Text style=\{\[styles\.text, textStyle\]\}>\{text\}<\/Text>/);
+  const screen = read('src/screens/GymBattle/TeamSelectionScreen.tsx');
+  assert.match(screen, /<ForKeepsNote text=\{FOR_KEEPS_LONG\} iconSize=\{26\}/);
+  const step = read('src/components/rewards/WinTeamStep.tsx');
+  assert.match(step, /: <ForKeepsNote style=\{styles\.keepsRow\} \/>/);
+  // No team pick says "for keeps" in bare text any more.
+  for (const src of [screen, step]) assert.doesNotMatch(src, />This is for keeps/);
 });
 
 test('T175: a treat catch plays at once on a slow server and its claim finishes in the claim queue', async () => {

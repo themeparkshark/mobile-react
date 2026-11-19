@@ -22,6 +22,7 @@ import { GameIcon } from '../../ui';
 import { QUESTION_BANK } from './teamQuiz';
 import { teamExit, teamStepGone, teamStepLeaving, teamStepShown, type TeamSelectionParams } from '../../components/rewards/teamOffer';
 import { tryAgainLine } from '../../services/connectionCopy';
+import ForKeepsNote, { FOR_KEEPS_LONG } from '../../components/rewards/ForKeepsNote';
 
 const ORDER: TeamId[] = ['mouse', 'globe', 'shark'];
 const VIBE: Record<TeamId, { tag: string; line: string }> = {
@@ -205,10 +206,7 @@ export default function TeamSelectionScreen({ navigation, route }: Props) {
             <Text style={s.tag}>{VIBE[team].tag}</Text>
             <Text style={s.line}>{VIBE[team].line}</Text>
             {/* T186: a lock picture says "for keeps" before a word is read. */}
-            <View style={s.warn} accessible accessibilityLabel="This is for keeps: you can’t switch teams later.">
-              <GameIcon name="lock" size={26} />
-              <Text style={s.warnText}>This is for keeps: you can’t switch teams later.</Text>
-            </View>
+            <ForKeepsNote text={FOR_KEEPS_LONG} iconSize={26} style={s.warn} textStyle={s.warnText} />
             {stage === 'error' && <Text style={s.error}>{`Couldn’t join just now. ${tryAgainLine()}`}</Text>}
             <Pressable style={[s.join, { backgroundColor: TEAMS[team].color }]} onPress={() => void join()}
               disabled={stage === 'joining'} accessibilityRole="button">
