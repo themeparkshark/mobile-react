@@ -36,6 +36,8 @@ export const TOP_SLOT_TOP = 12;
 /** The bottom-left menu disc and the bottom-right Shelf button (with its label), measured from the bottom. */
 export const MENU_RECT = { left: 12, bottom: 96, w: 84, h: 84 } as const;
 export const SHELF_RECT = { right: 10, bottom: 92, w: 96, h: 110 } as const;
+/** The footer's wave and raised centre button reach this far up over the map's bottom edge. */
+export const FOOTER_TUCK = 40;
 
 export interface ChromeInput {
   readonly width: number;
@@ -51,6 +53,8 @@ export interface ChromeInput {
   readonly shelf: boolean;
 }
 
+export type ChromeKind = 'card' | 'raid' | 'rail' | 'menu' | 'shelf' | 'footer';
+
 export interface ChromeLayout {
   /** Where the top slot's card sits. A raid chip never pushes it down (it lives in the rail column). */
   readonly cardTop: number;
@@ -59,12 +63,12 @@ export interface ChromeLayout {
   readonly controlsTop: number;
   readonly compassRect: Rect;
   /** Every area chrome reserves on the map, by name. */
-  readonly reserved: readonly { readonly kind: 'card' | 'raid' | 'rail' | 'menu' | 'shelf'; readonly rect: Rect }[];
+  readonly reserved: readonly { readonly kind: ChromeKind; readonly rect: Rect }[];
 }
 
 /** Lays the map's chrome out once, from the screen size and what is showing. Pure. */
 export function mapChrome(i: ChromeInput): ChromeLayout {
-  const reserved: { kind: 'card' | 'raid' | 'rail' | 'menu' | 'shelf'; rect: Rect }[] = [];
+  const reserved: { kind: ChromeKind; rect: Rect }[] = [];
   const railX = i.width - RAIL_RIGHT - RAIL_BUTTON;
   const cardTop = TOP_SLOT_TOP;
   const controlsTop = TOP_SLOT_TOP + (i.raidChip ? RAID_CHIP_ROW : 0);
@@ -75,6 +79,8 @@ export function mapChrome(i: ChromeInput): ChromeLayout {
   reserved.push({ kind: 'rail', rect: { x: railX - 6, y: controlsTop - 6, w: RAIL_BUTTON + 12, h: RAIL_BUTTON + i.railExtras * RAIL_STEP + 18 } });
   if (i.menu) reserved.push({ kind: 'menu', rect: { x: MENU_RECT.left, y: i.height - MENU_RECT.bottom - MENU_RECT.h, w: MENU_RECT.w, h: MENU_RECT.h } });
   if (i.shelf) reserved.push({ kind: 'shelf', rect: { x: i.width - SHELF_RECT.right - SHELF_RECT.w, y: i.height - SHELF_RECT.bottom - SHELF_RECT.h, w: SHELF_RECT.w, h: SHELF_RECT.h } });
+  // The footer is part of the frame: a treat behind its wave is covered too.
+  reserved.push({ kind: 'footer', rect: { x: 0, y: i.height - FOOTER_TUCK, w: i.width, h: FOOTER_TUCK } });
   return { cardTop, cardRect, controlsTop, compassRect, reserved };
 }
 
@@ -168,10 +174,15 @@ export function mapTipGate(g: {
 /** How far around a reserved area a treat still counts as under it (its art stands above its spot). */
 export const UNDER_PAD = 18;
 
-/** Whether a treat's map spot sits under any reserved area (then it shows as an edge arrow, never peeking). Pure. */
-export function underChrome(point: { readonly x: number; readonly y: number }, reserved: readonly Rect[], pad = UNDER_PAD): boolean {
+/**
+ * Whether a treat's map spot sits under any reserved area, or so close to the map's edge that its art is cut off
+ * (then it shows as an edge arrow, never peeking). Pure.
+ */
+export function underChrome(point: { readonly x: number; readonly y: number }, reserved: readonly Rect[], pad = UNDER_PAD,
+  size: { readonly width: number; readonly height: number } | null = null): boolean {
   // The art stands about 36 pt above its spot: test that box, not the bare point.
   const art: Rect = { x: point.x - 20, y: point.y - 36, w: 40, h: 44 };
+  if (size && (art.x < 0 || art.y < 0 || art.x + art.w > size.width || art.y + art.h > size.height)) return true;
   return reserved.some(r => hits(art, inflate(r, pad)));
 }
 

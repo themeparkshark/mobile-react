@@ -90,6 +90,9 @@ test('(c) a treat under a corner button or the card is under chrome; one in the 
   assert.ok(C.underChrome({ x: menu.x + 10, y: menu.y + 20 }, reserved), 'the pickle behind the menu disc');
   assert.ok(C.underChrome({ x: 100, y: layout.cardRect.y + 60 }, reserved), 'under the card');
   assert.ok(!C.underChrome({ x: PRO.width / 2, y: PRO.height / 2 }, reserved), 'the open map');
+  assert.ok(C.underChrome({ x: PRO.width - 20, y: PRO.height - 12 }, reserved), 'behind the footer wave (r-home-05)');
+  assert.ok(C.underChrome({ x: PRO.width - 8, y: 400 }, reserved, undefined, PRO), 'cut off by the right edge');
+  assert.ok(!C.underChrome({ x: 200, y: 400 }, reserved, undefined, PRO));
 });
 
 test('(d) edge arrows: one per side led by the nearest find, merged with a count, never touching, never on chrome', () => {
@@ -144,7 +147,7 @@ test('the home map and the park map read their chrome from the one owner', () =>
   const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.doesNotMatch(homeSrc, /LIVE_BAR_ROW/, 'no second rule that drops the card for the raid');
   assert.match(homeSrc, /controlsTop=\{chrome\.controlsTop\}/);
-  assert.match(homeSrc, /underChrome\(point, reservedRef\.current\)/);
+  assert.match(homeSrc, /underChrome\(point, reservedRef\.current, undefined, containerSize\)/);
   assert.match(homeSrc, /edgeTokens\(edgeFinds, containerSize/);
   assert.doesNotMatch(homeSrc, /edgeArrowPlacement/);
   const chip = read('src/screens/ExploreScreen/HomeHuntChip.tsx');

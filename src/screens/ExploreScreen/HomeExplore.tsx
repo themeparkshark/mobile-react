@@ -680,7 +680,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         if (!point) continue;
         next.set(item.pivot_id, point);
         const off = point.x < 0 || point.y < 0 || point.x > containerSize.width || point.y > containerSize.height;
-        const under = !off && underChrome(point, reservedRef.current);
+        const under = !off && underChrome(point, reservedRef.current, undefined, containerSize);
         if (under) covered.add(item.pivot_id);
         if (off || under) edges.push({ item, point, distance });
       }
