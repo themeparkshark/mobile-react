@@ -91,7 +91,7 @@ test('T104: the chest card is sized to its prizes, the lid pops on the phone, pr
   assert.ok(quick[3] - quick[0] <= 330, `prizes land together (${quick.join(',')})`);
   const reveal = read('src/components/retention/RewardReveal.tsx');
   assert.match(reveal, /const lid = setTimeout\(\(\) => \{ cancelAnimation\(shake\); shake\.value = 0; popLid\(\); \}, reducedMotion \? 0 : LOCAL_POP_MS\);/);
-  assert.match(reveal, /!revealed && popped && previewRows\.length \? previewRows\.map/, 'the held prizes wait inside, dim');
+  assert.match(reveal, /!revealed && previewRows\.length \? previewRows\.map/, 'the held prizes show dim from the first frame');
   assert.doesNotMatch(reveal, /styles\.flash|useCountUp/, 'no white flash oval, no count-up');
   assert.match(reveal, /colors=\{GOLD_BURST\}/, 'a gold burst');
   const hook = read('src/components/retention/useRetention.tsx');

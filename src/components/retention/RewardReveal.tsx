@@ -242,8 +242,9 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       <Pressable onPress={skip} disabled={!revealed || allIn} accessible={false} style={{ alignSelf: 'stretch' }}>
         <ScrollView ref={scroll} style={{ height: rowsHeight }} contentContainerStyle={styles.rows} scrollEnabled={revealed}
           showsVerticalScrollIndicator={false}>
-          {!revealed && popped && previewRows.length ? previewRows.map(row => (
-            // T104: the lid is open and the server is paying: what the chest holds waits inside, dim, then lands.
+          {!revealed && previewRows.length ? previewRows.map(row => (
+            // T104: what the chest holds shows dim from the first frame (the card is never a tall empty panel), stays
+            // dim while the server pays, then lands bright.
             <View key={row.kind} style={styles.waiting}><Row row={row} shown reducedMotion compact={compact} /></View>
           )) : !revealed ? (
             <View style={[styles.hintBox, { height: rowsHeight - 8 }]}>
@@ -259,6 +260,7 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
       </Pressable>
       <View style={styles.bottom}>
         {allIn ? <DoneArea footer={footer} label={doneLabel ?? 'AWESOME!'} onDone={onDone} reducedMotion={reducedMotion} />
+          : !revealed && previewRows.length ? <Text style={styles.paying}>{!opening ? 'Tap to open!' : stalled ? 'Still opening...' : 'Opening...'}</Text>
           : opening && !revealed && popped ? <Text style={styles.paying}>{stalled ? 'Still opening...' : 'Opening...'}</Text> : null}
       </View>
       {stage && <RewardBurst progress={burst} x={stage.x} y={stage.y} colors={GOLD_BURST} />}
@@ -369,7 +371,7 @@ const styles = StyleSheet.create({
   hintBox: { alignItems: 'center', justifyContent: 'center' },
   hint: { fontFamily: 'Shark', fontSize: 22, color: BRAND.gold, textAlign: 'center' },
   waiting: { opacity: 0.4 },
-  paying: { fontFamily: 'Shark', fontSize: 16, color: BRAND.gold, textAlign: 'center' },
+  paying: { fontFamily: 'Shark', fontSize: 20, color: BRAND.gold, textAlign: 'center', paddingBottom: 28 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 14,
     paddingHorizontal: 10, paddingVertical: 2 },
   rowCompact: { minHeight: 0, paddingVertical: 0 },
