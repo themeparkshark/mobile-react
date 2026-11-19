@@ -59,7 +59,7 @@ test('N04/T036: the shell holds its count off stage and shows the field once the
 
 test('N04/T036: Memory shows its felt during the deal, deals in place off stage, and holds barker and bot; Whack holds its music', () => {
   assert.match(memory, /stageReady=\{stageDealt\}\n\s+stageDrawn=\{!!geo\}/);
-  assert.match(memory, /const offStage = stageHeldRef\.current;\n\s+dealCards\(offStage\);/);
+  assert.match(memory, /const offStage = stageHeldRef\.current \|\| retryDealRef\.current;\n\s+dealCards\(offStage\);/);
   assert.match(memory, /if \(stageHeldRef\.current\) introWaiting\.current = true;/);
   assert.match(memory, /enabled: visible && !stageHeld && !result && !tryScreen/);
   assert.match(whack, /const bed = !visible \|\| stageHeld \|\| result \? null/);
