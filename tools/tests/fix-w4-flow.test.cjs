@@ -101,3 +101,15 @@ test('T031 the Games sheet always offers Parade Beat, once, and its tile plays w
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
   assert.equal((screen.match(/onChoose=\{chooseArcade\}/g) ?? []).length, 2, 'both Games sheets use the same chooser');
 });
+
+/* T037: one coin moment: the card is already under the catch when its coin leaves. */
+test('T037 the win card comes up under the leaving catch, and the reveal never asks for a tap', () => {
+  const reveal = read('src/components/CoinCatchReveal.tsx');
+  assert.match(reveal, /const exit = \(\) => \{\n\s+callbacks\.current\.onExit\?\.\(\);/, 'the catch says when its coin starts to leave');
+  assert.doesNotMatch(reveal, />Tap to continue</, 'no Tap to continue line: the reveal flows on by itself');
+  const card = read('src/components/PostWinRewardsModal.tsx');
+  assert.match(card, /onExit=\{\(\) => setUnder\(true\)\}/);
+  assert.match(card, /const shown = caught \|\| under;/);
+  assert.match(card, /opacity: shown \? 1 : 0/, 'the card shows under the leaving coin, not only after the catch is gone');
+  assert.match(card, /onBurst=\{measureHero\}/, 'the hero slot is measured fresh before the coin flies to it');
+});

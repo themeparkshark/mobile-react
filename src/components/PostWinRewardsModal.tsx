@@ -323,6 +323,10 @@ export default function PostWinRewardsModal({
 
   // The coin catch plays first and hands its coin to the summary's hero slot.
   const [caught, setCaught] = useState(false);
+  // T037: the card comes up under the catch as its coin starts to leave (never after it has gone), so the
+  // coin lands in a card already there: no map frame between the reveal and the card.
+  const [under, setUnder] = useState(false);
+  const shown = caught || under;
   const [handoff, setHandoff] = useState<CatchHandoff | null>(null);
   const heroRef = useRef<View>(null);
   // Closing keeps the card as it is while the sheet fades; it resets once the sheet is gone (handleHidden).
@@ -330,7 +334,7 @@ export default function PostWinRewardsModal({
   const fullRevealRef = useRef(fullReveal); fullRevealRef.current = fullReveal;
   const [revealNow, setRevealNow] = useState(fullReveal);
   useEffect(() => {
-    if (visible) { setRevealNow(fullRevealRef.current); setCaught(!hasCoin || !fullRevealRef.current); setHandoff(null); }
+    if (visible) { setRevealNow(fullRevealRef.current); setCaught(!hasCoin || !fullRevealRef.current); setUnder(false); setHandoff(null); }
   }, [visible, hasCoin]);
   // The team step inside this card (T034): which panel shows, and where the player was going.
   const [panel, setPanel] = useState<'win' | 'team'>('win');
@@ -369,24 +373,31 @@ export default function PostWinRewardsModal({
   const heroSquash = useSharedValue(1);
   const burst = useSharedValue(0);
   const spin = useSharedValue(0);
+  // The card settles as soon as it is shown (under the leaving catch, T037); the hero lands when the coin arrives.
   useEffect(() => {
-    const values = [enter, heroSquash, burst, spin];
-    if (!visible || !caught) { values.forEach(value => cancelAnimation(value)); return undefined; }
+    const values = [enter, spin];
+    if (!visible || !shown) { values.forEach(value => cancelAnimation(value)); return undefined; }
     if (reducedMotion) {
-      enter.value = 1; heroSquash.value = 1; burst.value = 0; spin.value = isNewCoin ? 0.6 : 0.35;
+      enter.value = 1; spin.value = isNewCoin ? 0.6 : 0.35;
       return undefined;
     }
     enter.value = 0;
     enter.value = withTiming(1, { duration: 900, easing: Easing.out(Easing.cubic) });
-    // The coin arrives from the catch: land with a squash and settle.
-    heroSquash.value = withSequence(withTiming(0.88, { duration: 80 }), withSpring(1, SPRING.pop));
-    burst.value = 0;
-    burst.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) });
     // The same gold as the catch that handed the coin over (GoldBurst turns only while it shows and power allows).
     spin.value = 0;
     spin.value = withTiming(isNewCoin ? 0.6 : 0.35, { duration: DURATION.enter, easing: EASE.out });
     return () => { values.forEach(value => cancelAnimation(value)); };
-  }, [visible, caught, reducedMotion]);
+  }, [visible, shown, reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const values = [heroSquash, burst];
+    if (!visible || !caught) { values.forEach(value => cancelAnimation(value)); return undefined; }
+    if (reducedMotion) { heroSquash.value = 1; burst.value = 0; return undefined; }
+    // The coin arrives from the catch: land with a squash and settle.
+    heroSquash.value = withSequence(withTiming(0.88, { duration: 80 }), withSpring(1, SPRING.pop));
+    burst.value = 0;
+    burst.value = withTiming(1, { duration: 700, easing: Easing.out(Easing.quad) });
+    return () => { values.forEach(value => cancelAnimation(value)); };
+  }, [visible, caught, reducedMotion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cardStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, enter.value * 4),
@@ -458,7 +469,7 @@ export default function PostWinRewardsModal({
     else if (when === 'after_team_step') flyAfterTeamStep(flyRewards);
     const nextStep = afterHide.current; afterHide.current = null;
     onHidden?.(); nextStep?.();
-    setCaught(false); setHandoff(null); setBodyUp(false);
+    setCaught(false); setUnder(false); setHandoff(null); setBodyUp(false);
   };
   if (hiddenRef) hiddenRef.current = handleHidden;
   // Embedded, the card stays drawn while the host's sheet fades, and fades in over the game it follows.
@@ -525,7 +536,7 @@ export default function PostWinRewardsModal({
   const body = (
     <>
       {/* The summary is laid out under the catch (hidden) so its hero slot can be measured. */}
-      <View style={{ flex: 1, opacity: caught ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
+      <View style={{ flex: 1, opacity: shown ? 1 : 0 }} pointerEvents={caught ? 'auto' : 'none'}>
       <ScrollView style={styles.scroll}
         contentContainerStyle={[styles.container, { paddingTop: Math.max(insets.top, 20) + 4, paddingBottom: 12 }]}
         showsVerticalScrollIndicator={false} testID="post-win-scroll">
@@ -547,7 +558,8 @@ export default function PostWinRewardsModal({
               {!reducedMotion && <View pointerEvents="none" style={{ position: 'absolute', width: HERO, height: HERO }}>
                 <RewardBurst progress={burst} x={HERO / 2} y={HERO / 2} />
               </View>}
-              <Animated.View style={heroStyle}>
+              {/* While the catch's coin is still flying in (T037), the slot waits empty for it. */}
+              <Animated.View style={[heroStyle, !caught && { opacity: 0 }]}>
                 <View ref={heroRef} collapsable={false} onLayout={measureHero} style={{ width: HERO, height: HERO }}>
                   {hasCoin
                     ? coinSource
@@ -658,6 +670,7 @@ export default function PostWinRewardsModal({
       </View>
       {visible && hasCoin && !caught && revealNow && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName} sight={sight}
         isNewCoin={isNewCoin} handoff={handoff}
+        onBurst={measureHero} onExit={() => setUnder(true)}
         onDone={() => setCaught(true)} />}
     </>
   );

@@ -47,6 +47,7 @@ export default function CoinCatchReveal({
   ready = true,
   handoff = null,
   onBurst,
+  onExit,
   onDone,
 }: {
   /** The summary hero slot the coin lands in (shared element). */
@@ -60,6 +61,11 @@ export default function CoinCatchReveal({
   readonly ready?: boolean;
   /** Fires at the burst. */
   readonly onBurst?: () => void;
+  /**
+   * Fires as the coin starts to leave (fix w4 T037): the summary comes up underneath now, so the coin
+   * flies into a card that is already there and the map never shows between the catch and the card.
+   */
+  readonly onExit?: () => void;
   readonly onDone: () => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -67,8 +73,8 @@ export default function CoinCatchReveal({
   const finished = useRef(false);
   const [burst, setBurst] = useState(false);
   const [artFailed, setArtFailed] = useState(false);
-  const callbacks = useRef({ onDone, onBurst });
-  callbacks.current = { onDone, onBurst };
+  const callbacks = useRef({ onDone, onBurst, onExit });
+  callbacks.current = { onDone, onBurst, onExit };
   const handoffRef = useRef<CatchHandoff | null>(handoff);
   handoffRef.current = handoff;
   const origin = useRef({ x: 0, y: 0 });
@@ -144,12 +150,14 @@ export default function CoinCatchReveal({
         title.value = 1;
         setBurst(true);
         success();
-        at(1100, finish);
+        at(1100, () => { callbacks.current.onExit?.(); finish(); });
         return;
       }
 
-      // 5. Exit: into the summary's hero slot when it is known, else up and away.
+      // 5. Exit: into the summary's hero slot when it is known, else up and away. The summary
+      // starts coming up under the coin right now (onExit), so it lands in a card already there.
       const exit = () => {
+        callbacks.current.onExit?.();
         const target = handoffRef.current;
         const coinSize = Math.min(width * 0.52, 240);
         if (target) {
