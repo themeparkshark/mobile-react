@@ -303,8 +303,10 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     // Before the navigator is ready, getCurrentRoute logs a console.error (a red screen in a debug binary with
     // release-like JS): wait for the navigator's first 'state' event instead.
     const sync = () => {
-      if (!navigationRef.isReady()) return;
-      try { setRouteName(navigationRef.getCurrentRoute()?.name); } catch { setRouteName(undefined); }
+      try {
+        if (!navigationRef.isReady()) return;
+        setRouteName(navigationRef.getCurrentRoute()?.name);
+      } catch { setRouteName(undefined); }
     };
     sync();
     try { return navigationRef.addListener('state', sync); } catch { return undefined; }
