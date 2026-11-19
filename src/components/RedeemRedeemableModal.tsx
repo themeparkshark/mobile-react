@@ -80,6 +80,7 @@ import { CHALLENGE_GAME_COLORS } from '../constants/coinTiers';
 import { storeAvailable } from '../services/purchases';
 import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
+import { pressTrace } from '../ui/pressTrace';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { lossNext } from './rewards/lossNext';
 import { foldHeldXp, holdBroadcasts } from '../api/broadcastFilter';
@@ -202,6 +203,7 @@ export default function RedeemRedeemableModal({
   const devFlow = devFlowEnv && ['lost', 'expired', 'claim-error', 'spend-error', 'save-error'].includes(devFlowEnv)
     ? devFlowEnv : undefined;
   const [flowState, setFlowState] = useState<FlowState>(devFlow ?? 'preview');
+  useEffect(() => { pressTrace('card.flow', () => flowState); }, [flowState]);
   const [selectedGame, setSelectedGame] = useState<GameType | null>(null);
   const [winCovered, setWinCovered] = useState(false);
   // The server is starting the game: the card says so at once, so a slow answer never looks like a dead button.
@@ -594,6 +596,7 @@ export default function RedeemRedeemableModal({
 
   // The request ID and active attempt survive retries while this modal is open.
   const handleStartWheel = useCallback(async () => {
+    pressTrace('card.start', () => `spending=${spendingRef.current} player=${!!player?.id} task=${taskType}:${taskId} loc=${!!location}`);
     if (spendingRef.current || !player?.id || !taskType || !taskId) return;
     setStartError(null);
     spendingRef.current = true;
@@ -611,6 +614,7 @@ export default function RedeemRedeemableModal({
       ? { latitude: saved.latitude, longitude: saved.longitude }
       : location ?? startLocationRef.current;
     if (!startLocation) {
+      pressTrace('card.start.noLocation');
       spendingRef.current = false;
       return;
     }
@@ -835,6 +839,7 @@ export default function RedeemRedeemableModal({
   }, [refreshPlayer, onPress, close, clearFinishedTry]);
 
   const handleProtectedRetry = useCallback(async () => {
+    pressTrace('card.retry', () => `loc=${!!location} busy=${protectedRetryRef.current}`);
     if (!location || protectedRetryRef.current) return;
     protectedRetryRef.current = true;
     // A resolved loss is final. The next try needs a fresh request ID and
@@ -1171,6 +1176,7 @@ export default function RedeemRedeemableModal({
   const needLabel = needMain === 'lineplay' ? 'LinePlay' : needMain === 'practice' ? 'Practice Game' : NEED_TICKET_BUTTON;
   const buttonLabel = !stepReady || starting ? 'One moment' : claiming ? 'Claiming...' : needTicket ? needLabel : challengeButtonLabel(freeStep, ticketCost);
   const pressChallenge = () => {
+    pressTrace('card.press', () => `preview=${previewOnly} stepReady=${stepReady} claiming=${claiming} needTicket=${needTicket} starting=${starting} flow=${flowState}`);
     if (previewOnly || !stepReady || claiming) return;
     if (freeStep?.kind === 'claim') { void handleClaimTickets(); return; }
     if (needTicket) {

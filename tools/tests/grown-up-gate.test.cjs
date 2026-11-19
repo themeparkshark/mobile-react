@@ -21,6 +21,8 @@ const where = re => SRC.filter(({ code }) => re.test(strip(code))).map(({ file }
 
 function gateModule(store = {}, navigated = [], dev = true) {
   return loadTs('src/components/GrownUpGate.tsx', {
+    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, runOnJS: f => f, useAnimatedStyle: f => f(), useSharedValue: v => ({ value: v }), withTiming: (v, c, cb) => { if (cb) cb(true); return v; } },
+    '../ui/useUiReducedMotion': { __esModule: true, default: () => false },
     '@react-native-async-storage/async-storage': { __esModule: true, default: {
       getItem: async k => store[k] ?? null, setItem: async (k, v) => { store[k] = v; } } },
     react: { useEffect() {}, useState: v => [v, () => {}] },
@@ -143,9 +145,10 @@ test('real money is bought in exactly two gated places', () => {
   // and a grown-up answers (price and contents restated) before StoreKit is called.
   // Funnel tracking may sit around the gate; the gate must come before the one StoreKit call.
   const code = strip(supplies);
-  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,320}buying = true;\s*try \{[\s\S]{0,200}if \(!\(await askGrownUp\(gateReasonFor\(product, state\.prices\[product\.product_id\], grownUpWorth\(product, catalog, state\.prices\)\)\)\)\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
-  assert.ok(code.indexOf('await askGrownUp(') < code.indexOf('await purchaseNow('), 'the gate comes before the buy');
-  assert.ok(code.indexOf('async function purchaseNow') > code.indexOf('await askGrownUp('), 'StoreKit is reached only from purchaseNow, after the gate');
+  // Fix pass w4 (N02): the answer is read as yes, no or unshown; only a yes goes on (a gate nobody saw is not a no).
+  assert.match(code, /if \(buying\) return \{ status: 'busy' \};[\s\S]{0,320}buying = true;\s*try \{[\s\S]{0,200}const answer = await askGrownUpOutcome\(gateReasonFor\(product, state\.prices\[product\.product_id\], grownUpWorth\(product, catalog, state\.prices\)\)\);\s*if \(answer === 'unshown'\) return \{ status: 'unshown' \};[\s\S]{0,120}if \(answer === 'no'\) \{[\s\S]{0,120}return \{ status: 'declined' \};/);
+  assert.ok(code.indexOf('await askGrownUpOutcome(') < code.indexOf('await purchaseNow('), 'the gate comes before the buy');
+  assert.ok(code.indexOf('async function purchaseNow') > code.indexOf('await askGrownUpOutcome('), 'StoreKit is reached only from purchaseNow, after the gate');
   assert.equal((strip(supplies).match(/buyShopProduct\(/g) || []).length, 1, 'StoreKit is reached from one line, after the gate');
 });
 
@@ -268,7 +271,7 @@ test('the gate answers only after it has faded out, so the share sheet can prese
   const gate = read('src/components/GrownUpGate.tsx');
   assert.match(gate, /<Modal visible=\{closing === null && !devRefuse\(\)\}[\s\S]{0,200}?onShow=\{\(\) => \{ shownRef\.current = true; \}\} onDismiss=\{finish\}>/);
   assert.match(gate, /setTimeout\(finish, GATE_DISMISS_FALLBACK_MS\)/, 'a missed onDismiss still answers');
-  assert.match(gate, /if \(shownRef\.current \|\| !reqRef\.current \|\| answerRef\.current !== null\) return;[\s\S]{0,200}?showRetryHint\(gateRetryHint\(reqRef\.current\.reason\)\);\s*answerRef\.current = false;\s*finish\(\);\s*\}, gateWatchdogMs\(req\?\.reason\)\)/, 'a refused gate answers no at once, with a kind hint (real money waits longer)');
+  assert.match(gate, /if \(shownRef\.current \|\| !reqRef\.current \|\| answerRef\.current !== null\) return;[\s\S]{0,200}?showRetryHint\(gateRetryHint\(reqRef\.current\.reason\)\);\s*reqRef\.current\.unshown = true;\s*answerRef\.current = false;\s*finish\(\);\s*\}, gateWatchdogMs\(req\?\.reason\)\)/, 'a refused gate answers at once as unshown (never a grown-up no), with a kind hint (real money waits longer)');
   const g = gateModule();
   assert.equal(g.GATE_DISMISS_FALLBACK_MS, 2000);
   assert.match(gate, /if \(Platform\.OS !== 'ios'\) \{ finish\(\); return; \}/, 'Android answers at once');
@@ -298,7 +301,7 @@ test('every real-money App Store call sits behind the grown-up gate in the same 
   assert.match(vip, /askGrownUp\([\s\S]{0,600}buyVipGift\(/, 'VIP gift plans');
   assert.match(vip, /grownUpForNextStep\([\s\S]{0,600}buyVip\(/, 'VIP plans');
   const supplies = read('src/services/money/supplies.ts');
-  assert.match(supplies, /if \(!state\.prices\[product\.product_id\]\?\.price\) return \{ status: 'declined' \};[\s\S]*askGrownUp\(/, 'no price, no buy');
+  assert.match(supplies, /if \(!state\.prices\[product\.product_id\]\?\.price\) return \{ status: 'declined' \};[\s\S]*askGrownUp(?:Outcome)?\(/, 'no price, no buy');
   // Exact allowlists: a new caller anywhere else fails the build until it is gated and listed here.
   const callers = re => where(re).filter(f => f !== 'src/services/purchases.ts');
   assert.deepEqual(callers(/\bbuySharkPass\(/), ['src/screens/SharkPassScreen.tsx']);

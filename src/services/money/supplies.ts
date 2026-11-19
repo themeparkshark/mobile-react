@@ -8,7 +8,7 @@
  * run at a time, app-wide.
  */
 import { useEffect, useState } from 'react';
-import { askGrownUp, type GateReason } from '../../components/GrownUpGate';
+import { askGrownUpOutcome, type GateReason } from '../../components/GrownUpGate';
 import { getShop, type ShopCatalog, type ShopGrants, type ShopProduct } from '../../api/endpoints/me/shop';
 import { trackMoney } from './track';
 import { buyShopProduct, loadShopPrices, storeAvailable, type ShopPrice, type ShopPurchaseOutcome } from '../purchases';
@@ -127,7 +127,7 @@ export function packBuyInProgress(): boolean {
  * catalog reloads, so every offer on screen updates its limits.
  */
 export async function buyPack(product: ShopProduct, options: { onStart?: () => void; placement?: string } = {}):
-  Promise<ShopPurchaseOutcome | { status: 'declined' | 'busy' }> {
+  Promise<ShopPurchaseOutcome | { status: 'declined' | 'busy' | 'unshown' }> {
   if (buying) return { status: 'busy' };
   const catalog = state.catalog;
   const where = options.placement ?? 'supplies';
@@ -136,8 +136,12 @@ export async function buyPack(product: ShopProduct, options: { onStart?: () => v
   buying = true;
   try {
     trackMoney('tap', where, product.product_id);
+    const answer = await askGrownUpOutcome(gateReasonFor(product, state.prices[product.product_id], grownUpWorth(product, catalog, state.prices)));
+    // A gate iOS never drew is not a grown-up's no (fix pass w4, N02): nothing is logged as shown or declined, and
+    // the gate's own "Tap it again" hint is on screen.
+    if (answer === 'unshown') return { status: 'unshown' };
     trackMoney('gate_shown', where, product.product_id);
-    if (!(await askGrownUp(gateReasonFor(product, state.prices[product.product_id], grownUpWorth(product, catalog, state.prices))))) {
+    if (answer === 'no') {
       trackMoney('gate_declined', where, product.product_id);
       return { status: 'declined' };
     }
@@ -165,7 +169,7 @@ async function purchaseNow(product: ShopProduct, catalog: ShopCatalog | null): P
 }
 
 /** The one message for each purchase outcome, used by every offer. Null when nothing needs saying. */
-export function outcomeMessage(outcome: ShopPurchaseOutcome | { status: 'declined' | 'busy' }, granted: ShopGrants | null):
+export function outcomeMessage(outcome: ShopPurchaseOutcome | { status: 'declined' | 'busy' | 'unshown' }, granted: ShopGrants | null):
   { title: string; body: string } | null {
   switch (outcome.status) {
     case 'success': return { title: 'You got it!', body: `${grantsText(granted ?? {})}. They’re yours now.` };

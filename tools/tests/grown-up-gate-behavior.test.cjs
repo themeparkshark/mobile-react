@@ -120,10 +120,12 @@ function find(tree, pred, out = []) {
 const modalOf = host => find(host.tree, n => n.type === 'Modal')[0] ?? null;
 const textOf = tree => find(tree, n => n.type === 'Text').flatMap(n => [].concat(n.props.children)).filter(c => typeof c === 'string').join(' ');
 
-function loadGate(os = 'ios') {
+function loadGate(os = 'ios', sheet = null) {
   const clock = fakeClock();
   const rt = hooksRuntime();
   const gate = loadTs('src/components/GrownUpGate.tsx', {
+    'react-native-reanimated': { __esModule: true, default: { View: 'AnimatedView' }, runOnJS: f => f, useAnimatedStyle: f => f(), useSharedValue: v => ({ value: v }), withTiming: (v, c, cb) => { if (cb) cb(true); return v; } },
+    '../ui/useUiReducedMotion': { __esModule: true, default: () => false },
     '@react-native-async-storage/async-storage': { __esModule: true, default: { getItem: async () => null, setItem: async () => undefined } },
     react: rt.React,
     'react/jsx-runtime': { jsx: el, jsxs: el, Fragment: 'Fragment' },
@@ -132,6 +134,8 @@ function loadGate(os = 'ios') {
     '../RootNavigation': { navigate: () => undefined },
     '../ui': { BRAND: { goldLip: '#d99a00', navy: '#05346e' }, FONT: {}, GameIcon: 'GameIcon' },
     '../ui/modalLayers': { useModalLayer: () => true },
+    // Outside a sheet by default (the gate's own Modal); `sheet` stands in for the sheet's own view (fix pass w4, N02).
+    '../ui/sheetOverlay': { useSheetOverlay: () => (sheet ? sheet.set : null) },
   }, { __DEV__: false, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout });
   const settle = rt.settle;
   const tick = ms => clock.tick(ms, settle);
@@ -640,4 +644,68 @@ test('flex card art that is blocked or slow is replaced by its bundled fallback 
   // The share waits past the fallback swap before it captures.
   const host = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/share/ShareStudioHost.tsx'), 'utf8');
   assert.match(host, /FLEX_CAPTURE_WAIT_MS = FLEX_ART_FALLBACK_MS \+ 2000/);
+});
+
+/** The sheet's own view (ui/DoorModal.tsx): what the gate asked it to draw, by key. */
+function sheetView() {
+  const layers = new Map();
+  return { layers, set: (key, node) => { if (node == null) layers.delete(key); else layers.set(key, node); }, top: () => [...layers.values()].pop() ?? null };
+}
+
+test('N02: a slot inside a sheet draws the gate in the sheet\'s own view, never a second native sheet', async () => {
+  const sheet = sheetView();
+  const { gate, settle, tick, mountHost } = loadGate('ios', sheet);
+  mountHost(false);
+  const slot = mountHost(true);
+  const ask = track(gate.askGrownUpOutcome({ kind: 'money' }, 42));
+  await settle();
+  assert.equal(modalOf(slot), null, 'no Modal of its own for UIKit to present late or never');
+  const layer = sheet.top();
+  assert.ok(layer, 'the gate is handed to the sheet at once');
+  assert.match(textOf(layer.props.children), /Ask a grown-up/);
+  // The sheet commits the layer: it is drawn, so the watchdog never closes it.
+  layer.props.onDrawn();
+  await tick(gate.GATE_SHOW_WATCHDOG_MONEY_MS + 100);
+  assert.equal(ask.done, false, 'a drawn gate waits for the grown-up');
+  find(sheet.top(), n => n.type === 'Pressable' && find(n, c => c.type === 'Text' && [].concat(c.props.children).includes('Not now')).length)[0].props.onPress();
+  await tick(gate.GATE_FADE_OUT_MS + 300);
+  await settle();
+  assert.equal(ask.value, 'no', 'Not now on a gate a grown-up saw is a no');
+  assert.equal(sheet.top(), null, 'and the layer is gone');
+});
+
+test('N02: a gate in a sheet that was never drawn is unshown, never a no', async () => {
+  const sheet = sheetView();
+  const { gate, settle, tick, mountHost } = loadGate('ios', sheet);
+  mountHost(false);
+  mountHost(true);
+  const ask = track(gate.askGrownUpOutcome({ kind: 'money' }, 42));
+  await settle();
+  await tick(gate.GATE_SHOW_WATCHDOG_MONEY_MS + 10);
+  assert.equal(ask.value, 'unshown');
+});
+
+test('N02: every sheet host gives its contents the overlay, and draws its layers above them in its own view', () => {
+  const door = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/ui/DoorModal.tsx'), 'utf8');
+  assert.match(door, /<SheetOverlay\.Provider value=\{setOverlay\}>/);
+  assert.match(door, /\{children\}\s*\{overlays\.map\(item => <SheetOverlayLayer key=\{`\$\{item\.key\}\.\$\{item\.gen\}`\} leaving=\{item\.leaving\}>/);
+  const layer = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/ui/SheetOverlayLayer.tsx'), 'utf8');
+  assert.match(layer, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents=\{leaving \? 'none' : 'auto'\}/,
+    'never see-through to taps while up (an opacity 0 view is skipped by the hit test), let through at once when leaving');
+  assert.match(layer, /useEffect\(\(\) => \{\s*shown\.value = withTiming\(leaving \? 0 : 1/, 'the layer fades itself in on its own mount');
+  const gateSrc = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/components/GrownUpGate.tsx'), 'utf8');
+  assert.match(gateSrc, /if \(!presenting \|\| inSheetRef\.current\) return;\s*fadeIn\(\);/,
+    'in a sheet the gate never runs its own fade (it could end before the layer existed and leave the gate invisible)');
+  const { withOverlay, overlayDrop } = loadTs('src/ui/sheetOverlay.ts', { react: { createContext: v => ({ v }), useContext: c => c.v } });
+  const keys = l => Array.from(l, i => `${i.key}.${i.gen}${i.node ?? ''}${i.leaving ? '-' : ''}`);
+  let list = withOverlay([], 1, 'a');
+  list = withOverlay(list, 2, 'b');
+  list = withOverlay(list, 1, 'a2');
+  assert.deepEqual(keys(list), ['1.1a2', '2.1b'], 'an update keeps its place');
+  list = withOverlay(list, 1, null);
+  assert.deepEqual(keys(list), ['1.1a2-', '2.1b'], 'a removed layer keeps its look while it fades out');
+  assert.deepEqual(keys(overlayDrop(list, 1)), ['2.1b']);
+  list = withOverlay(list, 1, 'c');
+  assert.deepEqual(keys(list), ['2.1b', '1.2c'], 'asked again while leaving: a fresh layer that fades in');
+  assert.deepEqual(keys(overlayDrop(list, 1)), ['2.1b', '1.2c'], 'the old fade ending never removes the new one');
 });

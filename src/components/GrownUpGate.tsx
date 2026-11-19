@@ -1,11 +1,15 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
+import { useSheetOverlay } from '../ui/sheetOverlay';
 import { useModalLayer } from '../ui/modalLayers';
+import { pressTrace } from '../ui/pressTrace';
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import useUiReducedMotion from '../ui/useUiReducedMotion';
 
 /**
  * The grown-up gate in front of every paywall and real-money purchase
@@ -57,7 +61,11 @@ let pass: { flow: GateFlow; until: number } | null = null;
 let vipMember = false;
 const REST_KEY = 'grown-up-gate:rest-until';
 let gateRestUntil = 0;
-type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason };
+type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason;
+  /** The gate never drew for this ask (iOS did not put it up, or it was replaced or torn before it showed). */
+  unshown?: boolean };
+/** What one ask came to: a grown-up's yes, a grown-up's no, or a gate that could not be shown (never a no). */
+export type GateOutcome = 'yes' | 'no' | 'unshown';
 type ShowGate = (r: GateRequest) => void;
 type GateHost = { show: ShowGate; hint: (text: string) => void };
 /**
@@ -69,9 +77,12 @@ type GateHost = { show: ShowGate; hint: (text: string) => void };
 let hosts: GateHost[] = [];
 let showGate: ShowGate | null = null;
 function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show : null; }
-let open: Promise<boolean> | null = null;
+let open: Promise<GateOutcome> | null = null;
 /** iOS shows nothing new while a modal is still sliding away: the answer waits for the gate to be gone. */
 export const GATE_DISMISS_FALLBACK_MS = 2000;
+/** The gate's own soft fade, in and out (UI thread). */
+export const GATE_FADE_IN_MS = 220;
+export const GATE_FADE_OUT_MS = 160;
 /**
  * A gate that iOS refused to present (another modal was in the way) closes as a no, never hangs.
  * Long enough that a slow or hot phone still gets its gate (presenting can take 3 s or more there).
@@ -205,9 +216,23 @@ export function gateContinueLabel(reason: GateReason | null | undefined): string
 
 /** Opens the gate and resolves true only on the right answer. A second ask while it is open shares the first. */
 export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
-  if (!showGate) return Promise.resolve(false);
+  return askGrownUpOutcome(reason, seed, now).then(outcome => outcome === 'yes');
+}
+
+/**
+ * The same ask, saying whether a grown-up answered at all (fix pass w4, N02): a gate iOS never drew is 'unshown',
+ * so a money door never logs or treats it as a grown-up's no (the gate shows its "Tap it again" hint instead).
+ */
+export function askGrownUpOutcome(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<GateOutcome> {
+  if (!showGate) return Promise.resolve('unshown');
   open ??= loadRest()
-    .then(() => new Promise<boolean>(resolve => showGate ? showGate({ resolve, seed: now < gateRestUntil ? -1 : seed, reason }) : resolve(false)))
+    .then(() => new Promise<GateOutcome>(resolve => {
+      if (!showGate) { resolve('unshown'); return; }
+      const request: GateRequest = { seed: now < gateRestUntil ? -1 : seed, reason,
+        resolve: ok => resolve(request.unshown ? 'unshown' : ok ? 'yes' : 'no') };
+      pressTrace('gate.request', () => `reason=${reason?.kind ?? 'none'}`);
+      showGate(request);
+    }))
     .finally(() => { open = null; });
   return open;
 }
@@ -375,26 +400,42 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const reqRef = useRef<GateRequest | null>(null);
   const answerRef = useRef<boolean | null>(null);
   const shownRef = useRef(false);
+  const sheetOverlay = useSheetOverlay();
+  const inSheetRef = useRef(false);
   const finish = useCallback(() => {
     const done = reqRef.current;
     if (!done) return;
     reqRef.current = null;
     const ok = answerRef.current === true;
     answerRef.current = null;
+    pressTrace('gate.answer', () => `nested=${nested} ok=${ok} shown=${shownRef.current} unshown=${!!done.unshown}`);
     setReq(null); setDetails(null); setClosing(null);
     done.resolve(ok);
-  }, []);
+  }, [nested]);
+  // The gate fades in and out on the UI thread inside a sheet UIKit presents with no animation of its own (fix pass
+  // w4, N02): UIKit's own fade presentation took 1.3 to 5.3 s to report under load and sometimes never did, so the
+  // gate was closed before it drew. A plain present reports at once; the look is the same soft fade.
+  const reduced = useUiReducedMotion();
+  const fade = useSharedValue(0);
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
+  const closeAfterFade = useCallback((ok: boolean) => { setClosing(current => (current === null ? ok : current)); }, []);
   const close = useCallback((ok: boolean) => {
     if (!reqRef.current || answerRef.current !== null) return;
     answerRef.current = ok;
     // Only iOS refuses to present while a modal is leaving (and only iOS reports onDismiss).
     if (Platform.OS !== 'ios') { finish(); return; }
-    setClosing(ok);
-  }, [finish]);
+    // In a sheet's own view the layer fades itself out and lets taps through at once.
+    if (inSheetRef.current) { closeAfterFade(ok); return; }
+    fade.value = withTiming(0, { duration: reduced ? 0 : GATE_FADE_OUT_MS }, done => { if (done) runOnJS(closeAfterFade)(ok); });
+    // A fade whose end never comes back (a busy phone) still closes.
+    setTimeout(() => closeAfterFade(ok), GATE_FADE_OUT_MS + 250);
+  }, [finish, fade, reduced, closeAfterFade]);
   useEffect(() => {
     const host: GateHost = {
       hint: text => setHint(text),
       show: (r: GateRequest) => {
+        pressTrace('gate.ask', () => `nested=${nested} hosts=${hosts.length}`);
+        if (reqRef.current && !shownRef.current) reqRef.current.unshown = true;
         reqRef.current?.resolve(false);
         reqRef.current = r; answerRef.current = null; shownRef.current = false;
         setTyped(''); setDetails(r.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setClosing(null); setReq(r);
@@ -409,6 +450,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
       // so no button waits forever and an answered yes is never lost.
       const left = reqRef.current;
       const ok = answerRef.current === true;
+      if (left && !shownRef.current) left.unshown = true;
       reqRef.current = null;
       answerRef.current = null;
       left?.resolve(ok);
@@ -419,12 +461,25 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const layerFront = useModalLayer(!!req && !nested, 'wait');
   const front = nested ? !!req : layerFront;
   const presenting = !!req && front && closing === null;
+  const fadeIn = useCallback(() => {
+    fade.value = 0;
+    fade.value = withTiming(1, { duration: reduced ? 0 : GATE_FADE_IN_MS });
+  }, [fade, reduced]);
+  useEffect(() => {
+    // In a sheet's own view the layer fades itself in once it is mounted (ui/SheetOverlayLayer.tsx): a fade started
+    // here could end before that view existed, and the gate stayed at opacity 0, unseen (fix pass w4, N02).
+    if (!presenting || inSheetRef.current) return;
+    fadeIn();
+  }, [presenting, req]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (req) pressTrace('gate.front', () => `nested=${nested} front=${front} presenting=${presenting}`); }, [req, front, presenting]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!presenting) return undefined;
     const t = setTimeout(() => {
       if (shownRef.current || !reqRef.current || answerRef.current !== null) return;
       // It never showed, so there is no fade to wait for: a no at once, so the next tap asks fresh.
+      pressTrace('gate.watchdog', () => `nested=${nested}`);
       showRetryHint(gateRetryHint(reqRef.current.reason));
+      reqRef.current.unshown = true;
       answerRef.current = false;
       finish();
     }, gateWatchdogMs(req?.reason));
@@ -440,6 +495,28 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     const t = setTimeout(() => setHint(null), GATE_HINT_MS);
     return () => clearTimeout(t);
   }, [hint]);
+  // A slot inside a sheet draws the gate in that sheet's own view (fix pass w4, N02): a second native sheet presented
+  // from the card came up 0.8 to 8.4 s late and 4 times in 20 never, so it was closed unseen. Outside a sheet, and
+  // for the root gate, it is the <Modal> below as before.
+  const inSheet = nested && sheetOverlay !== null;
+  inSheetRef.current = inSheet;
+  const overlayKey = useRef(0);
+  if (overlayKey.current === 0) overlayKey.current = nextOverlayKey++;
+  const bodyRef = useRef<ReactNode>(null);
+  const sentRef = useRef<ReactNode>(null);
+  useEffect(() => {
+    if (!sheetOverlay || bodyRef.current === sentRef.current) return;
+    sentRef.current = bodyRef.current;
+    sheetOverlay(overlayKey.current, bodyRef.current);
+  });
+  useEffect(() => () => { sheetOverlay?.(overlayKey.current, null); }, [sheetOverlay]);
+  const drawn = useCallback(() => {
+    if (!reqRef.current || shownRef.current) return;
+    shownRef.current = true;
+    pressTrace('gate.drawn', () => `nested=${nested} inSheet=true`);
+  }, [nested]);
+  // In the sheet's own view there is no native dismiss to wait for: the answer goes once the fade out has ended.
+  useEffect(() => { if (inSheet && closing !== null) finish(); }, [inSheet, closing, finish]);
   // Not a <Modal>: it draws inside whatever holds this host, so it shows even where the gate could not.
   const hintPill = hint ? (
     <View style={styles.hintWrap} pointerEvents="none">
@@ -449,6 +526,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
       </View>
     </View>
   ) : null;
+  bodyRef.current = null;
   if (!req || !front) return hintPill;
   const resting = req.seed < 0;
   const q = resting ? null : grownUpQuestion(req.seed);
@@ -463,11 +541,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     }
     setTyped(t => (t.length < 3 ? t + k : t));
   };
-  return (
-    <>
-    <Modal visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
-      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
-      <View style={styles.scrim}>
+  const scrim = (
+      <Animated.View style={[styles.scrim, inSheet ? null : fadeStyle]}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
             <RealMoneyMark size={36} />
@@ -542,11 +617,29 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
           )}
         </View>
         )}
-      </View>
+      </Animated.View>
+  );
+  if (inSheet) {
+    bodyRef.current = closing === null && !devRefuse() ? <GateDrawn onDrawn={drawn}>{scrim}</GateDrawn> : null;
+    return hintPill;
+  }
+  return (
+    <>
+    <Modal visible={closing === null && !devRefuse()} transparent animationType="none" onRequestClose={() => close(false)} statusBarTranslucent
+      testID={nested ? 'gate-slot' : 'gate'}
+      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
+      {scrim}
     </Modal>
     {hintPill}
     </>
   );
+}
+
+let nextOverlayKey = 1;
+/** Mounted in the sheet's own view in the commit that draws the gate: from then on a grown-up can see it. */
+function GateDrawn({ onDrawn, children }: { readonly onDrawn: () => void; readonly children: ReactNode }) {
+  useEffect(() => { onDrawn(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  return <>{children}</>;
 }
 
 /** House navy panel, white rim, gold OK key (blue/white/gold palette): every ink is AA on its surface. */

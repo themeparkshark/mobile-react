@@ -145,6 +145,7 @@ import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, clust
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 import { UpperText } from '../ui/upper';
 import { usePlayTapHold } from '../components/guide/playTapHold';
+import { pressTrace } from '../ui/pressTrace';
 import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
@@ -1373,6 +1374,7 @@ export function ExploreScreenBody() {
   }), retention.rewards);
   const { openRewards: openRewardsSheet } = retention;
   const openRewards = useCallback(() => {
+    pressTrace('rewards.press', () => `clear=${modalLayers.pressClear()} layers=${modalLayers.count()} leaving=${modalLayers.leavingCount()}`);
     if (!modalLayers.pressClear()) return; // PLAY!'s card is on its way: the first press wins.
     rewardsTapped.current = true;
     openRewardsSheet();

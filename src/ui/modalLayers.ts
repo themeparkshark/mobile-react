@@ -15,6 +15,8 @@
  * presents it from that sheet, so it neither waits nor blocks.
  */
 import { createContext, useCallback, useContext, useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { pressTrace } from './pressTrace';
+import { tapThrough } from './tapThrough';
 
 let nextId = 1;
 let layers: number[] = [];
@@ -48,12 +50,16 @@ export const modalLayers = {
     if (!layers.includes(id) || leaving.includes(id)) return;
     if (leaving.length === 0) leavingSince = Date.now();
     leaving = [...leaving, id];
+    pressTrace('layer.leaving', () => `id=${id} layers=${layers.join(',')}`);
+    takeBatchedTap();
     emit();
   },
   /** The sheet wants to show again before it was gone: it is no longer leaving. */
   clearLeaving(id: number): void {
     if (!leaving.includes(id)) return;
     leaving = leaving.filter(l => l !== id);
+    // The sheet stays after all: a tap kept for the screen under it is not replayed later (ui/tapThrough.ts).
+    tapThrough.drop();
     emit();
   },
   /**
@@ -82,24 +88,56 @@ export const modalLayers = {
  */
 export const LEAVING_TAP_MIN_MS = 0;
 let leavingSince = 0;
-const leavingTapListeners = new Set<(x: number, y: number) => void>();
+/**
+ * Two taps that reach JS within this long of each other on a sheet that is still up were held back by a busy JS
+ * thread and arrive in one batch (fix pass w4, N01, phase log on Rewards: BACK TO MAP and the Rewards press noted in
+ * the same millisecond, 2 of 30). The first one closes the sheet; the later one was meant for the screen under it.
+ */
+export const BATCHED_TAP_MS = 60;
+/** The later tap of such a batch counts as a tap on the leaving sheet if the sheet starts leaving within this long. */
+export const BATCHED_LEAVE_MS = 1500;
+let lastUpTap: { x: number; y: number; at: number } | null = null;
+let batchedTap: { x: number; y: number; at: number } | null = null;
+function takeBatchedTap() {
+  const tap = batchedTap;
+  batchedTap = null;
+  if (!tap || Date.now() - tap.at > BATCHED_LEAVE_MS) return;
+  pressTrace('leavingTap.batched', () => `x=${Math.round(tap.x)} y=${Math.round(tap.y)}`);
+  const kept = tapThrough.keep(tap.x, tap.y);
+  leavingTapListeners.forEach(fn => fn(tap.x, tap.y, () => { kept.claimed = true; }));
+}
+/** A listener that takes the tap as its own calls `claim`, so the screen under the sheet is not pressed too. */
+type LeavingTapListener = (x: number, y: number, claim: () => void) => void;
+const leavingTapListeners = new Set<LeavingTapListener>();
 export const leavingSheetTap = {
   /** PLAY! listens while it is drawn. */
-  listen(fn: (x: number, y: number) => void): () => void {
+  listen(fn: LeavingTapListener): () => void {
     leavingTapListeners.add(fn);
     return () => { leavingTapListeners.delete(fn); };
   },
-  /** `going`: this sheet's own native dismiss has started (it counts even with no layer listed as leaving). */
-  note(x: number, y: number, now: number = Date.now(), going: boolean = false): void {
-    if (!going && (leaving.length === 0 || now - leavingSince < LEAVING_TAP_MIN_MS)) return;
-    leavingTapListeners.forEach(fn => fn(x, y));
+  /**
+   * `going`: this sheet's own native dismiss has started (it counts even with no layer listed as leaving).
+   * `topLevel`: the tap is on a top-level sheet, so once that sheet is gone the screen under the tap gets it
+   * (ui/tapThrough.ts), unless a listener claimed it. A sheet inside another sheet never replays.
+   */
+  note(x: number, y: number, now: number = Date.now(), going: boolean = false, topLevel: boolean = false): void {
+    pressTrace('leavingTap', () => `x=${Math.round(x)} y=${Math.round(y)} going=${going} leaving=${leaving.length} top=${topLevel}`);
+    if (!going && (leaving.length === 0 || now - leavingSince < LEAVING_TAP_MIN_MS)) {
+      if (topLevel) {
+        if (lastUpTap && now - lastUpTap.at <= BATCHED_TAP_MS && (lastUpTap.x !== x || lastUpTap.y !== y)) batchedTap = { x, y, at: now };
+        lastUpTap = { x, y, at: now };
+      }
+      return;
+    }
+    const kept = topLevel ? tapThrough.keep(x, y) : null;
+    leavingTapListeners.forEach(fn => fn(x, y, () => { if (kept) kept.claimed = true; }));
   },
 };
 
 // Dev builds: the lane tools read the layer list over the debugger (never in a store or OTA bundle).
 const devLog: { t: number; op: string; id: number }[] = [];
 if (typeof __DEV__ !== 'undefined' && __DEV__) (globalThis as { __tpsModalLayers?: unknown }).__tpsModalLayers = { count: () => layers.length, ids: () => [...layers], log: () => devLog.splice(0) };
-const note = (op: string, id: number) => { if (typeof __DEV__ !== 'undefined' && __DEV__) { devLog.push({ t: Date.now(), op, id }); if (devLog.length > 200) devLog.shift(); } };
+const note = (op: string, id: number) => { pressTrace(`layer.${op}`, () => `id=${id} layers=${layers.join(',')} leaving=${leaving.join(',')}`); if (typeof __DEV__ !== 'undefined' && __DEV__) { devLog.push({ t: Date.now(), op, id }); if (devLog.length > 200) devLog.shift(); } };
 
 /** True while any sheet, dialog or the grown-up gate is up: ambient stage loops behind it rest. */
 export function useAnyModalLayer(): boolean {
