@@ -21,7 +21,7 @@ import * as TaskManager from 'expo-task-manager';
 import { AppState } from 'react-native';
 import { RideType } from '../api/endpoints/rides';
 import { QUEUE_RIDE_TYPES } from '../constants/queueRideTypes';
-import { ensureRideQuestionLedger, lastCoinGameAt, linePlayWaitAt, noteLinePlayBoardingSeen, noteLinePlayWaitEnded,
+import { ensureRideQuestionLedger, lastCoinGameIn, linePlayWaitAt, noteLinePlayBoardingSeen, noteLinePlayWaitEnded,
   noteLinePlayWaitStarted, rideHoldUntil, rideQuestionOwner, setRideHold, visitInLinePlayWait } from './lineplay/rideQuestionLedger';
 import { noteRideLineCatalog, noteRideLive, rideLineState, type RideLiveRow } from './lineplay/rideLines';
 
@@ -694,13 +694,14 @@ class RideDetectionService {
   }
 
   /**
-   * Time a guest spent playing a ride's coin game is not a queue: the zone's clock (and its share of
-   * "closest") starts again when the game closed. Without this a coin game at the Tiki Room, then ten
-   * minutes standing near Jungle Cruise, came back as a 19 minute Tiki Room "ride".
+   * Time a guest spent playing a coin game is not a queue: every zone's clock (and its share of "closest")
+   * starts again when the game closed. Without this a coin game at the Tiki Room, then ten minutes standing
+   * near Jungle Cruise, came back as a 19 minute Tiki Room "ride". Any coin's game counts, not only the
+   * zone's own: Indiana Jones' game inside Jungle Cruise's zone came back as "Jungle Cruise, maybe" (hold R1).
    */
   private dropCoinGameTime(visit: ZoneVisit, now: number): void {
     for (const zone of visit.zones.values()) {
-      const game = lastCoinGameAt(zone.ride.task_id ?? null, now);
+      const game = lastCoinGameIn(zone.enteredAt, now, now);
       if (game != null && game > zone.enteredAt && game <= now) {
         zone.enteredAt = game;
         zone.nearestMs = 0;

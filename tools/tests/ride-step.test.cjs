@@ -881,6 +881,35 @@ test('item 12: detection never makes a ride question of a closed ride, a show-li
   });
 });
 
+test('hold R1: a neighbour coin\'s game inside Jungle Cruise\'s zone is never a Jungle Cruise ride (Ride Journal "Jungle Cruise, maybe")', async () => {
+  const store = new Map();
+  await withClock(PARK_DAY_2PM, async clock => {
+    const app = launch(store);
+    app.s.setRides([JUNGLE_TASK, INDY]);
+    await app.ledger.ensureRideQuestionLedger();
+    app.s.setLiveRows(8, [{ rideId: JUNGLE.id, status: 'OPERATING', wait: 25 }, { rideId: INDY.id, status: 'OPERATING', wait: 40 }]);
+    // The checker's walk: Jungle Cruise's coin game, then Indiana Jones' coin game next door (inside Jungle Cruise's
+    // zone, closer to Jungle Cruise), a win card each, then the walk away. About 8 minutes in the zone, all coin games.
+    for (let i = 0; i < 4; i++) { app.s.processLocation(JUNGLE.lat, JUNGLE.lng); clock.now += 30_000; }
+    app.ledger.noteCoinGamePlayed(JUNGLE_TASK.task_id, clock.now);
+    for (let i = 0; i < 4; i++) { app.s.processLocation(JUNGLE.lat + 0.00002, JUNGLE.lng - 0.00002); clock.now += 30_000; }
+    app.ledger.noteCoinGamePlayed(INDY.task_id, clock.now);
+    for (let i = 0; i < 6; i++) { app.s.processLocation(JUNGLE.lat + 0.00002, JUNGLE.lng - 0.00002); clock.now += 30_000; }
+    app.ledger.noteCoinGamePlayed(INDY.task_id, clock.now);
+    for (let i = 0; i < 4; i++) { app.s.processLocation(JUNGLE.lat, JUNGLE.lng); clock.now += 30_000; }
+    app.s.processLocation(33.8095, -117.9189); // Town Square
+    clock.now += 5 * 60_000;
+    await app.s.writeQueue;
+    assert.equal(app.heard.length + pendingIn(store).length, 0, 'zero ride questions: every minute there was a coin game');
+    // An older build kept such a stay: the batch drops it too.
+    store.set('pending_ride_detections', JSON.stringify([detectionAt(JUNGLE_TASK, clock.now - 13 * 60_000, clock.now - 5 * 60_000)]));
+    app.ledger.noteCoinGamePlayed(INDY.task_id, clock.now - 7 * 60_000);
+    assert.equal(await app.hook.checkAndShowPendingRides(), false);
+    assert.equal(app.navigations.length, 0, 'no Ride Journal');
+    assert.equal(pendingIn(store).length, 0);
+  });
+});
+
 test('grade fix 1: no in-line offer at the Piano Player or the Tiki Room show, and a 30 min parade stand by the Tiki Room asks nothing', async () => {
   const store = new Map();
   await withClock(PARK_DAY_2PM, async clock => {

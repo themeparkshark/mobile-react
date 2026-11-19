@@ -33,7 +33,7 @@ import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
 import { onRideDetectionRetry, rideInitRetryDelay } from '../services/rideDetectionInit';
 import { detectionExpired, detectionStillAskable, linePlayRideNow, minRideDwellMs, rideLoggedUntil,
   setDetectionLiveRows } from '../services/RideDetectionService';
-import { ensureRideQuestionLedger, lastCoinGameAt, rideQuestionOwner, unaskedLinePlayBoardings,
+import { ensureRideQuestionLedger, lastCoinGameIn, rideQuestionOwner, unaskedLinePlayBoardings,
   visitInLinePlayWait } from '../services/lineplay/rideQuestionLedger';
 import { rideLineState, rideLiveStatus, type RideLiveRow } from '../services/lineplay/rideLines';
 import { attentionGate } from '../screens/ExploreScreen/mapPresentationQueue';
@@ -74,7 +74,7 @@ let currentParkId: number | null = null;
 /**
  * Should this waiting detection ever be shown? No when it is stale or broken (another park day, a stay no
  * line explains), when the place has no line (a show the feed never gave a wait), when the ride is closed for
- * repairs, or when the stay was only its coin game (after the game, too short to be a ride).
+ * repairs, or when the stay was only a coin game (after any coin's game, too short to be a ride).
  */
 export function detectionWorthAsking(d: DetectedRide, now = Date.now()): boolean {
   if (detectionExpired(d, now)) return false;
@@ -82,9 +82,10 @@ export function detectionWorthAsking(d: DetectedRide, now = Date.now()): boolean
   if (line === 'no_line') return false;
   if (line === 'closed' && rideLiveStatus(d.rideId) === 'REFURBISHMENT') return false;
   const ride = rideDetectionService.rideById(d.rideId);
-  const game = lastCoinGameAt(ride?.task_id ?? null, now);
   const exit = d.exitedAt ?? d.detectedAt;
-  if (game != null && game >= d.enteredAt && game <= exit) {
+  // Any coin's game inside the stay (its own, or a neighbour's whose zone overlaps): the ride's clock starts after it.
+  const game = lastCoinGameIn(d.enteredAt, exit, now);
+  if (game != null) {
     const min = minRideDwellMs(d.rideType, ride?.min_dwell_minutes, ride?.ride_duration_minutes);
     if (min == null || exit - game < min) return false;
   }
