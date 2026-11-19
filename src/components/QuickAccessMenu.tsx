@@ -314,14 +314,15 @@ function MenuRow({ item, index, count, open, reduced, popped, badge, onPress }: 
       <Image source={ROUND[item.round]} style={StyleSheet.absoluteFill} contentFit="contain" />
       {item.image ? <Image source={item.image} style={styles.rowArt} contentFit="contain" /> : <GameIcon name={item.icon} size={38} />}
       {badge && <Animated.View style={[styles.badge, badgeStyle]}><GameIcon name="gift" size={20} /></Animated.View>}
-      {/* T158: "Just once" on the Shark Shop door while the Starter Pack is unbought (no price, no pop-up). */}
-      {item.id === 'shop' && <StarterSticker style={{ top: -6, right: -10 }} />}
     </View>
   );
   const label = (
     <View style={styles.label}>
       <Image source={LABEL_BAR} style={StyleSheet.absoluteFill} contentFit="fill" />
       <Text style={styles.labelText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} maxFontSizeMultiplier={1.15}>{item.label}</Text>
+      {/* T158: "Just once" on the Shark Shop door while the Starter Pack is unbought (no price, no pop-up).
+          Fix w4: it sits on the label's top right corner, never over the round shop icon. */}
+      {item.id === 'shop' && <StarterSticker style={{ top: -12, right: -8 }} />}
     </View>
   );
   return (

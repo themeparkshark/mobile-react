@@ -172,3 +172,12 @@ test('N09: rewards, not steps: a pass owner with both rows waiting sees both', (
   assert.match(read('src/components/money/SharkPassBanner.tsx'), /const claimable = claimableRewards\(state\);/);
   assert.match(read('src/screens/SharkPassScreen.tsx'), /Claim \$\{rewardsToClaim\} rewards/);
 });
+
+// ---------- T158: the Home menu sticker never covers the Shark Shop icon ----------
+test('T158: the JUST ONCE sticker sits on the label, not on the round icon', () => {
+  const menu = read('src/components/QuickAccessMenu.tsx');
+  const round = menu.slice(menu.indexOf('const round = ('), menu.indexOf('const label = ('));
+  const label = menu.slice(menu.indexOf('const label = ('), menu.indexOf('return (', menu.indexOf('const label = (')));
+  assert.doesNotMatch(round, /StarterSticker/);
+  assert.match(label, /StarterSticker/);
+});
