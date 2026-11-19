@@ -51,6 +51,7 @@ import Daily3Sheet, { type GoalTap } from './Daily3Sheet';
 import RewardReveal from './RewardReveal';
 import RewardsSheet from './RewardsSheet';
 import CalmModal, { calmFace } from './CalmModal';
+import { GrownUpGateSlot } from '../GrownUpGate';
 import DailyGiftModal from '../DailyGiftModal';
 import { tryAgainLine } from '../../services/connectionCopy';
 
@@ -783,6 +784,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
         reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
         onReminders={on => { void toggleReminders(on); }}
+        onLeaveSheet={() => setView(null)}
         onClaim={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }}
         onClaimWeekly={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); }}
         onBuyFreeze={() => setView({ k: 'freeze' })} />
@@ -914,6 +916,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
           {faceView(slot.face)}
         </View>
       ))}
+      {/* The grown-up gate inside this native sheet (Daily 3's calm Shark Pass card), so it shows above it. */}
+      {!!content && <GrownUpGateSlot />}
     </CalmModal>
   );
 

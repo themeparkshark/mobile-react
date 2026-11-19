@@ -1,0 +1,101 @@
+/**
+ * Fix round w3, cross-lane wiring (Nov 18 2026): the pieces lanes built for each other's screens are mounted.
+ * T220 / T230 calm offers at their four placements, T124 the ride line on the win card.
+ * Each test fails on the merged build before the wiring (7b48055a): the slots rendered nothing there.
+ */
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const fs = require('node:fs');
+const path = require('node:path');
+const { loadTs } = require('./helpers/ts-module.cjs');
+
+const root = path.resolve(__dirname, '../..');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+const strip = code => code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\{\/\*[\s\S]*?\*\/\}/g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+
+const offers = loadTs('src/services/money/naturalOffers.ts', {
+  '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => undefined } },
+});
+
+test('T220 need_ticket: the NEED A TICKET card mounts the calm offer, and never right after a lost try', () => {
+  const slots = strip(read('src/components/rewards/offerSlots.tsx'));
+  assert.match(slots, /export function NeedTicketOfferSlot\(\{ loss = false \}: OfferSlotProps\)[^{]*\{\s*return <CalmOffer placement="need_ticket" loss=\{loss\}/);
+  const modal = strip(read('src/components/RedeemRedeemableModal.tsx'));
+  assert.match(modal, /<NeedTicketOfferSlot placement="need_ticket" taskId=\{taskId\} closeCard=\{close\} loss=\{cardAfterLoss\} \/>/);
+  // The loss card's way on at 0 Tickets (backToCard) is a loss moment; a fresh open of the card is not.
+  const back = modal.slice(modal.indexOf('const backToCard = useCallback'), modal.indexOf("setFlowState('preview');", modal.indexOf('const backToCard = useCallback')));
+  assert.match(back, /setCardAfterLoss\(true\);/);
+  const reset = modal.slice(modal.indexOf('setLostTicketCost(0);'), modal.indexOf('setRetryOffered(true);'));
+  assert.match(reset, /setCardAfterLoss\(false\);/);
+});
+
+test('T220 first_win and T230 win_vip: one offer at most on a win card, mounted only once the card is up', () => {
+  const card = strip(read('src/components/PostWinRewardsModal.tsx'));
+  assert.match(card, /\{visible && caught && panel === 'win' && <WinOfferSlot firstWin=\{revealNow && isNewCoin\} coins=\{coinsEarned\} xp=\{xpEarned\}\s*winKey=\{attemptId \?\? null\} closeCard=\{closeCard\} \/>\}/);
+  assert.doesNotMatch(card, /FirstWinOfferSlot/, 'the old empty slot is gone');
+  const slots = strip(read('src/components/rewards/offerSlots.tsx'));
+  // The Starter card decides first; the VIP line waits for its "not shown" and the win-card pacing.
+  assert.match(slots, /useState<boolean \| null>\(firstWin \? null : false\)/);
+  assert.match(slots, /const vipLine = starterShown === false && nudge && !!line;/);
+  assert.match(slots, /\{firstWin && <CalmOffer placement="first_win" onShown=\{setStarterShown\} \/>\}/);
+  assert.match(slots, /<CalmOffer placement="win_vip" vipLine=\{line\} beforeLeave=\{closeCard\}/);
+  assert.match(slots, /const nudge = useVipNudge\(!isVip && winKey != null \? winKey : null\);/);
+  assert.match(slots, /if \(shown\) markVipNudgeShown\(winKey\);/);
+  assert.match(slots, /warmVipPerks\(\)/, 'the server multiplier is loaded, or the line never has numbers');
+});
+
+test('T230 the VIP line says this win\'s own numbers, and nothing for VIP or an empty win', () => {
+  const slots = loadTs('src/components/rewards/offerSlots.tsx', {
+    react: { useContext: () => ({}), useEffect() {}, useState: v => [v, () => undefined] },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
+    'react-native': { View: 'View' },
+    '../money/CalmOffer': { default: 'CalmOffer' },
+    '../../context/AuthProvider': { AuthContext: {} },
+    '../../services/money/vipNudge': { useVipNudge: () => false, markVipNudgeShown() {} },
+    '../../services/money/vipPerks': { vipRideMultiplierNow: () => null, warmVipPerks: async () => undefined },
+    '../../services/money/offers': loadTs('src/services/money/offers.ts', {}),
+  });
+  assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: false }), 'VIP doubles this: +60 Shark Coins, +50 XP');
+  assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: true }), null);
+  assert.equal(slots.winVipLine({ coins: 0, xp: 0, multiplier: 2, isVip: false }), null);
+  assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: null, isVip: false }), null, 'no server multiplier, no claim');
+});
+
+test('T230 CalmOffer: a win_vip line with nothing to say stays away; the door closes its sheet first', () => {
+  const card = strip(read('src/components/money/CalmOffer.tsx'));
+  assert.match(card, /const vipText = vipLine === undefined \? OFFER_COPY\.win_vip\.line : vipLine;/);
+  assert.match(card, /placement === 'win_vip' \? !vip && !!vipText/);
+  assert.match(card, /if \(placement === 'win_vip'\) \{ beforeLeave\?\.\(\); void openMembership\(\); return; \}/);
+  assert.match(card, /if \(placement === 'high_point'\) \{ beforeLeave\?\.\(\); RootNavigation\.navigate\('SharkPass'\); return; \}/);
+  // The card itself never names a price (the gate on the buy does).
+  assert.doesNotMatch(card, /\.price\b|prices\[/);
+});
+
+test('T220 high_point: the Shark Pass card on the Daily 3 sheet once the chest is open, only while the row is for sale', () => {
+  const sheet = strip(read('src/components/retention/Daily3Sheet.tsx'));
+  assert.match(sheet, /\{state\.claimed && <CalmOffer placement="high_point" style=\{styles\.offer\} beforeLeave=\{onLeaveSheet\} \/>\}/);
+  assert.match(strip(read('src/components/retention/useRetention.tsx')), /onLeaveSheet=\{\(\) => setView\(null\)\}/);
+  assert.equal(offers.passOfferReady({ enabled: true, season: { on_sale: true, product_id: 'pass.s1' }, progress: { premium: false } }), true);
+  assert.equal(offers.passOfferReady({ enabled: true, season: { on_sale: true, product_id: 'pass.s1' }, progress: { premium: true } }), false, 'owned');
+  assert.equal(offers.passOfferReady({ enabled: true, season: { on_sale: false, product_id: 'pass.s1' } }), false, 'not on sale yet');
+  assert.equal(offers.passOfferReady({ enabled: true, season: null }), false);
+  assert.equal(offers.passOfferReady({ enabled: false }), false);
+  assert.equal(offers.passOfferReady(null), false);
+  const card = strip(read('src/components/money/CalmOffer.tsx'));
+  assert.match(card, /placement === 'high_point' \? passOn && passReady === true/);
+});
+
+test('T220: a buy from an offer inside a native sheet can show its grown-up gate (a slot inside each sheet)', () => {
+  const modal = strip(read('src/components/RedeemRedeemableModal.tsx'));
+  assert.match(modal, /\{open === true && <GrownUpGateSlot \/>\}\s*<\/CalmModal>/);
+  const retention = strip(read('src/components/retention/useRetention.tsx'));
+  assert.match(retention, /\{!!content && <GrownUpGateSlot \/>\}\s*<\/CalmModal>/);
+});
+
+test('T124: the ride line sits under the won coin name on the win card, with the coin\'s park', () => {
+  const card = strip(read('src/components/PostWinRewardsModal.tsx'));
+  assert.match(card, /\{hasCoin && <RideFactLine rideName=\{rideName\} parkId=\{parkId\} onDark style=\{styles\.rideFact\} \/>\}/);
+  const title = card.indexOf('style={styles.heroTitle}');
+  assert.ok(title > 0 && card.indexOf('<RideFactLine') > title, 'under the name');
+  assert.match(strip(read('src/components/RedeemRedeemableModal.tsx')), /rideName=\{taskName\}\s*parkId=\{park\?\.id \?\? null\}/);
+});

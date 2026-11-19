@@ -258,7 +258,7 @@ test('T220/T230: one calm offer decision for every placement (switch, loss, kid 
   const card = read('src/components/money/CalmOffer.tsx');
   assert.doesNotMatch(card, /PriceBar|\.price\b|prices\[/, 'the card never shows a price; the gate does');
   assert.match(card, /await buyPack\(pack, \{ onStart: \(\) => setBusy\(true\), placement: `offer\.\$\{placement\}` \}\)/, 'the one gated buy path');
-  assert.match(card, /if \(placement === 'win_vip'\) \{ void openMembership\(\); return; \}/, 'VIP opens behind the grown-up gate');
+  assert.match(card, /if \(placement === 'win_vip'\) \{ beforeLeave\?\.\(\); void openMembership\(\); return; \}/, 'VIP opens through the one door (its Buy is gated)');
   assert.match(card, /flagOn\(retentionFlagsNow\(\), 'natural_offers'\)/, 'read the way daily_three is read');
   assert.match(card, /crew\?\.kind === 'family' && hasKids\(crew\)/);
   assert.match(card, /pictureOnlyFor\(/);

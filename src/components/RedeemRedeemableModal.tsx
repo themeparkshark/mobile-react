@@ -3,6 +3,7 @@ import { Image } from 'expo-image';
 import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Dimensions, Platform, Pressable, View, Text, StyleSheet } from 'react-native';
 import CalmModal from './retention/CalmModal';
+import { GrownUpGateSlot } from './GrownUpGate';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
 import { AuthContext } from '../context/AuthProvider';
@@ -253,6 +254,8 @@ export default function RedeemRedeemableModal({
   const [parkWins, setParkWins] = useState<number | null>(null);
   const [firstCoinTicketReturned, setFirstCoinTicketReturned] = useState(false);
   const [lostTicketCost, setLostTicketCost] = useState(0);
+  // The card came back from a lost try (the loss card's way on at 0 Tickets): a loss moment, so no paid offer on it.
+  const [cardAfterLoss, setCardAfterLoss] = useState(false);
   const [usedRescuePass, setUsedRescuePass] = useState(false);
   const [rescueRetryAvailable, setRescueRetryAvailable] = useState(false);
   // The "one more try" ad offer, shown once per lost challenge.
@@ -381,6 +384,7 @@ export default function RedeemRedeemableModal({
       setParkWins(null);
       setFirstCoinTicketReturned(false);
       setLostTicketCost(0);
+      setCardAfterLoss(false);
       setRetryOffered(true);
       setVipLeft(null);
       setVipNote(null);
@@ -904,6 +908,7 @@ export default function RedeemRedeemableModal({
     setRideTry(null);
     setClaimable(null);
     setStartError(null);
+    setCardAfterLoss(true);
     refreshPlayer?.();
     // The map reads this coin again, so the card's free and extra tries are today's, not the ones from before the loss.
     onPress();
@@ -1294,8 +1299,8 @@ export default function RedeemRedeemableModal({
                               <GameIcon name="arrow" size={14} />
                             </Pressable>
                           )}
-                          {/* One optional row (a calm offer) lands here in a later step; nothing until then. */}
-                          {!previewOnly && <NeedTicketOfferSlot placement="need_ticket" taskId={taskId} closeCard={close} />}
+                          {/* One optional calm offer row (T220): never right after a lost try, never on a kid path. */}
+                          {!previewOnly && <NeedTicketOfferSlot placement="need_ticket" taskId={taskId} closeCard={close} loss={cardAfterLoss} />}
                         </View>}
                         {needTicket && <Pressable onPress={safeClose} accessibilityRole="button" accessibilityLabel={BACK_TO_MAP}
                           style={({ pressed }) => [styles.mapLink, pressed && { opacity: 0.7 }]} hitSlop={8}>
@@ -1434,6 +1439,7 @@ export default function RedeemRedeemableModal({
         onCovered={() => setWinCovered(true)}
         visible={open === true && flowState === 'postwin'}
         rideName={taskName}
+        parkId={park?.id ?? null}
         // The server types ride coins coin_kind 'ride'; a sight (no kind) never reads "NEW RIDE COIN" (T019).
         sight={redeemable?.type === 'task' && (redeemable.model as { coin_kind?: string | null }).coin_kind !== 'ride'}
         limited={redeemable?.type === 'task' ? (redeemable.model as TaskType)?.limited ?? null : null}
@@ -1481,6 +1487,8 @@ export default function RedeemRedeemableModal({
       />
           </View>
         </View>
+        {/* The grown-up gate inside this native sheet (a calm offer's buy on the card or the win card), so it shows above it. */}
+        {open === true && <GrownUpGateSlot />}
       </CalmModal>
     </>
   );

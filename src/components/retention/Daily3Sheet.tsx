@@ -1,3 +1,4 @@
+import CalmOffer from '../money/CalmOffer';
 import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -28,7 +29,7 @@ export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride' | 'shelf
  * the Daily 3 chest, then the week of flames toward the Weekly Box.
  * Every number on it comes from the server.
  */
-export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyFreeze, onGoal, onClose, onReminders, busy, coins,
+export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyFreeze, onGoal, onClose, onLeaveSheet, onReminders, busy, coins,
   celebrate, reducedMotion, coach, onCoachDone, atPark = false, passToday = null, remindersReady = false, closeLabel = 'BACK TO MAP' }: {
   readonly state: DailyThreeState;
   readonly now: number;
@@ -45,6 +46,8 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   readonly onBuyFreeze: () => void;
   readonly onGoal: (tap: GoalTap) => void;
   readonly onClose: () => void;
+  /** Close this sheet before another screen opens (the calm Shark Pass card). */
+  readonly onLeaveSheet?: () => void;
   readonly onReminders: (on: boolean) => void;
   readonly busy: boolean;
   readonly coins: number;
@@ -106,6 +109,9 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
       </View>
 
       <ChestBlock state={state} done={done} busy={busy} onClaim={onClaim} reducedMotion={reducedMotion} />
+      {/* One natural high point (T220): once today's chest is open, a calm Shark Pass card for grown-ups.
+          CalmOffer keeps every rule (served switch, never on a kid path, once a day, Not now remembered, gate first). */}
+      {state.claimed && <CalmOffer placement="high_point" style={styles.offer} beforeLeave={onLeaveSheet} />}
 
       <View style={styles.week}>
         <View style={styles.weekDays}>
@@ -323,6 +329,7 @@ function WeekDay({ letter, state, reducedMotion }: { readonly letter: string; re
 }
 
 const styles = StyleSheet.create({
+  offer: { marginTop: 10 },
   card: { width: '94%', marginTop: -14, backgroundColor: BRAND.blue, borderRadius: 24, borderWidth: 4, borderColor: BRAND.white,
     paddingTop: 20, paddingBottom: 10, paddingHorizontal: 12, alignItems: 'stretch', overflow: 'hidden' },
   hero: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8, backgroundColor: 'rgba(255,255,255,0.12)',

@@ -63,6 +63,19 @@ export function offerDecision(c: OfferContext): OfferWhy {
   return 'show';
 }
 
+/**
+ * The high_point Shark Pass card is only for a player who can still get the Shark Pass row: a season on
+ * sale with a product, not owned yet. Anything else (no season, not on sale yet, already owned) says no.
+ */
+export function passOfferReady(state: {
+  readonly enabled: boolean;
+  readonly season?: { readonly on_sale?: boolean; readonly product_id?: string | null } | null;
+  readonly progress?: { readonly premium?: boolean } | null;
+} | null | undefined): boolean {
+  if (!state || !state.enabled) return false;
+  return !!state.season?.on_sale && !!state.season.product_id && state.progress?.premium !== true;
+}
+
 /** The record after the card really showed (with its content). */
 export function markShown(record: OfferRecord | null | undefined, today: string, now: number): OfferRecord {
   return { ...record, day: today, firstShownAt: record?.firstShownAt ?? now };

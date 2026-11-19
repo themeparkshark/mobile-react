@@ -24,7 +24,7 @@ import { loadLastCrew } from '../../services/lineplay/lineGroupStore';
 import { hasKids } from '../../services/lineplay/lineGroup';
 import { useMoneyFlag } from '../../services/money/flags';
 import {
-  OFFER_COPY, loadOfferRecords, localDay, markDismissed, markShown, offerDecision, saveOfferRecord,
+  OFFER_COPY, loadOfferRecords, localDay, markDismissed, markShown, offerDecision, passOfferReady, saveOfferRecord,
   type OfferPlacement, type OfferRecord,
 } from '../../services/money/naturalOffers';
 import { isParkDay, isStarter } from '../../services/money/suppliesPlan';
@@ -32,6 +32,7 @@ import { buyPack, outcomeMessage, useSupplies } from '../../services/money/suppl
 import { trackImpression } from '../../services/money/track';
 import { storeAvailable } from '../../services/purchases';
 import { openMembership } from '../GrownUpGate';
+import { getSharkPass } from '../../api/endpoints/me/shark-pass';
 import { BRAND, FONT, GameIcon, gameAlert } from '../../ui';
 import { Contents, GotIt, MAX_FONT, PackArt, type PackArtKey } from './moneyUi';
 
@@ -65,9 +66,17 @@ export type CalmOfferProps = {
   readonly style?: StyleProp<ViewStyle>;
   /** Told once whether the offer shows (a host can keep its layout calm). */
   readonly onShown?: (shown: boolean) => void;
+  /**
+   * win_vip only: this win's own line ("VIP doubles this: +60 Shark Coins, +50 XP", services/money/offers.ts
+   * vipWinOffer). Null: nothing to say, so the line stays away. Left out: the plain line.
+   */
+  readonly vipLine?: string | null;
+  /** Runs after the grown-up's yes and before another screen opens (a host sheet closes itself first). */
+  readonly beforeLeave?: () => void;
 };
 
-export default function CalmOffer({ placement, loss = false, style, onShown }: CalmOfferProps) {
+
+export default function CalmOffer({ placement, loss = false, style, onShown, vipLine, beforeLeave }: CalmOfferProps) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const switchOn = useNaturalOffersSwitch();
   const passOn = useMoneyFlag('shark_pass');
@@ -90,6 +99,14 @@ export default function CalmOffer({ placement, loss = false, style, onShown }: C
     });
     return () => { live = false; };
   }, [playerId, switchOn, loss, placement]);
+  // high_point: the Shark Pass card only while the row is on sale and not owned (read once per mount).
+  const [passReady, setPassReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (placement !== 'high_point' || !switchOn || !passOn || loss) return undefined;
+    let live = true;
+    void getSharkPass().then(state => { if (live) setPassReady(passOfferReady(state)); }).catch(() => { if (live) setPassReady(false); });
+    return () => { live = false; };
+  }, [placement, switchOn, passOn, loss]);
   const [busy, setBusy] = useState(false);
   const [gone, setGone] = useState(false);
   const [landed, setLanded] = useState<{ grants: Record<string, number>; art: PackArtKey } | null>(null);
@@ -97,8 +114,9 @@ export default function CalmOffer({ placement, loss = false, style, onShown }: C
   const today = catalog?.day ?? localDay(Date.now());
   const pack = placement === 'need_ticket' ? catalog?.products.find(p => isParkDay(p) && p.available)
     : placement === 'first_win' ? catalog?.products.find(p => isStarter(p) && p.available && !catalog.starter_seen_at) : undefined;
-  const contentReady = placement === 'win_vip' ? !vip
-    : placement === 'high_point' ? passOn
+  const vipText = vipLine === undefined ? OFFER_COPY.win_vip.line : vipLine;
+  const contentReady = placement === 'win_vip' ? !vip && !!vipText
+    : placement === 'high_point' ? passOn && passReady === true
       : !!catalog?.enabled && !!pack;
   const why = offerDecision({ placement, switchOn, loss, familyWithKids: ctx?.kids, pictureGames: ctx?.picture, vip,
     today, now: Date.now(), record: ctx?.record });
@@ -110,7 +128,8 @@ export default function CalmOffer({ placement, loss = false, style, onShown }: C
     void saveOfferRecord(playerId, placement, markShown(ctx?.record, today, Date.now()));
     trackImpression(`offer.${placement}`, pack?.product_id);
   }, [show]); // eslint-disable-line react-hooks/exhaustive-deps
-  const decided = loss || !switchOn ? false : ctx ? show : null;
+  const decided = loss || !switchOn || (placement === 'win_vip' && !vipText) || (placement === 'high_point' && (!passOn || passReady === false)) ? false
+    : ctx && (placement !== 'high_point' || passReady !== null) ? show : null;
   useEffect(() => { if (decided !== null) onShown?.(decided); }, [decided]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const dismiss = () => {
@@ -122,8 +141,10 @@ export default function CalmOffer({ placement, loss = false, style, onShown }: C
   const act = async () => {
     if (busy) return;
     haptic('tapLight');
-    if (placement === 'win_vip') { void openMembership(); return; }
-    if (placement === 'high_point') { RootNavigation.navigate('SharkPass'); return; }
+    // Both doors open a pitch page (pitch first, Oct 8): its every real-money Buy asks a grown-up fresh there.
+    // A host sheet closes first, so the page never opens under it.
+    if (placement === 'win_vip') { beforeLeave?.(); void openMembership(); return; }
+    if (placement === 'high_point') { beforeLeave?.(); RootNavigation.navigate('SharkPass'); return; }
     if (!pack) return;
     // The one gated buy path: a grown-up answers first; the price shows only on the gate's details card.
     const outcome = await buyPack(pack, { onStart: () => setBusy(true), placement: `offer.${placement}` });
@@ -145,9 +166,9 @@ export default function CalmOffer({ placement, loss = false, style, onShown }: C
     return (
       <Animated.View entering={FadeIn.delay(300).duration(220)} style={[st.vipLine, style]}>
         <Pressable onPress={() => void act()} accessibilityRole="button" style={st.vipTap}
-          accessibilityLabel={`${OFFER_COPY.win_vip.line}. For grown-ups, opens VIP.`}>
+          accessibilityLabel={`${vipText}. For grown-ups, opens VIP.`}>
           <GameIcon name="member" size={22} />
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipText}>{OFFER_COPY.win_vip.line}</Text>
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.vipText} numberOfLines={2}>{vipText}</Text>
           <GameIcon name="arrow" size={14} />
         </Pressable>
         <Pressable onPress={dismiss} hitSlop={10} accessibilityRole="button" accessibilityLabel="Not now">
@@ -196,8 +217,8 @@ const st = StyleSheet.create({
   // Its own small navy pill, so it reads on any host (cream ticket card or blue recap).
   notNow: { alignSelf: 'center', marginTop: 4, backgroundColor: '#123f80', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 3 },
   notNowText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
-  vipLine: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 8, backgroundColor: '#123f80', borderRadius: 999,
+  vipLine: { flexDirection: 'row', alignItems: 'center', alignSelf: 'center', gap: 8, maxWidth: '100%', backgroundColor: '#123f80', borderRadius: 999,
     borderWidth: 2, borderColor: BRAND.gold, paddingLeft: 10, paddingRight: 8, paddingVertical: 5 },
-  vipTap: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  vipText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold },
+  vipTap: { flexDirection: 'row', alignItems: 'center', gap: 6, flexShrink: 1 },
+  vipText: { fontFamily: FONT.display, fontSize: 15, color: BRAND.gold, flexShrink: 1, textAlign: 'center' },
 });

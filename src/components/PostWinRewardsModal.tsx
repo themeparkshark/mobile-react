@@ -48,7 +48,8 @@ import type { LimitedWindow } from '../models/task-type';
 import PerkChipRow from './coin/PerkChip';
 import { flyAfterTeamStep, type WinFlyWhen } from './rewards/teamOffer';
 import WinTeamStep from './rewards/WinTeamStep';
-import { FirstWinOfferSlot } from './rewards/offerSlots';
+import { WinOfferSlot } from './rewards/offerSlots';
+import RideFactLine from './collection/RideFactLine';
 
 const { width: SW, height: SH } = Dimensions.get('window');
 /** Below this height (iPhone SE is 667 pt) the hero coin shrinks so a first-coin card fits with no scroll. */
@@ -70,6 +71,8 @@ const WIN_COVER_MS = 500;
 interface Props {
   visible: boolean;
   rideName: string;
+  /** The won coin's park (the ride line under its name, T124). */
+  parkId?: number | null;
   /** A sight coin (a statue, a show, a land): NEW COIN, never NEW RIDE COIN (fix round w3 T019). */
   sight?: boolean;
   /** A limited coin's rotation: its win says where it lives when the shelf has no count for it. */
@@ -234,6 +237,7 @@ function RewardChip({ chip, index, enter, reduced, started, wide = false }: {
 export default function PostWinRewardsModal({
   visible,
   rideName,
+  parkId = null,
   sight = false,
   limited = null,
   taskCoinUrl,
@@ -543,6 +547,8 @@ export default function PostWinRewardsModal({
                 ? isNewCoin ? (sight ? 'NEW COIN' : 'NEW RIDE COIN') : `WON ${coinTimesCollected} TIMES`
                 : 'YOU WON'}</Text>
               <Text style={styles.heroTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{rideName}</Text>
+              {/* The ride's land and one fan note under its name (T124); nothing for a ride with no written note. */}
+              {hasCoin && <RideFactLine rideName={rideName} parkId={parkId} onDark style={styles.rideFact} />}
               {earnedEdition && <View style={styles.edition}>
                 <GameIcon name="sparkle" size={18} />
                 <Text style={styles.editionText} numberOfLines={1}>{earnedEdition.name} Edition</Text>
@@ -589,8 +595,10 @@ export default function PostWinRewardsModal({
                 <GameIcon name="crown" size={22} />
                 <Text style={styles.teamText} numberOfLines={2}>{team}</Text>
               </View>}
-              {/* One optional row under the rewards on the first win card (a calm offer, mounted by a later step). */}
-              {revealNow && isNewCoin && <FirstWinOfferSlot placement="first_win" taskId={wonTaskId ?? null} />}
+              {/* One calm offer at most (T220, T230): the Starter Pack on the first win card, else one VIP line.
+                  Mounted only once the card is really up, so a hidden card never counts a showing. */}
+              {visible && caught && panel === 'win' && <WinOfferSlot firstWin={revealNow && isNewCoin} coins={coinsEarned} xp={xpEarned}
+                winKey={attemptId ?? null} closeCard={closeCard} />}
             </Animated.View>
             </>}
           </View>
@@ -662,6 +670,7 @@ const styles = StyleSheet.create({
     textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 3 }, textShadowRadius: 0.1 },
   edition: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4, backgroundColor: '#fff8e4', borderRadius: 12,
     paddingHorizontal: 10, paddingVertical: 3 },
+  rideFact: { marginTop: 4 },
   editionText: { fontFamily: 'Knockout', fontSize: 14, color: '#05346e', flexShrink: 1 },
   shelfLine: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 6, backgroundColor: '#fff4cc', borderRadius: 14,
     borderWidth: 2, borderColor: '#ffcf3b', paddingVertical: 4, paddingHorizontal: 10, maxWidth: '100%' },

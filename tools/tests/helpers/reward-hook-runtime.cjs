@@ -154,7 +154,7 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)rewards\/lossNext$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/lossNext.ts');
       if (/(^|\/)rewards\/winFlow$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/rewards/winFlow.ts');
       if (/(^|\/)rewards\/coinCardSeen$/.test(name)) return { markCoinCardSeen: async () => undefined, coinCardSeenNow: () => false, warmCoinCardsSeen() {} };
-      if (/(^|\/)rewards\/offerSlots$/.test(name)) return { NeedTicketOfferSlot: 'NeedTicketOfferSlot', FirstWinOfferSlot: 'FirstWinOfferSlot' };
+      if (/(^|\/)rewards\/offerSlots$/.test(name)) return { NeedTicketOfferSlot: 'NeedTicketOfferSlot', FirstWinOfferSlot: 'FirstWinOfferSlot', WinOfferSlot: 'WinOfferSlot' };
       if (/(^|\/)services\/guide\/freeTickets$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/guide/freeTickets.ts');
       if (/(^|\/)services\/lineplay\/rideLines$/.test(name)) return { taskHasLine: () => false };
       // Nobody signed in unless a test says so (PLAY! reads the Ticket count for its free-try badge).
