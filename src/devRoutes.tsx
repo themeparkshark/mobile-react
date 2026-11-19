@@ -50,6 +50,7 @@ export const DEV_SCREENS: readonly DevScreen[] = __DEV__
       { name: 'SocialPreview', getComponent: () => require('./screens/SocialPreviewScreen').default },
       { name: 'RideLogSuccessPreview', getComponent: () => require('./screens/RideLogSuccessPreviewScreen').default },
       { name: 'UiKitGym', getComponent: () => require('./ui/UiKitGym').default },
+      { name: 'StickerGallery', getComponent: () => require('./ui/sticker/StickerGallery').default },
       { name: 'SetRevealPreview', getComponent: () => require('./screens/StoreScreen/SetRevealPreviewScreen').default },
       { name: 'SharkPassRevealPreview', getComponent: () => require('./screens/SharkPassRevealPreviewScreen').default },
       { name: 'BoxRevealPreview', getComponent: () => require('./screens/pins/BoxRevealPreviewScreen').default },
