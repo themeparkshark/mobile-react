@@ -80,7 +80,7 @@ test('the How to Play highlight is a one-shot: param cleared, stale requests dro
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /navigation\.setParams\(\{ highlightNearestFind: undefined \}\)/);
   const home = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(home, /isStaleHighlight\(highlightNearestFind, Date\.now\(\)\)/);
+  assert.match(home, /isStaleHighlight\(highlightRequest, Date\.now\(\)\)/);
   assert.match(home, /useEffect\(\(\) => \(\) => \{ if \(pulseTimer\.current\) clearTimeout\(pulseTimer\.current\); \}, \[\]\)/);
   const { isStaleHighlight } = loadTs('src/screens/ExploreScreen/nearestFind.ts');
   assert.equal(isStaleHighlight(1000, 5000), false);

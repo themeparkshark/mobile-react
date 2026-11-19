@@ -210,7 +210,7 @@ test('T113: the Rewards badge shows once, settled; a claim drops it at once', ()
   assert.equal(model.settleBadge(0, 5, model.BADGE_SETTLE_MS), 5, 'then shows the exact count');
   assert.equal(model.settleBadge(5, 4, 0), 4, 'a claim shows at once');
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /rewards: settledSummary \}/);
+  assert.match(hook, /rewards: settledSummary, homeNext \}/);
 });
 
 test('T118: the level chest waits while the Daily 3 chest is ready, then takes its turn', () => {
