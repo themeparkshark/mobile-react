@@ -145,3 +145,19 @@ test('the home map renders whenever there is no park, even before the first park
   const requestPark = provider.slice(provider.indexOf('const requestPark = async'), provider.indexOf('// A different account'));
   assert.doesNotMatch(requestPark, /setParkState\(undefined\)|clearPark\(\)|setParkLoaded\(false\)/);
 });
+
+test('T025: driving away, one good reading 1.5 km past the last in-park fix leaves at once (goodbye and home together)', () => {
+  const P = policy.exports;
+  const park = { id: 8 };
+  let state = P.nextParkPresence(P.NO_PARK_PRESENCE, { outcome: 'park', park, at: 0, latitude: 33.8121, longitude: -117.919, accuracyMeters: 10 });
+  // At the gate (300 m): still sticky, as before.
+  let next = P.nextParkPresence(state, { outcome: 'outside', at: 10_000, latitude: 33.8094, longitude: -117.919, accuracyMeters: 10 });
+  assert.equal(next.park, park, 'near the gate: one reading never leaves');
+  // 5 km away: leaves on the first good reading.
+  next = P.nextParkPresence(state, { outcome: 'outside', at: 15_000, latitude: 33.7671, longitude: -117.919, accuracyMeters: 10 });
+  assert.equal(next.park, undefined);
+  // A coarse far fix still does not count.
+  next = P.nextParkPresence(state, { outcome: 'outside', at: 15_000, latitude: 33.7671, longitude: -117.919, accuracyMeters: 500 });
+  assert.equal(next.park, park);
+  assert.equal(P.LEAVE_PARK_FAR_M, 1500);
+});

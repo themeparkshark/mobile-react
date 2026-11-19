@@ -16,3 +16,13 @@ export function compareQueueWaits(a: WikiLiveEntry, b: WikiLiveEntry,
   if (bWait === null) return -1;
   return (direction === 'wait-desc' ? bWait - aWait : aWait - bWait) || a.name.localeCompare(b.name);
 }
+
+/** A ride name reduced for matching: lower case, letters and digits only ("Pirates of the Caribbean" -> "piratesofthecaribbean"). */
+export function searchKey(text: string): string {
+  return text.toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+}
+
+/** The wait badge's number size: full size up to two digits, one step down for three (a 120 min wait). */
+export function badgeFontSize(text: string): number {
+  return text.length >= 3 ? 18 : 22;
+}

@@ -32,6 +32,7 @@ import type { ItemType } from '../../models/item-type';
 import type { ShopItem } from '../../models/shop-today';
 import { BRAND, FONT, GameIcon, SHADOW, SharkLoader } from '../../ui';
 import { LinearGradient } from 'expo-linear-gradient';
+import EdgeScrollHint, { useEdgeScrollHint } from '../../components/EdgeScrollHint';
 import ShopTile from './ShopTile';
 import TryOnSheet from './TryOnSheet';
 import useIdleRest from './useIdleRest';
@@ -219,6 +220,7 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
   // Filter chips: All, each slot on the shelf, Can buy (shop critic round 2: "hats I can afford" in two taps).
   const filters = useMemo(() => shelfFilters(items, balance), [items, balance]);
   const [filter, setFilter] = useState('all');
+  const chipHint = useEdgeScrollHint();
   const pickFilter = useCallback((key: string) => {
     void Haptics.selectionAsync().catch(() => undefined);
     soundRef.current(require('../../../assets/sounds/tap.mp3'));
@@ -308,7 +310,9 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
             </View>
           )}
           {filters.length > 0 && (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} accessibilityRole="tablist">
+            <View>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filters} accessibilityRole="tablist"
+              onLayout={chipHint.onLayout} onContentSizeChange={chipHint.onContentSizeChange} onScroll={chipHint.onScroll} scrollEventThrottle={64}>
               {filters.map(f => {
                 const on = f.key === filter;
                 return (
@@ -320,9 +324,10 @@ export default function GearShelf({ items, setItems, promoUrl, nextRotationAt, o
                 );
               })}
             </ScrollView>
+            {/* More chips to the right: a fade in the panel's blue and an arrow, gone at the row's end (T144). */}
+            <EdgeScrollHint more={chipHint.more} color={S.panel} fadeFrom="rgba(10,79,150,0)" style={styles.chipFade} />
+            </View>
           )}
-          {/* The chip row fades at its right edge, so a cut chip reads as "scroll for more". */}
-          {filters.length > 0 && <LinearGradient pointerEvents="none" colors={['rgba(10,79,150,0)', S.panel]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.chipFade} />}
           {shelf.length === 0 ? (
             <SharkLoader tone="onBlue" state="empty" compact title="New gear is on the way" message="New gear comes soon. Check back later." />
           ) : (
@@ -361,7 +366,7 @@ const styles = StyleSheet.create({
   restock: { position: 'absolute', top: 8, left: 10, gap: 6, alignItems: 'flex-start' },
   yoursChip: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 9, borderRadius: 13, backgroundColor: 'rgba(5,52,110,0.84)' },
   yoursChipText: { fontFamily: FONT.display, fontSize: 13, color: '#ffffff' },
-  chipFade: { position: 'absolute', right: 0, top: 10, width: 28, height: 40, borderTopRightRadius: 19 },
+  chipFade: { borderTopRightRadius: 19, overflow: 'hidden' },
   filter: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 34, paddingHorizontal: 10, borderRadius: 17,
     backgroundColor: 'rgba(5,52,110,0.65)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.55)' },
   filterOn: { backgroundColor: '#ffcf3b', borderColor: '#ffffff' },

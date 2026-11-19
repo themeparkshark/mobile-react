@@ -34,7 +34,10 @@ test('home map: find info lives on the marker as one small tag (distance far awa
   assert.doesNotMatch(marker, /TAP TO GRAB/);
   assert.doesNotMatch(marker, /WALK CLOSER/);
   assert.doesNotMatch(marker, /formatLeavesIn/);
-  assert.match(marker, /LEAVING_SOON_MS = 5 \* 60_000/);
+  // T006: words in the last ten minutes, never a minutes or seconds clock, no stopwatch icon.
+  assert.match(marker, /leavesSoon\(left, HOME_LEAVES_SOON_MS\) \? 'Leaves soon' : null/);
+  assert.doesNotMatch(marker, /Math\.ceil\(left \/ (1000|60_000)\)/);
+  assert.doesNotMatch(marker, /GameIcon name="timer"/);
   assert.match(marker, /const far = !inRange && distance != null && !plainDistance \? formatFindDistance\(distance\) : '';/);
   assert.match(marker, /\[far \|\| null, leavingSoon\]\.filter\(Boolean\)\.join\(' · '\)/);
   // Always mounted: a marker view never changes its layout.

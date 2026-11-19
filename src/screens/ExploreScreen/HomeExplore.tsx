@@ -613,6 +613,9 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
   const fingerRef = useRef<number | null>(null);
   fingerRef.current = fingerPivot;
+  // T148: while nothing is in range, the nearest treat bobs a little (one marker, on the map's clock).
+  const idlePivot = useMemo(() => fingerPivot != null ? null : [...placed].filter(entry => entry.distance != null)
+    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed, fingerPivot]);
   // Finn's first hello reads the loaded finds directly (no wait for the next GPS update).
   const fingerItem = fingerPivot != null ? placed.find(entry => entry.item.pivot_id === fingerPivot)?.item ?? null : null;
   useEffect(() => { onFindInRange?.(fingerItem); }, [fingerItem, onFindInRange]);
@@ -793,6 +796,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
             chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && prepItem.pivot_id !== catchingPivot && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}
             fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot}
+            idleBob={idlePivot != null && prepItem.pivot_id === idlePivot}
             pulseKey={pulse && pulse.pivot === prepItem.pivot_id ? pulse.key : null} plainDistance={firstHunt} />
         ))}
       </Map>

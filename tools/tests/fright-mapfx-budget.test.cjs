@@ -117,7 +117,7 @@ test('perf probe stats', () => {
 test('Map wires the fright layer through one prop, and the layer pauses with the map', () => {
   const map = read('src/components/Map.tsx');
   assert.match(map, /readonly fright\?: FrightMapInput \| null;/);
-  assert.match(map, /\{fright && <FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{mapViewRef\} hud=\{rail\} \/>\}/);
+  assert.match(map, /\{fright && <FrightMapSources input=\{fright\} zoom=\{cameraZoom\} mapRef=\{nativeMap\} hud=\{rail\} \/>\}/);
   assert.match(map, /\{fright && viewSize && <FrightMapLayer input=\{fright\}/);
   const index = read('src/components/map/fright/index.ts');
   assert.match(index, /export type \{ FrightMapInput \}/);

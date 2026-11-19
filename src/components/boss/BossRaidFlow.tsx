@@ -25,12 +25,26 @@ import { MAX_DAMAGE_PER_PLAYER, joinCost, rewardPreview, shortfallCopy } from '.
 import BossWinCard from './BossWinCard';
 import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll, { useAppActive } from '../../hooks/useLivePoll';
+import useStillMoment from '../../hooks/useStillMoment';
+import { attentionGate } from '../../screens/ExploreScreen/mapPresentationQueue';
 import { useBudgetedPoll } from '../../power';
 import useMatchLink from '../../hooks/useMatchLink';
 import MatchLinkBanner from '../match/MatchLinkBanner';
 import { LINK_COPY, type LinkPhase } from '../../services/match/matchLink';
 import { idlePollInterval } from '../../hooks/useUserIdle';
 import countText from '../../helpers/countText';
+
+/** The stored "this raid's result was collected" key. */
+export function celebratedKey(playerId: number, raidId: number): string {
+  return `boss-celebrated-v2-${playerId}-${raidId}`;
+}
+/**
+ * Results already put on screen in this app session. A map that remounts (a park reload, coming back from a
+ * game) never puts the same card up again before COLLECT has been stored.
+ */
+const presentedThisSession = new Set<string>();
+/** While a result waits for a still moment, it looks again this often (no server traffic). */
+export const RESULT_RETRY_MS = 10_000;
 
 /** Poll the park's raid while at a park. `loaded` is false until the first answer for this player and park. */
 export function useParkRaid(parkId: number | null | undefined, { focused = true, idle = false }: {
@@ -149,6 +163,8 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   // The server said this player is not at the ride for this raid: offer the remote join.
   const [awayFor, setAwayFor] = useState<{ raidId: number; reason: PresenceReason } | null>(null);
   const [celebrate, setCelebrate] = useState<BossRaid | null>(null);
+  // Who the shown card belongs to (COLLECT settles it for that player even if the context moved on).
+  const celebrateOwner = useRef<number | null>(null);
   const [sheetSettled, setSheetSettled] = useState(true);
   const [winSettled, setWinSettled] = useState(true);
   const lastHp = useRef<{ id: number; hp: number } | null>(null);
@@ -161,7 +177,6 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
   const owner = useRef(ownerKey); owner.current = ownerKey;
   const currentView = useRef({ contextKey, open, focused });
   currentView.current = { contextKey, open, focused };
-  const presented = useRef(new Set<string>());
   const recovery = useBossAttackRecovery({ playerId, parkId, onResult: (checkpoint, result) => {
     if (sentAtBell.current) setReceipt(result.ok ? { state: 'saved', note: null } : { state: 'error', note: ERRORS[result.error] });
     if (result.ok) {
@@ -203,32 +218,52 @@ export default function BossRaidFlow({ raid, parkId, open, onClose, onState, rec
     return () => clearInterval(id);
   }, [open, appActive, focused]);
 
-  // Once a raid you fought ends, celebrate it once.
+  // Once a raid you fought ends, celebrate it once (T002). The card is the player's to collect: it opens by
+  // itself only at a still moment (the player stayed put, not in the first 30 s at a park, not mid-game, the
+  // app open's one automatic open), or at once when the player opened the raid sheet themselves.
+  const still = useStillMoment(location);
+  const stillRef = useRef(still); stillRef.current = still;
+  const [presentRetry, setPresentRetry] = useState(0);
   useEffect(() => {
     if (!playerId || !raid || raid.status === 'active' || !raid.you.reward || !focused || fighting) return;
-    const key = `boss-celebrated-v2-${playerId}-${raid.id}`;
+    const key = celebratedKey(playerId, raid.id);
+    if (presentedThisSession.has(key)) return;
     let cancelled = false;
+    let retry: ReturnType<typeof setTimeout> | undefined;
     // Wait for the map to settle: iOS drops a modal presented mid-navigation.
     const timer = setTimeout(() => {
       AsyncStorage.getItem(key).then(seen => {
-        if (seen || cancelled || presented.current.has(key)) return;
-        presented.current.add(key);
+        if (seen || cancelled || presentedThisSession.has(key)) return;
+        const asked = currentView.current.open;
+        // Walking: wait (the still moment re-runs this). Still but the map is not ready for it (first 30 s at
+        // a park, a game or a win card just closed, the app open's one automatic open used): look again later.
+        if (!asked && !stillRef.current) return;
+        if (!asked && !attentionGate.request('raid_result')) {
+          retry = setTimeout(() => setPresentRetry(n => n + 1), RESULT_RETRY_MS);
+          return;
+        }
+        presentedThisSession.add(key);
+        celebrateOwner.current = playerId;
         setCelebrate(raid);
       }).catch(() => undefined);
     }, 1200);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [raid?.id, raid?.status, !!raid?.you.reward, focused, fighting, playerId]);
+    return () => { cancelled = true; clearTimeout(timer); clearTimeout(retry); };
+  }, [raid?.id, raid?.status, !!raid?.you.reward, focused, fighting, playerId, still, open, presentRetry]);
 
   const dismissCelebration = () => {
-    if (owner.current !== ownerKey) return;
-    if (celebrate && playerId) {
-      void AsyncStorage.setItem(`boss-celebrated-v2-${playerId}-${celebrate.id}`, '1').catch(() => undefined);
+    // COLLECT always settles the raid it shows, for the player it was shown to: the key is stored and the
+    // server told, so the card never comes back (it used to return early on an owner check and reopen on
+    // every map focus).
+    const owned = celebrate && celebrateOwner.current != null ? celebrateOwner.current : null;
+    if (celebrate && owned != null) {
+      void AsyncStorage.setItem(celebratedKey(owned, celebrate.id), '1').catch(() => undefined);
       // The server keeps a missed win on the raid endpoint until the app has shown it.
       void acknowledgeRaid(celebrate.id);
     }
     if (celebrate) onCelebrationDismiss?.(celebrate);
     setCelebrate(null);
-    onClose();
+    celebrateOwner.current = null;
+    if (owner.current === ownerKey) onClose();
   };
   const closeSheet = () => { round.current = null; setFighting(false); if (celebrate) dismissCelebration(); else onClose(); };
   // Result screen "Attack again": send this round, then start the next one once it is confirmed.

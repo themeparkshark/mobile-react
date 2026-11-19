@@ -105,7 +105,8 @@ test('team badges never show the old mouse face or Earth globe (IP safety, round
   const teamsMod = loadTs('src/constants/teams.ts');
   assert.notEqual(teamsMod.teamChipColor('globe'), teamsMod.TEAMS.globe.color);
   assert.equal(teamsMod.teamChipColor('mouse'), teamsMod.TEAMS.mouse.color);
-  for (const file of ['src/components/RideControlBar.tsx', 'src/components/home/HomeLive.tsx']) {
+  // The home map's team chips went into one small HUD chip (T013); the Ride Control bar keeps its chips.
+  for (const file of ['src/components/RideControlBar.tsx']) {
     assert.match(fs2.readFileSync(p2.join(__dirname, '../..', file), 'utf8'), /styles\.chip, \{ backgroundColor: teamChipColor\(team\) \}/, file);
   }
   const team = fs2.readFileSync(p2.join(__dirname, '../../src/components/TeamBadge.tsx'), 'utf8');

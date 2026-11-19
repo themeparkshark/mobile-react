@@ -71,6 +71,7 @@ type FxLive = Fx & { until: number };
 /** Word-slot priority (higher wins): countdown/FINISH 5, BLOCK IT! 4, smash and hit words 3, phase 2, streak 1. */
 function wordRank(f: { t: string; wm?: string; text?: string }): number {
   if (f.t === 'count' || (f.t === 'wm' && f.wm === 'finish')) return 5;
+  if (f.t === 'bubble' && f.text === 'LAST HITS!') return 5;
   if (f.t === 'bubble' && f.text === 'BLOCK IT!') return 4;
   if (f.t === 'wm' && (f.wm === 'nice' || f.wm === 'great' || f.wm === 'superb')) return 1;
   if (f.t === 'wm' && f.wm === 'knockout') return 6;
@@ -691,12 +692,11 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
     if (r.events.length) applyRef.current(r.events);
     // A first-timer who has not bonked yet gets the pointing hand.
     if (!firstBonked.current && played.current > 900 && hintRef.current === 'none' && engine.current.up.length) setHint('tentacle');
-    // The last three seconds count down out loud (FINISH! only at the bell).
+    // No countdown digits in a raid (T006): the round bar fills, and once, near the end, one call: LAST HITS!
     const left = Math.ceil((ROUND_MS - played.current) / 1000);
-    if (left <= 3 && left >= 1 && left < countdown.current) {
+    if (left <= 3 && countdown.current > 3) {
       countdown.current = left;
-      addFx({ t: 'count', text: String(left) }, 900);
-      GameAudio.play('ui.select', { volume: 0.9, pitch: (3 - left) * 2 });
+      addFx({ t: 'bubble', text: 'LAST HITS!', x: L.w / 2, y: SKY_WORD_Y, tone: 'gold' }, 1200);
       haptic('tickSelection');
     }
     if (played.current >= ROUND_MS) {
@@ -870,7 +870,6 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
   const shownFace: Face = faces.some(f => f[0] === wanted) ? wanted : 'angry';
   const sharkSrc = BASH_ART.shark[pose];
   // The raid clock (not the round clock) in the header: how long the team has left to beat it.
-  const raidMinutes = endsAt ? Math.max(0, Math.ceil((Date.parse(endsAt) - Date.now()) / 60000)) : 0;
   // One message on the boss at a time: while any word or bubble shows, damage numbers are plain (no badge).
   const perfectShowing = fx.some(f => f.t === 'wm' || f.t === 'bubble');
   const finSize = Math.min(54, L.w * 0.13);
@@ -968,7 +967,6 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
 
           {victory && <CoinRain width={L.w} top={L.bossTop} height={L.waterY - L.bossTop + 120} reduced={reduced} />}
           {victory && <TapHand x={L.head.x + 24} y={L.head.y + 10} reduced={reduced} size={72} />}
-          {victory && <VictoryClock clock={clock} until={koAt.current + (reduced ? 1200 : 3000)} />}
           {/* Effects (one message on the boss at a time: no gold badge while PERFECT shows). */}
           {fx.map(f => f.t === 'num' ? <DamageNumber key={f.id} text={f.text} x={f.x} y={f.y} big={f.big} badge={!perfectShowing} toX={scoreTarget.x} toY={scoreTarget.y} reduced={reduced} />
             : f.t === 'fin' ? <FinFly key={f.id} x={f.x} y={f.y} toX={f.toX} toY={f.toY} delay={f.delay} size={finSize} reduced={reduced} />
@@ -985,7 +983,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
           </View>
         </Animated.View>}
 
-        {/* HUD: shared HP, seconds left and the round bar on top; the fins at the bottom. */}
+        {/* HUD: shared HP and the round bar on top (no clock, T006); the fins at the bottom. */}
         {L.w > 0 && !result && <View pointerEvents="none" style={styles.hud}>
           <View style={styles.hpRow}>
             <Text style={styles.hpName} numberOfLines={1} maxFontSizeMultiplier={1.15}>{bossName.toUpperCase()}</Text>
@@ -997,9 +995,7 @@ export function BossBash({ visible, boss, bossName, rideName, hpLeft, hpMax, las
               <View style={[styles.hpYours, { width: `${Math.min(100, (Math.max(0, hpLeft) / Math.max(1, hpMax)) * 100)}%` }]} />
               <View style={[styles.hpFill, { width: `${Math.min(100, (hpNow / Math.max(1, hpMax)) * 100)}%` }]} />
             </View>
-            {raidMinutes > 0 && <View style={styles.minChip} accessible accessibilityLabel={`The raid ends in ${raidMinutes} minutes`}>
-              <Text style={styles.minText} maxFontSizeMultiplier={1.1}>{raidMinutes}m</Text></View>}
-            <SecondsLeft clock={clock} />
+            <RoundBar clock={clock} />
           </View>
           <View style={styles.chipRow}>
             {damageRate < 1 ? <View style={styles.homeChip}><Text style={styles.homeText}>From home: {Math.round(damageRate * 100)}% power</Text></View> : <View />}
@@ -1099,9 +1095,8 @@ const styles = StyleSheet.create({
   hpFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: BRAND.red },
   clockRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 5 },
   chipRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  secs: { minWidth: 46, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3, backgroundColor: BRAND.white, borderRadius: 12,
-    borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 6, paddingVertical: 1 },
-  secsText: { fontFamily: 'Shark', fontSize: 20, color: BRAND.navy, padding: 0, minWidth: 22, textAlign: 'center' },
+  roundTrack: { width: 74, height: 16, borderRadius: 8, borderWidth: 3, borderColor: BRAND.navy, backgroundColor: BRAND.sky, overflow: 'hidden' },
+  roundFill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
   timerTrack: { flex: 1, height: 10, borderRadius: 4, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: 'rgba(255,255,255,0.7)', overflow: 'hidden' },
   timerFill: { height: '100%', borderRadius: 2 },
   teamChip: { flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 6, backgroundColor: BRAND.white, borderRadius: 12, borderWidth: 2, borderColor: BRAND.navy, paddingHorizontal: 8, paddingVertical: 2 },
@@ -1112,12 +1107,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', zIndex: 6 },
   bangSpark: { position: 'absolute', width: 64, height: 64, left: -15, top: -15 },
   bangText: { fontFamily: 'Shark', fontSize: 30, color: BRAND.white, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0 },
-  minChip: { marginLeft: 6, paddingHorizontal: 7, height: 26, borderRadius: 13, borderWidth: 2, borderColor: BRAND.navy, backgroundColor: BRAND.white,
-    alignItems: 'center', justifyContent: 'center' },
-  minText: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
-  victoryClock: { position: 'absolute', right: 14, bottom: 90, width: 40, height: 40, borderRadius: 20, borderWidth: 3, borderColor: BRAND.navy,
-    backgroundColor: BRAND.white, alignItems: 'center', justifyContent: 'center', zIndex: 6 },
-  victoryText: { fontFamily: 'Shark', fontSize: 22, color: BRAND.navy },
   finDock: { position: 'absolute', bottom: 14, alignSelf: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 26,
     backgroundColor: 'rgba(255,255,255,0.88)', borderWidth: 3, borderColor: BRAND.navy },
   introWrap: { alignItems: 'center', justifyContent: 'flex-end', paddingBottom: 26, backgroundColor: 'rgba(8,56,128,0.18)' },
@@ -1151,14 +1140,17 @@ const styles = StyleSheet.create({
   goWordText: { fontFamily: 'Shark', fontSize: 92, color: BRAND.gold, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 6 }, textShadowRadius: 0 },
 });
 
-/** Seconds left, as a number kids can read (the bar alone is too subtle). */
-function SecondsLeft({ clock }: { clock: SharedValue<number> }) {
-  const [secs, setSecs] = useState(Math.ceil(ROUND_MS / 1000));
-  useAnimatedReaction(() => Math.max(0, Math.ceil((ROUND_MS - clock.value) / 1000)), (v, prev) => {
-    if (v !== prev) runOnJS(setSecs)(v);
+/**
+ * How much of the round has played: a bar that fills on the UI thread, never seconds (T006: no
+ * countdown digits in a raid). It turns gold near the bell, with no red and no ticking.
+ */
+function RoundBar({ clock }: { clock: SharedValue<number> }) {
+  const fill = useAnimatedStyle(() => {
+    const p = Math.min(1, Math.max(0, clock.value / ROUND_MS));
+    return { width: `${p * 100}%`, backgroundColor: p >= 0.85 ? BRAND.gold : BRAND.white };
   });
-  return <View style={[styles.secs, secs <= 3 && { backgroundColor: BRAND.gold }]} accessibilityLabel={`${secs} seconds left`}>
-    <GameIcon name="timer" size={16} /><Text style={styles.secsText}>{secs}</Text>
+  return <View style={styles.roundTrack} accessible accessibilityLabel="Round bar. It fills as the round plays.">
+    <Animated.View style={[styles.roundFill, fill]} />
   </View>;
 }
 
@@ -1237,11 +1229,4 @@ function FallingCoin({ x, delay, size, spin, height, reduced }: { x: number; del
   return <Animated.View style={[{ position: 'absolute', left: x, top: 0, width: size, height: size }, style]}>
     <GameIcon name="coins" size={size} />
   </Animated.View>;
-}
-/** Victory lap: seconds until the result card (3 s after the knockout). */
-function VictoryClock({ clock, until }: { clock: SharedValue<number>; until: number }) {
-  const [left, setLeft] = useState(3);
-  useAnimatedReaction(() => Math.max(0, Math.ceil((until - clock.value) / 1000)), (n, prev) => { if (n !== prev) runOnJS(setLeft)(n); });
-  if (left <= 0) return null;
-  return <View pointerEvents="none" style={styles.victoryClock}><Text style={styles.victoryText} maxFontSizeMultiplier={1.1}>{left}</Text></View>;
 }

@@ -17,6 +17,8 @@ import { useAppActive } from '../hooks/appActive';
 const RETURN_TIME_WORD = 'SKIP LINE';
 
 const QUEUE_TIMES_REFRESH_MS = 60_000;
+/** The live feed answered with nothing (T026). */
+export const WAIT_FEED_EMPTY_COPY = 'Live wait times are not reaching us right now. Rides still work.';
 import Topbar, { BackButton } from '../components/Topbar';
 import TopbarColumn from '../components/Topbar/TopbarColumn';
 import TopbarText from '../components/Topbar/TopbarText';
@@ -36,8 +38,10 @@ import { coinTasksByRideName, resolveRideContextOrOffline } from '../services/li
 import { guide } from '../services/guide/nextCoin';
 import getRideCoins from '../api/endpoints/me/ride-coins';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
-import { compareQueueWaits, postedStandbyWait } from '../services/lineplay/queueWaitPresentation';
+import { badgeFontSize, compareQueueWaits, postedStandbyWait, searchKey } from '../services/lineplay/queueWaitPresentation';
 import { UpperText } from '../ui/upper';
+import EdgeScrollHint, { useEdgeScrollHint } from '../components/EdgeScrollHint';
+import SearchField from './social/SearchField';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -147,9 +151,10 @@ const RideCard = ({
       <View style={styles.cardRow}>
         <View style={[styles.badge, { backgroundColor: badge.color }]}>
           {badge.icon ? <GameIcon name={badge.icon} size={30} /> : (
-            // Keyed by its text: a recycled list cell keeps iOS's shrunk font from an earlier, longer value
-            // ("50" drew tiny after a refresh), so a new value measures fresh.
-            <Text key={badge.text} style={styles.badgeText} maxFontSizeMultiplier={1.2} adjustsFontSizeToFit numberOfLines={1}>{badge.text}</Text>
+            // A fixed size by digit count, never shrink-to-fit: in a recycled list cell iOS shrank the
+            // number against a stale width and Indiana Jones drew a tiny unreadable wait (T149).
+            <Text key={badge.text} style={[styles.badgeText, { fontSize: badgeFontSize(badge.text) }]} maxFontSizeMultiplier={1.2}
+              numberOfLines={1}>{badge.text}</Text>
           )}
           {badge.minutes && <Text style={styles.badgeUnit}>MIN</Text>}
         </View>
@@ -269,8 +274,11 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   const [selectedPark, setSelectedPark] = useState<number>(route.params.park);
   const [sortMode, setSortMode] = useState<SortMode>('wait-desc');
   const [filterMode, setFilterMode] = useState<FilterMode>('open');
+  // Find a ride by name (T021: Pirates took 8 to 14 swipes). A search looks through every ride, open or not.
+  const [query, setQuery] = useState('');
   const [lastUpdated, setLastUpdated] = useState<number>(0);
   const [feedError, setFeedError] = useState(false);
+  const parkHint = useEdgeScrollHint();
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const fetchGeneration = useRef(0);
 
@@ -388,6 +396,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   // Filter & sort
   const processedData = useMemo(() => {
     let data = [...attractions];
+    const wanted = searchKey(query);
+    if (wanted) return data.filter(e => searchKey(e.name).includes(wanted)).sort((a, b) => a.name.localeCompare(b.name));
 
     if (filterMode === 'open') {
       data = data.filter((e) => e.status === 'OPERATING' || e.status === 'DOWN');
@@ -399,7 +409,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     });
 
     return data;
-  }, [attractions, filterMode, sortMode]);
+  }, [attractions, filterMode, sortMode, query]);
 
   const openCount = attractions.filter((e) => e.status === 'OPERATING').length;
   const totalCount = attractions.length;
@@ -445,6 +455,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.parkScrollContent}
+          onLayout={parkHint.onLayout} onContentSizeChange={parkHint.onContentSizeChange} onScroll={parkHint.onScroll}
+          scrollEventThrottle={64}
         >
           {groupedParks.map((group) => (
             <View key={group.group} style={styles.parkGroup}>
@@ -462,6 +474,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
             </View>
           ))}
         </ScrollView>
+        {/* More parks to the right: a fade and an arrow, gone at the row's end (T144). */}
+        <EdgeScrollHint more={parkHint.more} color="#e8f8ff" fadeFrom="rgba(232,248,255,0)" />
       </View>
 
       {/* Status bar */}
@@ -486,8 +500,15 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         </Pressable>
       )}
 
-      {/* Sort & Filter */}
-      {!loading && attractions.length > 0 && (
+      {/* Find a ride, then sort and filter */}
+      {/* Stays mounted through a reload or a park change: the field keeps its own text, so it must never
+          remount while a search is on (it came back empty with the list still filtered). */}
+      {(loading || attractions.length > 0 || !!query) && (
+        <View style={styles.searchWrap}>
+          <SearchField placeholder="Find a ride" onChangeText={setQuery} accessibilityLabel="Find a ride by name" />
+        </View>
+      )}
+      {!loading && attractions.length > 0 && !query.trim() && (
         <View style={styles.controlsRow}>
           <View style={styles.sortRow}>
             <SortButton label="Longest" active={sortMode === 'wait-desc'} onPress={() => setSortMode('wait-desc')} />
@@ -524,6 +545,11 @@ export default function QueueTimesScreen({ route }: { route: any }) {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />
           }
         />
+      ) : attractions.length > 0 && query.trim() ? (
+        <View style={styles.emptyCard}>
+          <Text style={styles.emptyTitle}>NO RIDE BY THAT NAME</Text>
+          <Text style={styles.emptyBody}>Try a shorter word, like "pirates" or "space".</Text>
+        </View>
       ) : attractions.length > 0 ? (
         <View style={styles.emptyCard}>
           <Text style={styles.emptyTitle}>NO OPEN ATTRACTIONS</Text>
@@ -535,10 +561,11 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         </View>
       ) : (
         <View style={styles.emptyCard}>
-          <Text style={styles.emptyTitle}>{feedError ? 'NO WAIT TIMES RIGHT NOW' : 'NO TIMES POSTED'}</Text>
+          {/* An empty feed is the live feed not reaching us, not a park with no waits (T026). Rides still work. */}
+          <Text style={styles.emptyTitle}>{feedError ? 'NO WAIT TIMES RIGHT NOW' : 'NO LIVE TIMES RIGHT NOW'}</Text>
           <Text style={styles.emptyBody}>{feedError
-            ? 'Wait times did not load. Check your internet or pick another park.'
-            : 'This park has no wait times right now. Try another park or check back later.'}</Text>
+            ? 'Wait times did not load. Check your internet and try again. Rides still work.'
+            : WAIT_FEED_EMPTY_COPY}</Text>
           <Pressable onPress={() => void fetchData(true)} accessibilityRole="button"
             accessibilityLabel="Retry wait times" style={styles.retryButton}>
             <Text style={styles.retryText}>TRY AGAIN</Text>
@@ -653,6 +680,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     fontFamily: 'Knockout',
   },
+  searchWrap: { paddingTop: 8 },
   controlsRow: {
     gap: 7,
     paddingHorizontal: 16,
@@ -722,6 +750,8 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     fontSize: 22,
     lineHeight: 24,
+    width: 52,
+    textAlign: 'center',
     fontVariant: ['tabular-nums'],
   },
   badgeUnit: {

@@ -88,6 +88,9 @@ test('QueueTimesScreen: the minute refresh only runs on screen in the foreground
     // Wait Times plans the next coin through the guide (core loop 5.5).
     '../services/guide/nextCoin': loadTs('src/services/guide/nextCoin.ts'),
     '../api/endpoints/me/ride-coins': { default: async () => ({ data: [] }), __esModule: true },
+    // The resort tabs' "more this way" hint (T144) and the ride search field (T021) are plain views here.
+    '../components/EdgeScrollHint': { default: 'EdgeScrollHint', useEdgeScrollHint: () => ({ more: false, onLayout() {}, onContentSizeChange() {}, onScroll() {} }) },
+    './social/SearchField': { default: 'SearchField' },
   }, { route: { params: { park: 7 } } }, {
     Date: { now: () => now },
     setInterval: (fn, ms) => { const id = ++seq; intervals.set(id, { fn, ms }); return id; },

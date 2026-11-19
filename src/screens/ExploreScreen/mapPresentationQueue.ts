@@ -142,9 +142,12 @@ export const WIN_CARD_QUIET_MS = 10_000;
  *   open of a calm moment. Level chests, the Daily 3 chest, the Weekly Box and event chests never open by
  *   themselves (they wait in the Rewards sheet).
  * - event_recap, membership, help_page, monday_results: through the queue, one per app open.
+ * - raid_result: the BOSS RAID card, through the queue. At a park it also waits out the first 30 s, and the
+ *   caller holds it for a still moment (the player stayed put, useStillMoment) instead of the guide's walk state,
+ *   which reads "walk" nearly all day at a park (T002).
  */
 export type AutoOpenKind = 'daily_chest' | 'reward' | 'event_recap' | 'membership' | 'help_page' | 'monday_results'
-  | 'ride_question' | 'share_drop';
+  | 'ride_question' | 'share_drop' | 'raid_result';
 
 export interface AttentionState {
   readonly atPark: boolean;
@@ -169,7 +172,7 @@ export function autoOpenAllowed(kind: AutoOpenKind, s: AttentionState): boolean 
   if (s.winCardClosedAt != null && s.now - s.winCardClosedAt >= 0 && s.now - s.winCardClosedAt < WIN_CARD_QUIET_MS) return false;
   if (s.atPark) {
     if (s.arrivedAt == null || s.now - s.arrivedAt < PARK_QUIET_MS) return false;
-    if (s.walkingToTarget) return false;
+    if (s.walkingToTarget && kind !== 'raid_result') return false;
   }
   return true;
 }

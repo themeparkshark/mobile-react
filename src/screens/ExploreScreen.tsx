@@ -86,6 +86,8 @@ import type { RushPick } from '../components/RushCallout';
 import LiveEventsPill from '../components/LiveEventsPill';
 import BossMarker from '../components/boss/BossMarker';
 import BossRaidFlow, { useParkRaid } from '../components/boss/BossRaidFlow';
+import { BOSS_ART } from '../components/boss/bossArt';
+import { BOSS_NAMES } from '../api/endpoints/parks/raid';
 import useBossAttackRecovery from '../hooks/useBossAttackRecovery';
 import DailyGiftModal from '../components/DailyGiftModal';
 import RewardsButton, { rewardsNewRungs, rewardsButtonModel, withRewardsSummary } from '../components/map/RewardsButton';
@@ -95,8 +97,9 @@ import HomeHuntResultsHost from '../components/home/HomeHuntResultsHost';
 import { DailyGiftContext } from '../context/DailyGiftProvider';
 import PinMarker from './ExploreScreen/PinMarker';
 import Redeemable from './ExploreScreen/Redeemable';
-import TaskMarker from './ExploreScreen/TaskMarker';
+import TaskMarker, { rideLandmarkArt } from './ExploreScreen/TaskMarker';
 import MapResourcePill from './ExploreScreen/MapResourcePill';
+import ClusterFan from './ExploreScreen/ClusterFan';
 import TrailHost from '../components/trail/TrailHost';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
 import { withWs2Profiler } from './ExploreScreen/ws2Profiler';
@@ -136,7 +139,7 @@ import { limitedLabel } from '../services/collection/limitedCoins';
 import FindMarker from './ExploreScreen/FindMarker';
 import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
 import { PARKED } from '../components/map/Marker';
-import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, energyGap, parkMapInsets, rideLayoutId, rideTagFor,
+import { bottomLeftColumnHeight, bottomRightColumnHeight, buildParkLayout, clusterMembers, energyGap, parkMapInsets, rideLayoutId, rideTagFor,
   type FindLayoutInput, type FixedLayoutInput, type HauntLayoutInput } from './ExploreScreen/parkMapLayout';
 import { UpperText } from '../ui/upper';
 import { usePlayTapHold } from '../components/guide/playTapHold';
@@ -229,6 +232,14 @@ function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: numbe
 }
 
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
+/** A ride island this close may sit under the following shark (the map checks on screen, T011). */
+const UNDER_SHARK_MAX_M = 40;
+const UNDER_SHARK_COIN = require('../../assets/images/map/ride-coin.png');
+/** The fanned coins stay below the guide card and above the footer and PLAY! (T017). */
+const FAN_GUIDE_CLEAR = 86;
+/** A boss's picture inside the compact HUD chip (T013). */
+const HUD_CHIP_ART = { width: 40, height: 40 } as const;
+const FAN_BOTTOM_CLEAR = 190;
 // An empty ride slot's stand-in (parked, never drawn) and an empty slot's 1 pt content.
 const PARKED_TASK = { id: -1, name: '', latitude: '0', longitude: '0', coin_url: '', coins: 0, completion_goal: 0, experience: 0,
   times_completed: 0, asset_id: -1, ticket_cost: 1 } as unknown as TaskType;
@@ -980,20 +991,54 @@ export function ExploreScreenBody() {
   }, []);
   const zoomRef = useRef(mapZoom); zoomRef.current = mapZoom;
   const declutterStore = useRef(createDeclutterStore()).current;
-  // Tapping an island with "+N" zooms into it; a lone island toggles selection.
+  // Tapping an island with "+N" fans its rides out (T017); a lone island toggles selection.
   const handleTaskPress = useCallback((task: TaskType) => {
-    const zoom = zoomRef.current;
-    const folded = declutterStore.get(rideLayoutId(task.id))?.folded ?? 0;
-    if (folded > 0 && zoom < 19.5) {
+    // A folded cluster (+N) fans its coins out around the island so any one can be picked (T017). It used
+    // to zoom in, and picking a ride then zoomed back out and folded the cluster again.
+    const members = clusterMembers(task, declutterStore.snapshot(), rideTasksRef.current);
+    if (members.length > 1) {
       setSelectedTask(null);
-      setMapFocusRequest({ latitude: Number(task.latitude), longitude: Number(task.longitude), zoom: Math.min(20, zoom + 1.5), requestId: Date.now() });
+      const ask = mapProjector.current?.(Number(task.latitude), Number(task.longitude));
+      void Promise.resolve(ask).then(at => { if (at) setClusterFan({ hostId: task.id, rides: members, at }); }).catch(() => undefined);
       return;
     }
+    pickTaskRef.current(task);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  const pickTask = (task: TaskType) => {
+    setClusterFan(null);
     setMapFocusRequest(null);
     setSelectedTask(previous => previous?.id === task.id ? null : task);
     // A tapped coin you do not own says "Walk closer: N m" and becomes the guide's target (core loop 4.1).
     if ((task.times_completed ?? 0) === 0) guide.setTarget(task.id, 'callout');
-  }, []);
+  };
+  const pickTaskRef = useRef(pickTask); pickTaskRef.current = pickTask;
+  const [clusterFan, setClusterFan] = useState<{ hostId: number; rides: TaskType[]; at: { x: number; y: number } } | null>(null);
+  const rideTasksRef = useRef<TaskType[]>([]); rideTasksRef.current = rideTasks;
+  // The fan is drawn where the island was on screen: a step or a pan moves the map, so it folds back.
+  const fanFrom = useRef<{ latitude: number; longitude: number } | null>(null);
+  useEffect(() => {
+    if (!clusterFan) { fanFrom.current = null; return; }
+    if (playerLat == null || playerLng == null) return;
+    if (!fanFrom.current) { fanFrom.current = { latitude: playerLat, longitude: playerLng }; return; }
+    const k = Math.cos(playerLat * Math.PI / 180);
+    if (Math.hypot((playerLat - fanFrom.current.latitude) * 111320, (playerLng - fanFrom.current.longitude) * 111320 * k) > 8) setClusterFan(null);
+  }, [clusterFan, playerLat, playerLng]);
+
+  // The ride island nearest the shark, when it may be hidden under it (T011): the map draws its coin chip
+  // beside the shark and passes the shark's tap to it. Same press as tapping the island.
+  const underSharkTask = useMemo(() => {
+    let best: TaskType | null = null, bestM = UNDER_SHARK_MAX_M;
+    for (const task of rideTasks) {
+      const m = taskDistance.get(task.id);
+      if (m !== undefined && m < bestM) { best = task; bestM = m; }
+    }
+    return best;
+  }, [rideTasks, taskDistance]);
+  const underShark = useMemo(() => underSharkTask ? {
+    key: underSharkTask.id, latitude: Number(underSharkTask.latitude), longitude: Number(underSharkTask.longitude),
+    coin: underSharkTask.coin_url ? { uri: underSharkTask.coin_url } : UNDER_SHARK_COIN, label: underSharkTask.name,
+    onPress: () => handleTaskPress(underSharkTask),
+  } : null, [underSharkTask, handleTaskPress]);
 
   // Adventure Ticket: Play opens only in the ride's line; detours rank open, near, short waits.
   const adventureGate = useMemo(() => adventure ? adventurePlayGate(adventure, location) : undefined,
@@ -1426,7 +1471,7 @@ export function ExploreScreenBody() {
     const selected = selectedTask?.id === task.id;
     const near = (taskDistance.get(task.id) ?? Infinity) <= 60;
     const tag = rideTagFor({ selected, rush, adventure: adventureTaskId === task.id, goal: goalTaskId === task.id,
-      owned: (task.times_completed ?? 0) > 0, limitedText: task.limited?.active ? limitedLabel(task.limited) : null,
+      owned: (task.times_completed ?? 0) > 0, limitedText: task.limited?.active ? limitedLabel(task.limited) : null, name: task.name,
       expiresAt: gameTimestamp(task.active_to), near, now: mapNow, closed });
     // The guide's target island keeps a pick's priority: it never folds away or hides while it is the target (core loop 4.1).
     return { id: task.id, latitude: Number(task.latitude), longitude: Number(task.longitude), selected,
@@ -1601,9 +1646,12 @@ export function ExploreScreenBody() {
     nightMode: frightNight.modeOn, control: hasTeam,
     event: liveEvt.event && eventsRung.open ? (openableKeys(liveEvt.event).length ? 'ready' : 'on') : null,
   }).map(key => {
-    if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, node: withNewTag(eventsRung,
+    if (key === 'event' && liveEvt.event) return { key, label: liveEvt.event.title, tone: TONES.park, icon: <GameIcon name="star" size={28} />, node: withNewTag(eventsRung,
       <EventStatusChip inline event={liveEvt.event} onPress={() => setEventOpen(true)} />) };
-    if (key === 'live') return { key, label: 'Live in the park', tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park, node: withNewTag(
+    if (key === 'live') return { key, label: raidOnMap && raid ? `Boss raid: ${BOSS_NAMES[raid.boss]}` : 'Rush in the park',
+      tone: rushes.length && !raidActive && !bossMap.moment ? TONES.rush : TONES.park,
+      icon: raidOnMap && raid ? <Image source={BOSS_ART[raid.boss]} style={HUD_CHIP_ART} contentFit="contain" /> : <GameIcon name="rush" size={30} />,
+      node: withNewTag(
       raidOnMap || rushes.length > 0 ? coinLevelsRung : null, <LiveEventsPill inline raid={raidOnMap ? raid : null} rushes={coinLevelsRung.open ? rushes : []} onBoss={() => setBossOpen(true)}
       mapMoment={bossMap.moment} mapFlag={bossMap.flag} onDismissMoment={bossMap.dismiss}
       onMapMoment={() => {
@@ -1612,14 +1660,14 @@ export function ExploreScreenBody() {
       }}
       pendingAttack={bossRecovery?.pending} receiptNeedsCheck={receiptNeedsCheck}
       onRush={(task) => setSelectedTask(task)} />) };
-    if (key === 'show') return { key, label: nightShow.show?.label ?? 'Tonight\'s show', tone: TONES.show, node: nightShow.show ? <NightShowPill inline show={nightShow.show} phase={nightShow.phase}
+    if (key === 'show') return { key, label: nightShow.show?.label ?? 'Tonight\'s show', tone: TONES.show, icon: <GameIcon name="sparkle" size={28} />, node: nightShow.show ? <NightShowPill inline show={nightShow.show} phase={nightShow.phase}
       onSee={() => {
         const anchor = nightShow.show?.anchor;
         if (anchor) { setSelectedTask(null); setMapFocusRequest({ ...anchor, zoom: 17.2, requestId: Date.now() }); }
       }} /> : null };
     // No own "?": the map's one "?" offers the Fin-ister tutorial while the mode is on.
-    if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
-    return { key, label: 'Ride Control', tone: TONES.park, node: <RideControlBar inline compact control={rideControl} tasks={visibleTasks}
+    if (key === 'fright') return { key, label: frightNight.title, tone: TONES.night, icon: <GameIcon name="pumpkin" size={30} />, node: <FrightPill inline night={frightNight} engine={frightEngine} /> };
+    return { key, label: 'Ride Control', tone: TONES.park, icon: <GameIcon name="swords" size={28} />, node: <RideControlBar inline compact control={rideControl} tasks={visibleTasks}
       hideAllOpen={hideEveryRideOpen({ modeOn: frightNight.modeOn, eventPark: frightNight.eventPark, hasNight: !!frightNight.tonight?.night })}
       onFocusTask={(task) => setSelectedTask(task)} /> };
   }) : [];
@@ -1964,7 +2012,9 @@ export function ExploreScreenBody() {
             style={coin?.style ?? (guideShown ? { ...PARK_WELCOME_TIP_STYLE, top: slotTop + GUIDE_CARD_HEIGHT + 10 } : PARK_WELCOME_TIP_STYLE)} />;
         })()}
         {/* One HUD row floats over the map (the map runs right up to the header). */}
-        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} />}
+        {/* T013: one small chip at the right, beside Rewards; the guide card owns the top-left. A boss moment
+            on the map or an attack to check opens it as the full pill (the player is in that moment). */}
+        {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} compact={!bossMap.moment && !receiptNeedsCheck} />}
         {/* Shark Events (after their rung): the sweep and the gain toast sit under the guide card, never over it or PLAY!. */}
         {player && liveEvt.event && eventsRung.open && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>
@@ -2007,10 +2057,12 @@ export function ExploreScreenBody() {
             const earnedCoin = adventureShelfArrival(adventure);
             RootNavigation.navigate('Park', { park: adventure.park_id, player: player.id, ...(earnedCoin ? { earnedCoin } : {}) });
           }} />}
-        <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); }}
+        <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); setClusterFan(null); }}
           coverHost="screen"
           hintReady={parkTipReady && !parkTipShowing}
           sharkCheer={openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task'}
+          underShark={underShark}
+          onUserPan={() => setClusterFan(null)}
           projector={mapProjector}
           onZoomChange={onMapZoom}
           ambientPaused={redeemFlowOpen || bossOccluded || adventureOccluded || dailyGiftOccluded || retentionOccluding}
@@ -2036,6 +2088,7 @@ export function ExploreScreenBody() {
               task={task}
               isSelected={selectedTask?.id === task.id}
               isTripGoal={goalTaskId === task.id}
+              guideTarget={guideTargetId === task.id}
               adventure={adventureTaskId === task.id}
               near={distance !== null && distance <= 60}
               playable={playableTaskId === task.id}
@@ -2102,6 +2155,12 @@ export function ExploreScreenBody() {
         </Map>
       </View>
       )}
+      {/* A tapped "+N" cluster fans its coins out (T017); picking one selects it like tapping its island. */}
+      {clusterFan && mapFocused && <ClusterFan at={clusterFan.at} reducedMotion={reducedMotion}
+        top={suggestionSlotScreenTop(Constants.statusBarHeight ?? 0) + FAN_GUIDE_CLEAR} bottom={FAN_BOTTOM_CLEAR}
+        rides={clusterFan.rides.map(ride => ({ id: ride.id, name: ride.name, art: rideLandmarkArt(ride.name) }))}
+        onClose={() => setClusterFan(null)}
+        onPick={id => { const ride = clusterFan.rides.find(r => r.id === id); if (ride) pickTask(ride); }} />}
       {/* A later loading sky (walking into a park) sits above every map button, card and tip (under
           the header and footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
       <MapLaunchCover variant="sky" blockTouches style={SKY_COVER_STYLE} />

@@ -5,7 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { cheerRide, getLiveParks, type HomeCheerTarget, type LiveParks, type LiveParkSummary } from '../../api/endpoints/me/livePark';
 import { BOSS_NAMES } from '../../api/endpoints/parks/raid';
-import { applyTeamNames, TEAM_ORDER, TEAMS, teamChipColor, teamName, teamShortName } from '../../constants/teams';
+import { applyTeamNames, TEAM_ORDER, TEAMS, teamName, teamShortName } from '../../constants/teams';
 import { AuthContext } from '../../context/AuthProvider';
 import { WhackAShark } from '../../games/whack';
 import * as RootNavigation from '../../RootNavigation';
@@ -16,14 +16,14 @@ import PushSoftAsk from '../PushSoftAsk';
 import useLivePoll from '../../hooks/useLivePoll';
 import { useAppActive } from '../../hooks/appActive';
 import { homeLiveBar } from './homeLiveBar';
+import { endsAtWords } from '../../helpers/calmTime';
 import TeamBadge from '../TeamBadge';
 
 const ORDER = TEAM_ORDER;
 
-/** How long a raid has left, in calm whole minutes ("4 min"), never a ticking m:ss (core loop 4.3 rule 7). */
-export function raidMinutes(endsAt: string, now: number): string {
-  const ms = Math.max(0, new Date(endsAt).getTime() - now);
-  return `${Math.max(1, Math.ceil(ms / 60_000))} min`;
+/** When a raid ends, as a time of day ("Ends at 1:50"), never a countdown (T006). */
+export function raidEnds(endsAt: string, { lower = false } = {}): string {
+  return endsAtWords(endsAt, { lower }) ?? (lower ? 'on now' : 'On now');
 }
 
 /**
@@ -103,36 +103,20 @@ export default function HomeLive({ top = 12, onBarChange }: {
 
   return (
     <>
+      {/* T013: one small chip at the top right (the guide card owns the top-left). A live boss shows its
+          picture with a live dot; the team race shows the leading team. Details open on a tap. */}
       {bar && <Pressable accessibilityRole="button" onPress={() => (liveRaid ? setRaidPark(liveRaid.park_id) : setOpen(true))}
-        onLongPress={() => setOpen(true)}
-        style={[styles.bar, liveRaid && styles.barBoss, { top }]}
+        onLongPress={() => setOpen(true)} hitSlop={6}
+        style={({ pressed }) => [styles.chipBar, liveRaid && styles.barBoss, { top }, pressed && styles.chipPressed]}
         accessibilityLabel={liveRaid?.raid
-          ? `Boss fight live: ${BOSS_NAMES[liveRaid.raid.boss]} at ${liveRaid.name}. Help your team from home.`
+          ? `Boss fight live: ${BOSS_NAMES[liveRaid.raid.boss]} at ${liveRaid.name}, ${raidEnds(liveRaid.raid.ends_at, { lower: true })}. Help your team from home.`
           : 'Team race. What is this?'}>
         {liveRaid?.raid ? (
           <>
-            <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.barBossArt} contentFit="contain" />
-            <View style={{ flex: 1 }}>
-              <View style={styles.liveRow}><View style={styles.liveDot} /><Text style={styles.barKicker} numberOfLines={1}>HELP FROM HOME  ·  {liveRaid.name}</Text></View>
-              <Text style={styles.barTitle} numberOfLines={1}>{BOSS_NAMES[liveRaid.raid.boss]} attack!  ·  {raidMinutes(liveRaid.raid.ends_at, now)}</Text>
-            </View>
-            <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
+            <Image source={BOSS_ART[liveRaid.raid.boss]} style={styles.chipBossArt} contentFit="contain" />
+            <View style={styles.chipLiveDot} />
           </>
-        ) : (
-          <>
-            <Text style={styles.barHeadline} numberOfLines={1}>
-              {leader ? `${teamName(leader, names).toUpperCase()} LEADS` : 'THE PARKS ARE UP FOR GRABS'}
-            </Text>
-            <View style={styles.chips}>
-              {ORDER.map(team => (
-                <View key={team} style={[styles.chip, { backgroundColor: teamChipColor(team) }, yours === team && styles.chipYours]}>
-                  <TeamBadge team={team} style={styles.chipBadge} />
-                  <Text style={styles.chipCount}>{live.totals[team]}</Text>
-                </View>
-              ))}
-            </View>
-          </>
-        )}
+        ) : leader ? <TeamBadge team={leader} style={styles.chipLeaderBadge} /> : <GameIcon name="swords" size={28} />}
       </Pressable>}
 
       {toast && <View style={[styles.toast, { top: top + 60 }]} pointerEvents="none">
@@ -210,7 +194,7 @@ export default function HomeLive({ top = 12, onBarChange }: {
                       <View style={styles.hpTrack}>
                         <View style={[styles.hpFill, { width: `${Math.max(2, (park.raid.hp_left / Math.max(1, park.raid.hp_max)) * 100)}%` }]} />
                       </View>
-                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {raidMinutes(park.raid.ends_at, now)} left</Text>
+                      <Text style={styles.raidMeta}>{park.raid.fighters} fighting  ·  {raidEnds(park.raid.ends_at, { lower: true })}</Text>
                     </View>
                     <View style={styles.joinTag}><Text style={styles.joinTagText}>JOIN</Text></View>
                   </Pressable>
@@ -256,6 +240,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6, paddingLeft: 12, paddingRight: 8, minHeight: 50,
     shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   barBoss: { backgroundColor: BRAND.blueBright, paddingLeft: 6 },
+  chipBar: { position: 'absolute', right: 12, zIndex: 25, width: 54, height: 54, borderRadius: 16, borderWidth: 3, borderColor: BRAND.white,
+    backgroundColor: BRAND.blue, alignItems: 'center', justifyContent: 'center',
+    shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  chipPressed: { transform: [{ scale: 0.94 }] },
+  chipBossArt: { width: 42, height: 42 },
+  chipLiveDot: { position: 'absolute', top: -4, right: -4, width: 14, height: 14, borderRadius: 7, backgroundColor: BRAND.red,
+    borderWidth: 2, borderColor: BRAND.white },
+  chipLeaderBadge: { width: 34, height: 34 },
   barBossArt: { width: 40, height: 40 },
   barHeadline: { flex: 1, fontFamily: 'Shark', fontSize: 15, color: BRAND.gold, textShadowColor: BRAND.navy,
     textShadowOffset: { width: 0, height: 1.5 }, textShadowRadius: 0 },

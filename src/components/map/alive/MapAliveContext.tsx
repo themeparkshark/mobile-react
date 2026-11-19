@@ -1,3 +1,4 @@
+import useUserIdle from '../../../hooks/useUserIdle';
 /**
  * One ambient clock for the whole living map.
  *
@@ -51,6 +52,9 @@ export function useMapAlive(): MapAlive {
 const WINDOW_MS = 2000;
 
 /** Drives the ambient clock for one map. `focused` and `paused` come from the screen. */
+/** No touch and no step for this long: the map's ambient clock rests (T189). */
+export const MAP_REST_MS = 60_000;
+
 export function useMapAliveEngine({ focused, paused, frozen = false, light }: {
   readonly focused: boolean;
   readonly paused: boolean;
@@ -86,7 +90,10 @@ export function useMapAliveEngine({ focused, paused, frozen = false, light }: {
   const caps = ALIVE_CAPS[tier];
   if (SOAK_TRACE) noteSoakTier(tier);
   const active = focused && appActive;
-  const running = active && !paused && caps.hz > 0;
+  // T189: a map nobody touches and nobody walks on rests after a minute: the ambient clock stops (glints,
+  // ride scenes and coin bobs hold still), so the resting map is near still. A touch or a step wakes it.
+  const resting = useUserIdle(MAP_REST_MS);
+  const running = active && !paused && caps.hz > 0 && !resting;
 
   // A calm phone (strain 2) has no clock to measure; probe lite again after a rest.
   useEffect(() => {

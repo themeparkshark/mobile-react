@@ -80,8 +80,16 @@ export const LEAVE_PARK_MIN_MS = 45_000;
 /** An outside reading from a fix this coarse does not count toward leaving. */
 export const LEAVE_PARK_MAX_ACCURACY_M = 100;
 
+/**
+ * Far from the last in-park reading (a car on the freeway, T025): one good outside reading leaves at
+ * once, so the goodbye and the home map arrive together instead of the home map 80 s later.
+ */
+export const LEAVE_PARK_FAR_M = 1500;
+
 export interface ParkPresence<P> {
   readonly park: P | undefined;
+  /** Where the last reading inside the park was (leaving far away needs no wait). */
+  readonly lastInside?: { readonly latitude: number; readonly longitude: number } | null;
   /** When the first countable outside reading arrived while at a park. */
   readonly outsideSince: number | null;
   readonly outsideChecks: number;
@@ -92,6 +100,9 @@ export interface ParkLookupResult<P> {
   readonly park?: P | null;
   readonly at: number;
   readonly accuracyMeters?: number | null;
+  /** Where this reading was taken. */
+  readonly latitude?: number;
+  readonly longitude?: number;
 }
 
 export const NO_PARK_PRESENCE: ParkPresence<never> = { park: undefined, outsideSince: null, outsideChecks: 0 };
@@ -99,16 +110,21 @@ export const NO_PARK_PRESENCE: ParkPresence<never> = { park: undefined, outsideS
 /** The park the map shows after one lookup. Entering or switching is instant; leaving is sticky. */
 export function nextParkPresence<P>(state: ParkPresence<P>, result: ParkLookupResult<P>): ParkPresence<P> {
   if (result.outcome === 'error') return state;
+  const at = result.latitude != null && result.longitude != null ? { latitude: result.latitude, longitude: result.longitude } : null;
   if (result.outcome === 'park' && result.park) {
-    return { park: result.park, outsideSince: null, outsideChecks: 0 };
+    const inside = at ?? state.lastInside ?? null;
+    return inside ? { park: result.park, outsideSince: null, outsideChecks: 0, lastInside: inside } : { park: result.park, outsideSince: null, outsideChecks: 0 };
   }
   if (!state.park) return { park: undefined, outsideSince: null, outsideChecks: 0 };
   const accuracy = result.accuracyMeters;
   if (accuracy != null && (!Number.isFinite(accuracy) || accuracy > LEAVE_PARK_MAX_ACCURACY_M)) return state;
+  if (at && state.lastInside && distanceMeters(at as LocationType, state.lastInside as LocationType) >= LEAVE_PARK_FAR_M) {
+    return { park: undefined, outsideSince: null, outsideChecks: 0 };
+  }
   const outsideSince = state.outsideSince ?? result.at;
   const outsideChecks = state.outsideChecks + 1;
   if (outsideChecks >= LEAVE_PARK_OUTSIDE_CHECKS && result.at - outsideSince >= LEAVE_PARK_MIN_MS) {
     return { park: undefined, outsideSince: null, outsideChecks: 0 };
   }
-  return { park: state.park, outsideSince, outsideChecks };
+  return state.lastInside ? { park: state.park, outsideSince, outsideChecks, lastInside: state.lastInside } : { park: state.park, outsideSince, outsideChecks };
 }

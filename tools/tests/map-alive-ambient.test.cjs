@@ -117,7 +117,10 @@ test('the map shares one ambient clock and pauses it with the screen, the app an
   assert.match(map, /<MapAliveProvider value=\{alive\}>/);
   const engine = read('src/components/map/alive/MapAliveContext.tsx');
   assert.match(engine, /AppState\.addEventListener/);
-  assert.match(engine, /const active = focused && appActive;\s*const running = active && !paused && caps\.hz > 0/);
+  assert.match(engine, /const active = focused && appActive;[\s\S]*const running = active && !paused && caps\.hz > 0 && !resting;/);
+  // T189: a minute with no touch and no step rests the clock (near still); a touch or a step wakes it.
+  assert.match(engine, /const resting = useUserIdle\(MAP_REST_MS\);/);
+  assert.match(engine, /export const MAP_REST_MS = 60_000;/);
   assert.match(engine, /frame\.setActive\(running && !frozen\)/, 'a frozen map only stops the clock');
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /ambientPaused=\{redeemFlowOpen \|\| bossOccluded \|\| adventureOccluded \|\| dailyGiftOccluded \|\| retentionOccluding\}/);

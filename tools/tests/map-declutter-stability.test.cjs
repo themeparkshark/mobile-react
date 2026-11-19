@@ -100,30 +100,22 @@ test('the map\'s children are append-only: no conditional, filtered or keyed-by-
 
 test('no find ever shows 0:00: at its time it fades out and asks for fresh map data', () => {
   const life = read('src/screens/ExploreScreen/FindLife.tsx');
-  const { findClock } = loadTs('src/screens/ExploreScreen/FindLife.tsx', {
-    react: {}, 'react/jsx-runtime': { jsx() {}, jsxs() {} }, 'react-native-reanimated': {}, './parkMapLayout': {} });
-  // Calm whole minutes (core loop 4.3 rule 7: no ticking countdown where a kid plays), never 0.
-  assert.equal(findClock(400), '1 min', 'the last minute never reads 0');
-  assert.equal(findClock(0), '1 min');
-  assert.equal(findClock(61_000), '2 min');
-  assert.equal(findClock(60_000), '1 min');
-  assert.equal(findClock(3_599_000), '60 min');
-  assert.equal(findClock(3_600_000), '1h 0m', 'an hour reads in hours, never 60:00');
-  assert.equal(findClock(3_752_000), '1h 2m', 'not 62:32');
-  assert.equal(findClock(2 * 3_600_000 + 6 * 60_000 + 1), '2h 6m');
+  // T006: no minutes chip; a find wears one "Leaves soon" chip in its last ten minutes (map-no-clocks.test.cjs).
+  assert.match(life, /export function FindSoonChip/);
   assert.match(life, /setGone\(true\); onExpire\(\);/);
   for (const file of ['Coin', 'Key', 'Redeemable']) {
     const src = read(`src/screens/ExploreScreen/${file}.tsx`);
     assert.match(src, /const gone = useFindExpiry\(/, file);
     assert.match(src, /<FindFade gone=\{gone\}>/, file);
-    assert.match(src, /\{findClock\(total\)\}/, `${file}: the chip rounds up`);
+    assert.match(src, /<FindSoonChip activeTo=\{\w+\.active_to\}/, `${file}: words, never minutes`);
+    assert.doesNotMatch(src, /Countdown/, `${file}: no per-second Countdown`);
   }
 });
 
-test('ride timers share the find clock: round up, hours past 60 min, fade themselves out at zero', () => {
+test('ride timers say Leaves soon in words and fade themselves out at zero', () => {
   const src = read('src/screens/ExploreScreen/TaskMarker.tsx');
   const body = src.slice(src.indexOf('function MarkerTimer'), src.indexOf('const TIMER_FADE_MS'));
-  assert.match(body, /\{findClock\(left\)\}/);
+  assert.match(body, /\{stayWords\(left\) \?\? 'Leaves soon'\}/);
   assert.doesNotMatch(body, /Math\.round|padStart/, 'no own m:ss math (it rounded the last second to 0:00)');
   assert.match(body, /if \(!ticking \|\| done\) return;/, 'stops ticking at zero');
   assert.match(body, /withTiming\(done \? 0 : 1/, 'fades out at zero from inside the timer');
@@ -175,7 +167,8 @@ test('every map marker pins its overflow extents (envelope), so iOS never re-pla
   // The water ambience marker keeps one box size whether or not it draws.
   const task = read('src/screens/ExploreScreen/TaskMarker.tsx');
   assert.match(task, /<View style=\{styles\.waterBox\}>/);
-  assert.match(task, /waterBox: \{ width: 110, height: 70 \}/);
+  assert.match(task, /const WATER_BOX = \{ width: 110, height: 70 \} as const;/);
+  assert.match(task, /waterBox: WATER_BOX,/);
   // Every chip, the selected card and the arrival burst fit inside the envelope (read from the source).
   const ENVELOPE = Number(/export const ENVELOPE = (\d+);/.exec(marker)[1]);
   const L = require('./helpers/ts-module.cjs').loadTs('src/screens/ExploreScreen/parkMapLayout.ts');

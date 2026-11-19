@@ -13,7 +13,8 @@ import prepItemImage from '../../helpers/prepItemImages';
 import { BRAND, GameIcon } from '../../ui';
 import { catchStyleFor } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
-import { formatFindDistance, msUntilLeavesInChanges } from './homeFindCopy';
+import { formatFindDistance } from './homeFindCopy';
+import { HOME_LEAVES_SOON_MS, leavesSoon, msUntilStayWordsChange } from '../../helpers/calmTime';
 import { findImageOrder, findLook, mapGlowColor } from './findPresentation';
 import { catchDim, catchHidePivot, tapPivot, tapSquash } from './catchPresence';
 
@@ -107,6 +108,8 @@ export function findImageSource(prepItem: Pick<PrepItemType, 'icon_url' | 'varia
 export type FingerSide = 'left' | 'right' | 'below-left' | 'below-right';
 
 interface Props {
+  /** The nearest find while none is in range: a small idle bob even far away (T148). */
+  readonly idleBob?: boolean;
   prepItem: PrepItemType;
   onExpire: () => void;
   inRange?: boolean;
@@ -132,8 +135,6 @@ export const PREP_MARKER_ANCHOR = { x: 0.5, y: 0.5 };
 /** The marker box; the art (58 pt at full size) is centred in it. */
 export const FIND_MARKER_BOX = 112;
 export const FIND_ART_SIZE = 58;
-/** Only the last few minutes earn a timer pill. */
-const LEAVING_SOON_MS = 5 * 60_000;
 
 const GLOW = require('../../../assets/images/ride-photo/glow.webp');
 const SPARKLE = require('../../../assets/images/ride-photo/sparkle.webp');
@@ -158,11 +159,11 @@ function SpawnSparkle({ angle, t }: { angle: number; t: ReturnType<typeof useSha
   return <Animated.View style={[styles.spawnSpark, style]}><Tinted source={MAP_SPARKLE} tint={GOLD_FX.raysSoft} fit="contain" /></Animated.View>;
 }
 
-/** "2 min" in the final five minutes, null before; calls onExpire once it is gone. Only ticks while the map is live. */
+/** "Leaves soon" in the last five minutes, null before (T006: words, never a minutes or seconds clock);
+ * calls onExpire once it is gone. Wakes only at the soon line and at zero, and only while the map is live. */
 function useLeavingSoon(activeTo: string | null | undefined, onExpire: () => void, live: boolean): string | null {
   const endsAt = activeTo ? Date.parse(activeTo) : NaN;
-  const label = (left: number) => (left > 0 && left <= LEAVING_SOON_MS
-    ? left < 60_000 ? `${Math.ceil(left / 1000)}s` : `${Math.ceil(left / 60_000)} min` : null);
+  const label = (left: number) => (leavesSoon(left, HOME_LEAVES_SOON_MS) ? 'Leaves soon' : null);
   const [text, setText] = useState(() => Number.isFinite(endsAt) ? label(endsAt - Date.now()) : null);
   const expireRef = useRef(onExpire);
   expireRef.current = onExpire;
@@ -173,7 +174,7 @@ function useLeavingSoon(activeTo: string | null | undefined, onExpire: () => voi
       const left = endsAt - Date.now();
       setText(label(left));
       if (left <= 0) { expireRef.current(); return; }
-      timer = setTimeout(tick, left > LEAVING_SOON_MS ? left - LEAVING_SOON_MS + 50 : msUntilLeavesInChanges(left));
+      timer = setTimeout(tick, Math.min(msUntilStayWordsChange(left, HOME_LEAVES_SOON_MS), 2 ** 31 - 1));
     };
     tick();
     return () => clearTimeout(timer);
@@ -216,7 +217,7 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null, plainDistance = false }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null, plainDistance = false, idleBob = false }: Props) {
   const { clock, active } = useMapAlive();
   const reduced = useReducedGameMotion();
   const reducedRef = useRef(reduced);
@@ -253,7 +254,9 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   // Round 4: a far find is still (BAND_LOOK far), so its styles read a constant instead of the map's clock and
   // stop evaluating every frame; it wakes up on the shared clock the moment it is no longer far.
   const still = useSharedValue(0);
-  const live = moving && band !== 'far';
+  // T148: the one nearest treat keeps a small idle bob even far away (the map's only other idle life was the
+  // shark). Every other far find stays still (battery).
+  const live = moving && (band !== 'far' || idleBob);
   const tick = live ? clock : still;
   const bob = useAnimatedStyle(() => {
     const lv = level.value;
@@ -429,7 +432,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
       {/* Hangs right under its own art (and badge), so it never reads as the next find's. */}
       <View style={[styles.timePill, inRange ? styles.tagNear : styles.tagFar, (chromeless || !tag) && styles.chromeOff]}>
         {far ? <Image source={FOOTSTEPS} style={styles.tagSteps} contentFit="contain" transition={0} /> : null}
-        {leavingSoon && <GameIcon name="timer" size={12} />}<Text style={styles.timeText}>{tag}</Text>
+        <Text style={styles.timeText}>{tag}</Text>
       </View>
     </Animated.View>
   );

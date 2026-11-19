@@ -60,7 +60,12 @@ export function Marker({ coordinate, anchor, onPress, onLongPress, children, acc
   }, []);
   const a = anchor ?? CENTER;
   return (
-    <MarkerView coordinate={last.current} anchor={laidOut ? a : { x: a.x, y: a.y + ANCHOR_NUDGE }} allowOverlap>
+    // A marker that takes no touches (decoration, a hidden or folded island, a parked slot) tells its native
+    // annotation view so too: iOS gives every annotation view its own tap recognizer, so an invisible folded
+    // island or a ride's water box on top swallowed the tap meant for the island under it (T017). Never
+    // 'auto' here: RCTViewManager's pointerEvents setter falls through from auto to none on a plain UIView.
+    <MarkerView coordinate={last.current} anchor={laidOut ? a : { x: a.x, y: a.y + ANCHOR_NUDGE }} allowOverlap
+      pointerEvents={tappable ? undefined : 'none'}>
       <Pressable onLayout={onLayout} disabled={!tappable} onPress={onPress} onLongPress={onLongPress} delayLongPress={450} hitSlop={6}
         pointerEvents={tappable ? 'auto' : 'none'} style={off ? HIDDEN : undefined}
         accessibilityRole={tappable ? 'button' : undefined} accessibilityLabel={tappable ? accessibilityLabel : undefined}

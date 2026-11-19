@@ -171,7 +171,7 @@ test('the server flag hides every Adventure Ticket surface when off', async () =
   assert.equal(off.find(named('AdventureTicketCard')), undefined);
 });
 
-test('stacked rides: every island stays mounted in a stable order (MapLibre insert crash); the solver folds them and tapping the "+N" host zooms in', async () => {
+test('stacked rides: every island stays mounted in a stable order (MapLibre insert crash); the solver folds them and tapping the "+N" host fans them out (T017)', async () => {
   const stack = [0, 1, 2].map(i => ({ ...task, id: 20 + i, name: `Ride ${i}`, latitude: 34.13808 + i * 0.00001 }));
   const app = exploreScreen({ trip: null, redeemables: { ...redeemables, tasks: stack } });
   await app.settle(); await app.settle();
@@ -191,8 +191,16 @@ test('stacked rides: every island stays mounted in a stable order (MapLibre inse
   map.props.declutter.store.publish(new Map([['ride:22', { ...v, folded: 2 }], ['ride:20', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }],
     ['ride:21', { ...v, visible: false, foldedInto: 'ride:22', reason: 'folded' }]]));
   const host = islands.find(island => island.props.task.id === 22 && !island.props.parked);
-  host.props.onPress(host.props.task); app.render();
-  assert.ok(app.find(named('Map')).props.focusCoordinate.zoom > 17.6, 'the camera zooms into the stack');
+  map.props.projector.current = async () => ({ x: 200, y: 420 });
+  host.props.onPress(host.props.task); await app.settle(); app.render();
+  // No zoom in and back out (the cluster refolded and Peter Pan could never be picked): its coins fan out.
+  assert.equal(app.find(named('Map')).props.focusCoordinate ?? null, null, 'the camera stays put');
+  const fan = app.find(named('ClusterFan'));
+  assert.ok(fan, 'the fan is up');
+  assert.deepEqual([...fan.props.rides].map(r => r.id), [22, 20, 21], 'the island first, then every ride folded into it');
+  fan.props.onPick(21); app.render();
+  assert.equal(app.find(named('ClusterFan')), undefined, 'picking folds the fan away');
+  assert.equal(Number(app.find(named('Map')).props.focusCoordinate.latitude), stack[1].latitude, 'the picked ride is selected');
   assert.equal(app.find(label('Play queue games for')), undefined);
 });
 

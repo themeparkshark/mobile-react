@@ -48,6 +48,8 @@ import { lightForElevation, sunElevation } from './map/alive/skyLight';
 import { TPS_MAP_STYLE } from './map/tpsMapStyle';
 import { FrightMapLayer, FrightMapSources, FrightNightTint, type FrightMapInput, type HudRect } from './map/fright';
 import { nearestWaterPoint } from './map/water';
+import { createNativeMapGate } from './map/nativeMapGate';
+import { islandUnderShark, type UnderShark } from './map/underShark';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { useFocusEffect } from '@react-navigation/native';
 import { canMirrorShark, hasDressedShark } from '../helpers/wardrobe';
@@ -146,7 +148,7 @@ export function railColumnHeight(buttons: number): number {
   return buttons <= 0 ? 0 : buttons * RAIL_BUTTON + (buttons - 1) * RAIL_GAP;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, guideSticky = false, returnAfterMs = null, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, guideSticky = false, returnAfterMs = null, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false, underShark = null }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -196,6 +198,11 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly coverHost?: 'self' | 'screen';
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
   readonly sharkCheer?: boolean;
+  /**
+   * The nearest ride island, when it may sit under the following shark (T011). If it does, its coin chip
+   * stands beside the shark and a tap on the shark or the chip goes to that coin (not "say hi").
+   */
+  readonly underShark?: UnderShark | null;
   /** Screen side (-1 left, 1 right) of the nearest find in range: the shark's look-around turns toward it. */
   readonly sharkLook?: -1 | 0 | 1;
   /** Bumped when a find appears in range: the shark gives one happy hop. */
@@ -411,7 +418,8 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const coverToken = useRef(0);
   // Tiles drawn at least once: until then a light sheet hides the bare lawn if the cover lifted early.
   const [tilesDrawn, setTilesDrawn] = useState(false);
-  const revealMap = () => { mapCoverDrawn(coverToken.current); if (!tilesDrawn) setTilesDrawn(true); };
+  // Only native map events call it, so it also opens the native query gate (T187).
+  const revealMap = () => { mapGate.ready(); mapCoverDrawn(coverToken.current); if (!tilesDrawn) setTilesDrawn(true); };
   // A JS backstop for the sheet's own UI-thread fade: whatever happens, it is gone shortly after its cap.
   const [tileWaitOver, setTileWaitOver] = useState(false);
   useEffect(() => {
@@ -427,11 +435,16 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return () => releaseMapCover(tok);
   }, []);
   const mapViewRef = useRef<MapViewRef>(null);
+  // Every native query reads the view through the gate: null until the native view has reported in
+  // (a native map event) and after unmount, so a query never names a view UIKit does not have (T187).
+  const [mapGate] = useState(() => createNativeMapGate(mapViewRef));
+  const nativeMap = mapGate.ref;
+  useLayoutEffect(() => () => mapGate.gone(), [mapGate]);
   const rootRef = useRef<View>(null);
   useEffect(() => {
     if (!projector) return;
     projector.current = async (latitude, longitude) => {
-      const point = await mapViewRef.current?.getPointInView([longitude, latitude]).catch(() => null);
+      const point = await nativeMap.current?.getPointInView([longitude, latitude]).catch(() => null);
       if (!point) return null;
       const origin = await new Promise<{ x: number; y: number } | null>(resolve => {
         if (!rootRef.current) { resolve(null); return; }
@@ -444,20 +457,19 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   useEffect(() => {
     if (!snapshotter) return;
     snapshotter.current = async () => {
-      try { return (await mapViewRef.current?.takeSnap(false)) ?? null; } catch { return null; }
+      try { return (await nativeMap.current?.takeSnap(false)) ?? null; } catch { return null; }
     };
     return () => { snapshotter.current = null; };
   }, [snapshotter]);
   const window = useWindowDimensions();
-  // A map that unmounted (the home map handing over to the park map at launch) is never queried:
-  // the native view is gone and the query would raise "Invalid react tag".
-  const mapAlive = useRef(true);
-  useEffect(() => { mapAlive.current = true; return () => { mapAlive.current = false; }; }, []);
+  // A map that unmounted (the home map handing over to the park map at launch) or has not reached
+  // UIKit yet is never queried: the gate's ref is null then (see nativeMapGate.ts).
   const mapQuery = useMemo(() => ({
     findWater: async (latitude: number, longitude: number, margin?: number) => {
-      if (!mapAlive.current) return null;
+      const map = nativeMap.current;
+      if (!map) return null;
       // MapLibre's rect is [top, right, bottom, left] with top the larger y.
-      const found = await mapViewRef.current?.queryRenderedFeaturesInRect(
+      const found = await map.queryRenderedFeaturesInRect(
         [window.height, window.width, 0, 0], undefined, ['water']);
       return nearestWaterPoint(found?.features ?? [], latitude, longitude, margin);
     },
@@ -476,13 +488,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   const refreshDecorations = useCallback(() => {
     clearTimeout(decoTimer.current);
     decoTimer.current = setTimeout(async () => {
-      const map = mapViewRef.current;
-      if (!map || !mapAlive.current || decoFrozen.current) return;
+      const map = nativeMap.current;
+      if (!map || decoFrozen.current) return;
       try {
         const [zoom, [[east, north], [west, south]]] = await Promise.all([map.getZoom(), map.getVisibleBounds()]);
         // Skip rebuilding for tiny camera nudges (walking follow) at the same density.
         const key = `${decorationBand(zoom)}|${(north * 4000).toFixed(0)}|${(west * 4000).toFixed(0)}|${((north - south) * 400).toFixed(0)}`;
-        if (key === decoKey.current || !mapAlive.current) return;
+        if (key === decoKey.current || !mapGate.isOpen()) return;
         const rect: [number, number, number, number] = [window.height, window.width, 0, 0];
         const [wood, green, water, homes, buildings, roads] = await Promise.all([
           map.queryRenderedFeaturesInRect(rect, undefined, ['wood']),
@@ -519,7 +531,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     const target = guideRef.current;
     if (!target) { setGuidePoint(null); return; }
     try {
-      const point = await mapViewRef.current?.getPointInView([target.longitude, target.latitude]);
+      const point = await nativeMap.current?.getPointInView([target.longitude, target.latitude]);
       if (guideRef.current?.requestId === target.requestId) setGuidePoint(point ? { x: point[0], y: point[1] } : null);
     } catch { /* the map is not ready; the next camera move retries */ }
   }, []);
@@ -869,6 +881,10 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
     return { transform: [{ translateX: x }, { translateY: y }, { scale: 1 + 0.006 * m }] };
   });
 
+  // A ride island under the following shark (T011): measured on screen at the current zoom.
+  const sharkOnIsland = underShark && location && focusedOnPlayer
+    && islandUnderShark(glideMeters(location, underShark), pointsPerMeter(cameraZoom, location.latitude)) ? underShark : null;
+
   return (
     <MapAliveProvider value={alive}>
     {/* The Fin-ister layers read the map's bearing through the heading context (FrightBearing). */}
@@ -930,6 +946,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         pitchEnabled={false}
         regionWillChangeDebounceTime={0}
         onRegionWillChange={(feature) => {
+          mapGate.ready();
           if (!feature.properties?.isUserInteraction) return;
           lastTouchRef.current = Date.now();
           onUserPan?.();
@@ -954,11 +971,12 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         // the cover is up: after that the per-frame event is switched off.
         onDidFinishLoadingMap={revealMap}
         onDidFinishRenderingFrameFully={covered || !tilesDrawn ? revealMap : undefined}
-        onDidFinishRenderingMapFully={() => { refreshDecorations(); revealMap(); cam.resync();
-          void mapViewRef.current?.getZoom().then(zoom => {
+        onDidFinishRenderingMapFully={() => { mapGate.ready(); refreshDecorations(); revealMap(); cam.resync();
+          void nativeMap.current?.getZoom().then(zoom => {
             if (Number.isFinite(zoom)) { setCameraZoom(zoom); onZoomChange?.(zoom); }
           }).catch(() => undefined); }}
         onRegionIsChanging={(feature) => {
+          mapGate.ready();
           // While the map moves: held declutter passes (markers on screen stay put, art reaching the
           // HUD fades first), and the panned-away shark hides before iOS parks it in the corner.
           // Camera eases (following the walk, a tap-to-focus) get the same held passes, less often.
@@ -982,6 +1000,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           checkPlayer(feature.properties?.visibleBounds);
         }}
         onRegionDidChange={(feature) => {
+          mapGate.ready();
           refreshDecorations();
           void projectGuide();
           const zoom = Number(feature.properties?.zoomLevel);
@@ -1024,7 +1043,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
           // Panned away: a tap on your own shark does a trick and brings the map back to it.
           const sx = Number(feature?.properties?.screenPointX), sy = Number(feature?.properties?.screenPointY);
           if (!focusedOnPlayer && location && playerOnScreen && Number.isFinite(sx) && Number.isFinite(sy)) {
-            void mapViewRef.current?.getPointInView([location.longitude, location.latitude]).then(pt => {
+            void nativeMap.current?.getPointInView([location.longitude, location.latitude]).then(pt => {
               if (pt && sharkHit(pt as [number, number], [sx as number, sy as number])) { onSharkTap(); recenterOnPlayer(); }
             }).catch(() => undefined);
           }
@@ -1106,7 +1125,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* Fin-ister Nights markers (lanterns, reef critters, encounter): LAST, so the one-time
             mount appends instead of inserting mid-list, and a fixed set that never mounts or
             unmounts afterwards (MapLibre insertReactSubview crash). */}
-        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={mapViewRef} hud={rail} />}
+        {fright && <FrightMapSources input={fright} zoom={cameraZoom} mapRef={nativeMap} hud={rail} />}
       </MapView>
       </Reanimated.View>
       </DeclutterContext.Provider>
@@ -1146,15 +1165,42 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
             {sharkArt(overlayStyles, overlayLive, focusedOnPlayer, true)}
             <SharkSparkles burst={sparkleBurst} />
             <TrailBoxBadge trail={trailHidden || !SHARK_TRAIL_BADGE ? null : liveTrail} live={lifeOn} />
-            {/* Tap your shark: it hops, twirls and shows off what it is wearing. */}
-            <Pressable style={styles.sharkTap} onPress={onSharkTap} disabled={!focusedOnPlayer}
-              accessibilityRole="button" accessibilityLabel="Your shark. Tap to say hi." />
+            {/* Tap your shark: it hops, twirls and shows off what it is wearing. Standing on a ride island, the tap
+                goes to that ride's coin instead (its island is hidden under the shark, T011). */}
+            <Pressable style={styles.sharkTap} onPress={sharkOnIsland ? sharkOnIsland.onPress : onSharkTap} disabled={!focusedOnPlayer}
+              accessibilityRole="button" accessibilityLabel={sharkOnIsland ? `${sharkOnIsland.label}. Show this ride's coin.` : 'Your shark. Tap to say hi.'} />
+            <UnderSharkChip island={sharkOnIsland} reducedMotion={reducedMotion} />
           </View>
         </View>
       )}
     </View>
     </FrightBearing>
     </MapAliveProvider>
+  );
+}
+
+/**
+ * The coin chip of the ride island the shark stands on (T011): it pops in beside the shark (a spring; a
+ * plain fade under Reduce Motion) and takes the tap. Always mounted; it only shows and hides.
+ */
+function UnderSharkChip({ island, reducedMotion }: { readonly island: UnderShark | null; readonly reducedMotion: boolean }) {
+  const shown = useSharedValue(island ? 1 : 0);
+  const last = useRef<UnderShark | null>(island);
+  if (island) last.current = island;
+  useEffect(() => {
+    const to = island ? 1 : 0;
+    shown.value = reducedMotion ? withTiming(to, { duration: 120 }) : island ? withSpring(1, { damping: 11, stiffness: 260 }) : withTiming(0, { duration: 140 });
+  }, [!!island, reducedMotion, shown]); // eslint-disable-line react-hooks/exhaustive-deps
+  const style = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ scale: 0.6 + 0.4 * shown.value }] }));
+  const shownIsland = island ?? last.current;
+  return (
+    <Reanimated.View pointerEvents={island ? 'box-none' : 'none'} style={[chipStyles.underChip, style]}>
+      <Pressable onPress={() => island?.onPress()} hitSlop={8} accessibilityRole="button"
+        accessibilityLabel={shownIsland ? `${shownIsland.label}. Show this ride's coin.` : undefined}
+        style={({ pressed }) => [chipStyles.underChipDisc, pressed && chipStyles.underChipPressed]}>
+        {shownIsland && <Image source={shownIsland.coin} style={chipStyles.underChipCoin} contentFit="contain" />}
+      </Pressable>
+    </Reanimated.View>
   );
 }
 
@@ -1216,6 +1262,16 @@ function FrightBearing({ store, children }: { readonly store: BearingStore; read
   const value = useMemo(() => ({ ...control, heading: bearing, headingEnabled: true }), [control, bearing]);
   return <HeadingContext.Provider value={value}>{children}</HeadingContext.Provider>;
 }
+
+/** The coin chip beside the shark (T011). */
+const chipStyles = StyleSheet.create({
+  // Beside the shark's body, right of its fin (the island it stands on is hidden behind the shark).
+  underChip: { position: 'absolute', left: 80, top: 34, zIndex: 3 },
+  underChipDisc: { width: 46, height: 46, borderRadius: 23, borderWidth: 3, borderColor: BRAND.white, backgroundColor: BRAND.blue,
+    alignItems: 'center', justifyContent: 'center', ...SHADOW.card },
+  underChipPressed: { transform: [{ scale: 0.94 }] },
+  underChipCoin: { width: 36, height: 36 },
+});
 
 const styles = StyleSheet.create({
   // The compass on the right, the extra buttons in their own column to its left (short phones).
@@ -1371,3 +1427,4 @@ function useSharkStyles(live: SharedValue<number>, m: SharkMotion) {
   });
   return { shark, shadow, glow, weakRing };
 }
+
