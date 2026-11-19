@@ -25,6 +25,9 @@ test('a timed find says it stays a little while, then leaves soon, in words', ()
   // It wakes at the soon line and at zero, never once a minute.
   assert.equal(T.msUntilStayWordsChange(30 * 60_000), 20 * 60_000 + 50);
   assert.equal(T.msUntilStayWordsChange(5 * 60_000), 5 * 60_000 + 50);
+  // Home treats: only their last five minutes (a calm home map).
+  assert.equal(T.leavesSoon(8 * 60_000, T.HOME_LEAVES_SOON_MS), false);
+  assert.equal(T.leavesSoon(4 * 60_000, T.HOME_LEAVES_SOON_MS), true);
 });
 
 test('a raid says when it ends as a time of day', () => {

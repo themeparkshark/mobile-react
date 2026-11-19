@@ -14,7 +14,7 @@ import { BRAND, GameIcon } from '../../ui';
 import { catchStyleFor } from './ridePhoto';
 import { useMapAlive } from '../../components/map/alive/MapAliveContext';
 import { formatFindDistance } from './homeFindCopy';
-import { leavesSoon, msUntilStayWordsChange } from '../../helpers/calmTime';
+import { HOME_LEAVES_SOON_MS, leavesSoon, msUntilStayWordsChange } from '../../helpers/calmTime';
 import { findImageOrder, findLook, mapGlowColor } from './findPresentation';
 import { catchDim, catchHidePivot, tapPivot, tapSquash } from './catchPresence';
 
@@ -159,11 +159,11 @@ function SpawnSparkle({ angle, t }: { angle: number; t: ReturnType<typeof useSha
   return <Animated.View style={[styles.spawnSpark, style]}><Tinted source={MAP_SPARKLE} tint={GOLD_FX.raysSoft} fit="contain" /></Animated.View>;
 }
 
-/** "Leaves soon" in the last ten minutes, null before (T006: words, never a minutes or seconds clock);
+/** "Leaves soon" in the last five minutes, null before (T006: words, never a minutes or seconds clock);
  * calls onExpire once it is gone. Wakes only at the soon line and at zero, and only while the map is live. */
 function useLeavingSoon(activeTo: string | null | undefined, onExpire: () => void, live: boolean): string | null {
   const endsAt = activeTo ? Date.parse(activeTo) : NaN;
-  const label = (left: number) => (leavesSoon(left) ? 'Leaves soon' : null);
+  const label = (left: number) => (leavesSoon(left, HOME_LEAVES_SOON_MS) ? 'Leaves soon' : null);
   const [text, setText] = useState(() => Number.isFinite(endsAt) ? label(endsAt - Date.now()) : null);
   const expireRef = useRef(onExpire);
   expireRef.current = onExpire;
@@ -174,7 +174,7 @@ function useLeavingSoon(activeTo: string | null | undefined, onExpire: () => voi
       const left = endsAt - Date.now();
       setText(label(left));
       if (left <= 0) { expireRef.current(); return; }
-      timer = setTimeout(tick, Math.min(msUntilStayWordsChange(left), 2 ** 31 - 1));
+      timer = setTimeout(tick, Math.min(msUntilStayWordsChange(left, HOME_LEAVES_SOON_MS), 2 ** 31 - 1));
     };
     tick();
     return () => clearTimeout(timer);

@@ -15,15 +15,18 @@ export function stayWords(msLeft: number): StayWords | null {
   return msLeft <= LEAVES_SOON_MS ? 'Leaves soon' : 'Here for a little while';
 }
 
-/** True in the last ten minutes (the island's chip and gold ring show only then). */
-export function leavesSoon(msLeft: number): boolean {
-  return stayWords(msLeft) === 'Leaves soon';
+/** The home map's treats live short lives: only their last five minutes say "Leaves soon" (a calm map). */
+export const HOME_LEAVES_SOON_MS = 5 * 60_000;
+
+/** True in the last ten minutes (the island's chip and gold ring show only then); `soonMs` for a shorter line. */
+export function leavesSoon(msLeft: number, soonMs = LEAVES_SOON_MS): boolean {
+  return Number.isFinite(msLeft) && msLeft > 0 && msLeft <= soonMs;
 }
 
 /** When the words next change (at the soon line, then at zero), so a marker wakes twice, not every minute. */
-export function msUntilStayWordsChange(msLeft: number): number {
+export function msUntilStayWordsChange(msLeft: number, soonMs = LEAVES_SOON_MS): number {
   if (!Number.isFinite(msLeft) || msLeft <= 0) return 0;
-  return msLeft > LEAVES_SOON_MS ? msLeft - LEAVES_SOON_MS + 50 : msLeft + 50;
+  return msLeft > soonMs ? msLeft - soonMs + 50 : msLeft + 50;
 }
 
 /** "1:50", "2:00": the local time of day, 12-hour, no am/pm (a kid reads it off any clock). */
