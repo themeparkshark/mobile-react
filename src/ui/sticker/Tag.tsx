@@ -44,7 +44,8 @@ function TagImpl({ children, paper = 'white', plain = false, icon, iconRatio = 1
   const size = large ? 18 : plain ? TAG.fontKo : TAG.font;
   const spec = { ...(plain ? TEXT.bodySmall : TEXT.tag), size, spacing: plain ? 0.04 : 0.03, maxScale: TAG.maxScale };
   const drop = onMap ? DROP.tagOnMap : DROP.tag;
-  const iconH = large ? 18 : 14;
+  // A what-you-get tag shows the thing big (the board: the art nearly fills the pill), a small tag a 14 pt mark.
+  const iconH = large ? 24 : 14;
   return (
     <View accessible accessibilityRole="text" accessibilityLabel={label ?? children}
       style={[{ alignSelf: 'flex-start', maxWidth: '100%', height: height + drop, transform: tilt ? [{ rotate: `${-TAG.tilt}deg` }] : undefined }, style]}>

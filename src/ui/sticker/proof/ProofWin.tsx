@@ -16,7 +16,7 @@
  * row in the foot, so the whole card shows at rest with nothing under the foot.
  */
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, useWindowDimensions } from 'react-native';
+import { View, useWindowDimensions, type ImageSourcePropType } from 'react-native';
 import useUiReducedMotion from '../../useUiReducedMotion';
 import Arrive from '../Arrive';
 import Card from '../Card';
@@ -36,7 +36,7 @@ import { Body, Caps, Count, Title } from '../Text';
 import { ART, ART_RATIO } from '../art';
 import { buttonHeight, screenFrameWidth } from '../layout';
 import { LINE, SPACE, TAG } from '../tokens';
-import { useParkCoinArt } from './proofCoins';
+import { useParkCoins } from './proofCoins';
 import { WIN_BEATS, countSteps, winsLeft } from './proofData';
 
 const noop = () => undefined;
@@ -88,10 +88,17 @@ function measure(node: Measurable | null): Promise<{ x: number; y: number; w: nu
   });
 }
 
+/** The win card waits for the won coin's art (a real win has it before the card opens), then runs its beats from zero. */
 export default function ProofWin() {
+  const { art, ready } = useParkCoins(useMemo(() => [WON, NEXT], []));
+  return ready ? <WinCard coins={art} /> : <Screen testID="proof-win-wait" header={{ children: [
+    <CurrencyChip key="c" kind="coins" value={START.coins} />, <CurrencyChip key="e" kind="energy" value={START.energy} />, <CurrencyChip key="t" kind="tickets" value={START.tickets} />,
+  ] }} />;
+}
+
+function WinCard({ coins }: { readonly coins: Readonly<Record<string, ImageSourcePropType | undefined>> }) {
   const { width, height } = useWindowDimensions();
   const reduced = useUiReducedMotion();
-  const coins = useParkCoinArt(useMemo(() => [WON, NEXT], []));
   const [found, setFound] = useState(15);
   const [chips, setChips] = useState<Record<ChipKey, number>>(START);
   const [flights, setFlights] = useState<{ key: string; chip: ChipKey; from: FlightPoint; to: FlightPoint; delay: number; art: number; ratio: number }[]>([]);
