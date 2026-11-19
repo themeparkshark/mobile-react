@@ -7,6 +7,9 @@
  * goal) are forwarded to the coin's own park shelf, which scrolls to it and
  * opens its detail.
  */
+import { allParksTotal, mergeParkTotals } from '../services/collection/parkTotals';
+import getVisitedParks from '../api/endpoints/me/visited-parks';
+import type { ParkType } from '../models/park-type';
 import CollectionSwitch from '../components/collection/CollectionSwitch';
 import { showToast } from '../utils/toast';
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
@@ -78,8 +81,11 @@ export default function CoinShelfScreen({ route }: {
   const forwarded = useRef<number | null>(null);
   const goalSavingRef = useRef(false);
 
+  // The shelf's own per-park totals (fix w3 T134): the counts here match the shelf and Profile.
+  const [visited, setVisited] = useState<ParkType[] | null>(null);
   const loadCatalog = useCallback(async () => {
     if (preview || !player?.id) return;
+    void getVisitedParks(player.id).then(setVisited).catch(() => undefined);
     try {
       setCatalog(await getTripGoal());
       setCatalogStale(false);
@@ -123,8 +129,9 @@ export default function CoinShelfScreen({ route }: {
       entry.total += 1; if (ride.coin_owned) entry.owned += 1;
       byPark.set(ride.park_id, entry);
     }
-    return byPark;
-  }, [catalogRides]);
+    return mergeParkTotals(byPark, visited);
+  }, [catalogRides, visited]);
+  const across = useMemo(() => allParksTotal(totals), [totals]);
   const groups = useMemo(() => {
     const owned = groupCoinsByPark(coins);
     const seen = new Set(owned.map(group => group.parkId));
@@ -135,7 +142,6 @@ export default function CoinShelfScreen({ route }: {
   }, [coins, totals]);
   const energy = preview ? 18 : player?.energy ?? 0;
   const ready = coins.filter(coin => isUpgradeReady(coin, energy));
-  const ownedCount = catalogRides.filter(ride => ride.coin_owned).length;
   const missing = catalogRides.filter(ride => !ride.coin_owned);
   const nextCoin = catalog?.goal && !catalog.goal.coin_owned
     ? missing.find(ride => ride.asset_id === catalog.goal?.asset_id) ?? missing[0] : missing[0];
@@ -171,9 +177,9 @@ export default function CoinShelfScreen({ route }: {
             <GameIcon name="coins" size={44} />
             <View style={{ flex: 1 }}>
               <Text style={styles.summaryEyebrow}>{catalogStale ? 'SAVED ON YOUR PHONE' : 'ACROSS ALL PARKS'}</Text>
-              <Text style={styles.summaryCount}>{catalog ? `${ownedCount} of ${catalogRides.length}` : coins.length} COINS</Text>
-              {catalog && catalogRides.length > 0 && <View style={styles.track}>
-                <View style={[styles.fill, { width: `${Math.round(ownedCount / catalogRides.length * 100)}%` }]} />
+              <Text style={styles.summaryCount}>{catalog && across.total > 0 ? `${across.owned} of ${across.total}` : coins.length} COINS</Text>
+              {catalog && across.total > 0 && <View style={styles.track}>
+                <View style={[styles.fill, { width: `${Math.round(across.owned / across.total * 100)}%` }]} />
               </View>}
             </View>
           </View>

@@ -1,22 +1,16 @@
 /**
- * The "More" chest in Shark Social's top bar, with a real chest tap
- * (Dustin, Oct 8 2026: "tapping the more chest has no sound effect or cool
- * tap feature"):
+ * The "More" button in Shark Social's top bar, with a real tap (Dustin, Oct 8 2026: "tapping the
+ * more chest has no sound effect or cool tap feature"). Fix w3 T147: it used to be a chest, but a
+ * chest means Rewards only, so it now wears the map's menu button (Alex's round blue FAB with three
+ * bars). The file keeps its name for history.
  *
- * - Finger down: the chest squashes (wide and low) on the UI thread.
- * - Release: it hops, the lid pops open (an empty, softly lit chest: it opens
- *   a menu, not a payout), it wiggles, a few small stars puff out of the lid,
- *   a medium haptic and Chris's wooden clack. The sheet opens a beat later,
- *   so the pop reads first. One tap owns the beat: taps are ignored until the
- *   sheet closes, so sounds never stack.
- * - The lid stays open while the sheet is up and shuts with a little bump, a
- *   soft tick and a light haptic when it closes.
- * - Reduce Motion: no squash, hop, wiggle or stars; the lid still opens, with
- *   the sound and the haptic.
- * - The stars are one small Skia canvas driven by one shared value; nothing
- *   runs between taps, and a fast second tap restarts the beat cleanly.
+ * - Finger down: the button squashes (wide and low) on the UI thread.
+ * - Release: it hops and wiggles, the middle bar tucks in while the sheet is up, a medium haptic
+ *   and Chris's wooden clack. The sheet opens a beat later, so the pop reads first. One tap owns
+ *   the beat: taps are ignored until the sheet closes, so sounds never stack.
+ * - It settles with a little bump, a soft tick and a light haptic when the sheet closes.
+ * - Reduce Motion: no squash, hop or wiggle; the sound and the haptic stay.
  */
-import { Canvas, Group, Path, usePathValue } from '@shopify/react-native-skia';
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -31,7 +25,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import * as Haptics from '../../helpers/haptics';
 import { playSfx } from '../../gamekit/SFX';
-import { BRAND, GameIcon } from '../../ui';
+import { BRAND } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 
 /** Chris's cues (chrisBank, preloaded by useSocialSounds): the wooden clack as the lid opens, a soft tick as it shuts. */
@@ -48,20 +42,9 @@ const ms = (t: number) => t * SLOW;
 const spring = (c: { damping: number; stiffness: number; mass?: number }) =>
   (SLOW === 1 ? c : { ...c, damping: c.damping / SLOW, stiffness: c.stiffness / (SLOW * SLOW) });
 
-/** Alex's chest, open and empty (it opens a menu, not a payout). GPT Image from chest_closed.png; see juice/art/ART_QA.md. */
-const OPEN_ART = require('../../../assets/images/social/chest_open_empty.png');
-const SIZE = 36;
-const OPEN_SIZE = 35;
-const FX = 96; // the star canvas, centred on the chest
-const STARS = [
-  { a: -2.75, d: 14, s: 6 },
-  { a: -2.15, d: 12, s: 7 },
-  { a: -1.57, d: 10, s: 7.5 },
-  { a: -1.0, d: 12, s: 7 },
-  { a: -0.4, d: 14, s: 6 },
-];
-/** Stars start this far out from the lid and spread before they grow, so they never stack. */
-const STAR_START = 8;
+/** The map's menu button (Alex's round blue button, the Quick Access Menu FAB): More opens a menu. */
+const MENU_ART = require('../../../assets/images/alex-ui/fab-blue.webp');
+const SIZE = 38;
 
 export default function ChestButton({
   label,
@@ -92,7 +75,6 @@ export default function ChestButton({
   const sy = useSharedValue(1);
   const lift = useSharedValue(0);
   const tilt = useSharedValue(0);
-  const burst = useSharedValue(0);
   const dim = useSharedValue(1);
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
 
@@ -132,29 +114,6 @@ export default function ChestButton({
     ],
   }));
 
-  const stars = usePathValue((p) => {
-    'worklet';
-    const q = burst.value;
-    if (q <= 0 || q >= 1) return;
-    const cx = FX / 2;
-    const cy = FX / 2 - 8;
-    for (let i = 0; i < STARS.length; i++) {
-      const s = STARS[i];
-      const e = 1 - (1 - q) * (1 - q);
-      const reach = STAR_START + s.d * e;
-      const x = cx + Math.cos(s.a) * reach;
-      const y = cy + Math.sin(s.a) * reach + q * q * 8;
-      const grow = Math.min(1, Math.max(0, (q - 0.06) * 1.8));
-      const r = s.s * Math.sin(grow * Math.PI * 0.5) * (1 - Math.max(0, q - 0.65) / 0.35);
-      if (r < 3.5) continue;
-      p.moveTo(x, y - r);
-      p.quadTo(x, y, x + r, y);
-      p.quadTo(x, y, x, y + r);
-      p.quadTo(x, y, x - r, y);
-      p.quadTo(x, y, x, y - r);
-      p.close();
-    }
-  });
 
   const pressIn = () => {
     if (locked.current) return;
@@ -193,8 +152,6 @@ export default function ChestButton({
         withTiming(-5, { duration: ms(80) }),
         withSpring(0, spring({ damping: 8, stiffness: 300 })),
       );
-      burst.value = 0;
-      burst.value = withTiming(1, { duration: ms(620), easing: Easing.linear });
     }
     pending.current = setTimeout(() => { pending.current = null; onPress(); }, reduced ? 60 : ms(CHEST_OPEN_DELAY_MS));
   };
@@ -210,19 +167,13 @@ export default function ChestButton({
       accessibilityHint={accessibilityHint}
       style={styles.hit}
     >
-      <View pointerEvents="none" style={styles.fx}>
-        <Canvas style={StyleSheet.absoluteFill}>
-          <Group>
-            <Path path={stars} color={BRAND.gold} />
-            <Path path={stars} style="stroke" strokeWidth={1.8} strokeJoin="round" color="#9a6400" />
-          </Group>
-        </Canvas>
-      </View>
+      {/* Fix w3 T147: the chest means Rewards only, so More wears the map's own menu button (Alex's round
+          blue button with three bars). The squash, hop, sound and haptic stay; the payout stars do not. */}
       <Animated.View style={[styles.chest, chestStyle, dimStyle]}>
-        {lidOpen
-          // The open art has a taller canvas: drawn larger and lifted so its box matches the closed chest.
-          ? <Image source={OPEN_ART} style={[styles.open, { width: OPEN_SIZE, height: OPEN_SIZE }]} contentFit="contain" />
-          : <GameIcon name="chest" size={SIZE} />}
+        <Image source={MENU_ART} style={StyleSheet.absoluteFill} contentFit="contain" />
+        <View style={styles.bars}>
+          {[0, 1, 2].map(line => <View key={line} style={[styles.bar, lidOpen && line === 1 && styles.barOpen]} />)}
+        </View>
       </Animated.View>
       <Text style={styles.text} maxFontSizeMultiplier={1.2}>{label}</Text>
     </Pressable>
@@ -231,8 +182,9 @@ export default function ChestButton({
 
 const styles = StyleSheet.create({
   hit: { alignItems: 'center', minWidth: 48 },
-  chest: { width: SIZE, height: SIZE },
-  open: { position: 'absolute', left: 1, top: -2 },
-  fx: { position: 'absolute', width: FX, height: FX, left: 24 - FX / 2, top: SIZE / 2 - FX / 2 },
+  chest: { width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' },
+  bars: { alignItems: 'center', justifyContent: 'center', gap: 3, marginTop: -4 },
+  bar: { width: 18, height: 4, borderRadius: 2, backgroundColor: BRAND.white, borderWidth: 1, borderColor: '#0b3f78' },
+  barOpen: { width: 14 },
   text: { fontFamily: 'Shark', fontSize: 11, color: BRAND.white, marginTop: -2, textShadowColor: BRAND.navy, textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 0 },
 });

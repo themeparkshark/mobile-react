@@ -122,14 +122,22 @@ export function trophyMoment(parkWins: number | null | undefined): TrophyMoment 
  * coin count alone. A full shelf says so. Null without numbers.
  */
 export function shelfLine(result: CollectionMilestones | null | undefined, parkWins?: number | null): string | null {
+  // Fix w3 T123: "15 of 35 coins. 35 more wins for Silver" read as a math error, so the coins say
+  // where they are ("on your shelf") and the trophy gets its own line (trophyToGoLine).
+  void parkWins;
   const progress = result?.progress;
   if (!progress || !(progress.available > 0)) return null;
   const have = Math.max(0, Math.min(progress.collected, progress.available));
-  const lead = `${have} of ${progress.available} coins`;
-  if (have >= progress.available) return `${lead}. Shelf complete!`;
+  const lead = `${have} of ${progress.available} ${progress.available === 1 ? 'coin' : 'coins'} on your shelf`;
+  return have >= progress.available ? `${lead}. Shelf complete!` : lead;
+}
+
+/** The trophy's own line on the win card: "Silver trophy: 35 more wins". Null without wins or after Gold. */
+export function trophyToGoLine(parkWins: number | null | undefined): string | null {
   const wins = Number(parkWins);
-  const next = parkWins != null && Number.isFinite(wins) ? nextTrophy(wins) : null;
-  return next ? `${lead}. ${next.left} more ${next.left === 1 ? 'win' : 'wins'} for ${next.name}` : lead;
+  if (parkWins == null || !Number.isFinite(wins)) return null;
+  const next = nextTrophy(wins);
+  return next ? `${next.name} trophy: ${next.left} more ${next.left === 1 ? 'win' : 'wins'}` : null;
 }
 
 export interface WinRowInput {
@@ -297,6 +305,8 @@ export function limitedWinLine(limited: { readonly active: boolean } | null | un
  */
 export interface WinShelfLine {
   readonly text: string;
+  /** The trophy's own second line under the coin count (T123), when it applies. */
+  readonly sub?: string | null;
   readonly icon: 'trophyBronze' | 'trophySilver' | 'trophy' | 'sparkle';
   /** Set when this win earned a trophy: the card shows its trophy moment. */
   readonly trophy?: TrophyMoment;
@@ -312,7 +322,10 @@ export function winShelfLine(
   if (earned) return { text: `${earned.name} trophy! ${earned.wins} wins here`, icon: earned.icon, trophy: earned };
   const wins = parkWins != null && Number.isFinite(Number(parkWins)) ? Number(parkWins) : null;
   const shelf = shelfLine(milestones ?? null, wins);
-  if (shelf) return { text: shelf, icon: wins != null ? trophyIcon(wins) : 'trophyBronze' };
+  if (shelf) {
+    const sub = shelf.endsWith('Shelf complete!') ? null : trophyToGoLine(wins);
+    return { text: shelf, sub, icon: wins != null ? trophyIcon(wins) : 'trophyBronze' };
+  }
   const own = isNewCoin ? limitedWinLine(limited) : null;
   if (own) return { text: own, icon: 'sparkle' };
   // A coin won again: the trophy it counts toward, in the shelf's own words.

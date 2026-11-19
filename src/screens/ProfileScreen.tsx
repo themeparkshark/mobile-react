@@ -65,6 +65,7 @@ import { UpperText } from '../ui/upper';
 import { FlexShareButton } from '../share/FlexShareButton';
 import { shouldFlexReveal } from '../share/copy';
 import { useRung } from '../services/reveal/revealLadder';
+import { useShownNewTag } from '../services/retention/newTag';
 
 /** The shark stage: 315 pt on tall phones, shorter on 6.1" ones so the shortcut row shows on first view. */
 // Short phones (iPhone SE, 667 pt) get a 230 pt stage so the Shop / Stamp Book / Pins labels sit clear of the center compass at rest.
@@ -231,6 +232,8 @@ export default function ProfileScreen() {
     return () => { live = false; };
   }, []);
 
+  // The Pins door's NEW dot (rung 8), shown while Profile is in view.
+  const pinsNew = useShownNewTag('pins', focused);
   const shortcuts = useMemo<ProfileShortcut[]>(() => {
     const { sharkShop, others } = profileStores(stores);
     const openStore = (store: StoreType) => {
@@ -270,8 +273,10 @@ export default function ProfileScreen() {
         // Pins v2: one Pins page (mystery boxes, park sets, your lanyard).
         label: 'Pins',
         image: require('../../assets/images/screens/profile/pin_collections.png'),
-        hint: 'Opens your pins, mystery boxes and park sets',
-        onPress: () => RootNavigation.navigate('PinCollections'),
+        // The lanyard lives behind this door until a pin hangs on it (T121): its NEW dot and hint come here.
+        hint: pinsNew.isNew ? 'New: opens your pins and lanyard' : 'Opens your pins, mystery boxes, park sets and lanyard',
+        dot: pinsNew.isNew,
+        onPress: () => { pinsNew.seen(); RootNavigation.navigate('PinCollections'); },
       },
       ...others.map((store): ProfileShortcut => ({
         key: `store-${store.id}`,
@@ -284,7 +289,7 @@ export default function ProfileScreen() {
         onPress: () => openStore(store),
       })),
     ];
-  }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim, secretV2]);
+  }, [stores, labels.pin_packs, player?.is_subscribed, stampsToClaim, secretV2, pinsNew.isNew, pinsNew.seen]);
 
   // Redirect guests to login: must be in useEffect, not during render.
   // Signing out also forgets the Stamp Book dot (it is keyed by player too).
@@ -621,6 +626,33 @@ export default function ProfileScreen() {
               )}
               <Heading text={labels.your_statistics || 'Your statistics'} />
               <Stats player={player} rideCoins={rideCoinTotal(parks)} parks={visitedParkCount(parks)} />
+              <View 
+                onLayout={(event) => {
+                  parksYPosition.current = event.nativeEvent.layout.y + 250; // Offset for header
+                }}
+              >
+                <Heading text={labels.your_parks || 'Your parks'} />
+                {/* Parks card */}
+                <View
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.95)',
+                    borderRadius: 18,
+                    padding: 16,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 2 },
+                    shadowOpacity: 0.08,
+                    shadowRadius: 8,
+                    elevation: 3,
+                  }}
+                >
+                  {parksUnavailable && parks.length === 0 ? (
+                    <Text style={{ fontFamily: 'Knockout', fontSize: 18, textAlign: 'center',
+                      color: '#46617A', paddingTop: 8, paddingBottom: 12 }}>
+                      Your parks will appear when you reconnect.
+                    </Text>
+                  ) : <VisitedParks parks={parks} player={player} />}
+                </View>
+              </View>
               <Heading text={`${labels.your_friends || 'Your friends'} (${player.friends_count})`} />
               {/* Friends card */}
               <View
@@ -696,33 +728,6 @@ export default function ProfileScreen() {
                     </View>
                   </>
                 )}
-              </View>
-              <View 
-                onLayout={(event) => {
-                  parksYPosition.current = event.nativeEvent.layout.y + 250; // Offset for header
-                }}
-              >
-                <Heading text={labels.your_parks || 'Your parks'} />
-                {/* Parks card */}
-                <View
-                  style={{
-                    backgroundColor: 'rgba(255,255,255,0.95)',
-                    borderRadius: 18,
-                    padding: 16,
-                    shadowColor: '#000',
-                    shadowOffset: { width: 0, height: 2 },
-                    shadowOpacity: 0.08,
-                    shadowRadius: 8,
-                    elevation: 3,
-                  }}
-                >
-                  {parksUnavailable && parks.length === 0 ? (
-                    <Text style={{ fontFamily: 'Knockout', fontSize: 18, textAlign: 'center',
-                      color: '#46617A', paddingTop: 8, paddingBottom: 12 }}>
-                      Your parks will appear when you reconnect.
-                    </Text>
-                  ) : <VisitedParks parks={parks} player={player} />}
-                </View>
               </View>
               </View>
               </View>

@@ -92,7 +92,8 @@ export function ratedDifficulty(p: SharkyProgress): 1 | 2 | 3 {
 /** The "NEW!" card shown after a run that crossed an unlock (design 5.9). */
 export function unlockCard(runsBefore: number, runsAfter: number): string | null {
   const cards: Record<number, string> = {
-    1: 'NEW: Prize Boxes',
+    // Fix w3 T126: "box" means a reward box (Trail Boxes, chests); Sharky's pickups get their own name.
+    1: 'NEW: Sea Treasures',
     2: 'NEW: Overdrive',
     3: 'NEW: Rally your crew',
     4: 'NEW: Power-ups',

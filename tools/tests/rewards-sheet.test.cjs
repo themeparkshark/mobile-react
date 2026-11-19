@@ -335,7 +335,9 @@ test('Pins: the door stays; mystery boxes, chaser meter and pips only where pin_
   assert.match(screen, /<BackButton \/>/, 'a visible back button (the footer is hidden here)');
   assert.match(screen, /pinsRung\.markSeen\(\)/, 'opening Pins clears the NEW tag');
   const lanyard = read('src/screens/pins/ProfileLanyardCard.tsx');
-  assert.match(lanyard, /useShownNewTag\('pins', own && !!data && focused\)/, 'the lanyard NEW retires once shown');
+  assert.match(lanyard, /useShownNewTag\('pins', own && !!data && data\.lanyard\.length > 0 && focused\)/, 'the lanyard NEW retires once shown');
+  // Fix w3 T121: an empty strap folds into the Pins door, which wears the NEW dot instead.
+  assert.match(read('src/screens/ProfileScreen.tsx'), /const pinsNew = useShownNewTag\('pins', focused\);[\s\S]*dot: pinsNew\.isNew,/);
   assert.match(lanyard, /\{newTag && <NewPill \/>\}/, 'the shared pill, no copied styles');
   assert.doesNotMatch(lanyard, /newText|useRung\('pins'\)/);
   assert.match(read('src/screens/pins/BoxReveal.tsx'), /useNativeModalLayer\(!hidden, 'show'\)/);
@@ -364,7 +366,7 @@ test('membership look dialogs: home first, through the modal layer, one automati
 test('level chest: the pin box line only where mystery boxes are on; Energy says what it is for before rung 3', () => {
   const reveal = read('src/components/retention/RewardReveal.tsx');
   assert.match(reveal, /\.filter\(r => pinBoxes \|\| r\.kind !== 'mystery_boxes'\)/);
-  assert.match(reveal, /energySaved && r\.kind === 'energy' \? \{ \.\.\.r, label: 'Energy for growing coins' \}/);
+  assert.match(reveal, /energySaved && r\.kind === 'energy' \? \{ \.\.\.r, label: 'Energy' \}/);
   const hook = read('src/components/retention/useRetention.tsx');
   assert.match(hook, /energySaved=\{!coinLevelsOpen\} pinBoxes=\{flagOn\(flags, 'pin_mystery_boxes'\)\}/);
   assert.match(hook, /onPins=\{flagOn\(flags, 'pin_mystery_boxes'\) \?/);

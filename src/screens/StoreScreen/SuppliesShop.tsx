@@ -62,11 +62,11 @@ const APP_STORE_URL = 'itms-apps://apps.apple.com/app/id6758812566';
 
 export type SuppliesFocus = 'tickets' | 'coins' | 'rescue' | 'featured';
 
+// Fix w3 T229: the shop's wallet shows the two things you spend here, Tickets and Shark Coins. Energy lives
+// on the shelf and extra tries show on PLAY! when you hold one, so the row no longer lists four balances.
 const WALLET: { key: keyof ShopGrants; icon: GameIconName; term: GlossaryKey; many: string }[] = [
   { key: 'tickets', icon: 'ticket', term: 'tickets', many: 'tickets' },
   { key: 'coins', icon: 'coins', term: 'coins', many: 'Shark Coins' },
-  { key: 'energy', icon: 'energy', term: 'energy', many: 'energy' },
-  { key: 'rescue_passes', icon: 'retry', term: 'rescue_pass', many: 'extra tries' },
 ];
 
 /**
@@ -264,8 +264,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
             accessibilityHint="Explains what this is"
             onPress={() => explain(w.term, { count: wallet[w.key] })}>
             <GameIcon name={w.icon} size={22} />
-            {/* Extra tries have no picture of their own yet, so the chip says the word too. */}
-            <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{countText(wallet[w.key])}{w.key === 'rescue_passes' ? (wallet[w.key] === 1 ? ' extra try' : ' extra tries') : ''}</Text>
+            <Text maxFontSizeMultiplier={MAX_FONT} style={st.walletText}>{countText(wallet[w.key])}</Text>
           </Pressable>
         ))}
       </View>
@@ -430,14 +429,15 @@ function DayCard({ product, index, price, worth, note, busy, disabled, onBuy }: 
   return (
     <Animated.View entering={FadeInUp.delay(120 + index * 70).springify().damping(15)} style={{ flex: 1 }}>
       <ShopCard onPress={onBuy} disabled={disabled || !price || !!note} style={{ flex: 1 }} fill
-        accessibilityLabel={`${product.title}. ${deal ? 'A new deal every day.' : 'One a day.'} ${price ?? ''}, real money.`}>
+        accessibilityLabel={`${product.title}. ${deal ? 'Today\u2019s pick.' : 'For one park day.'} ${price ?? ''}, real money.`}>
         <Band text={deal ? 'TODAY’S PICK' : 'PARK DAY'} color={deal ? 'green' : 'blue'} size={15} />
         <View style={st.dayBody}>
           <PackArt art={packArtKey(product)} size={64} />
           <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{product.title.toUpperCase()}</Text>
           <View style={{ flex: 1, justifyContent: 'center', alignSelf: 'stretch' }}><Contents grants={product.grants} size="tight" /></View>
           {/* No WORTH pill (psychology r8): one BEST VALUE per shelf is the only value badge. */}
-          <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>{deal ? 'New deal every day' : 'One a day'}</Text>
+          {/* Fix w3 T228: no deal wording on a kid's shelf; the band already says TODAY'S PICK. */}
+          <Text maxFontSizeMultiplier={MAX_FONT} style={st.dayNote}>{deal ? 'Changes each day' : 'For one park day'}</Text>
         </View>
         <PriceBar price={price} busy={busy} note={note} />
       </ShopCard>

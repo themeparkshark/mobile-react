@@ -1,13 +1,83 @@
 /**
  * Plain ride names everywhere (IP rule): drop trademark, registered and copyright marks the
  * wait-times feed and some catalog rows carry ("Indiana Jones™ Adventure" reads
- * "Indiana Jones Adventure"), and tidy the spaces they leave. Words are never changed.
+ * "Indiana Jones Adventure"), and tidy the spaces they leave. Then one display name per ride.
  */
 const MARKS = /\s*(?:[™®©℠]|\((?:TM|R|C|SM)\))/giu;
 
+/**
+ * One display name per ride (fix w3 T122). The coin rows ("Thunder Mountain", "Tiki Room",
+ * "Pirates"), the ride catalog ("Big Thunder Mountain Railroad", "Walt Disney's Enchanted Tiki
+ * Room") and the wait-times feed ("Haunted Mansion Holiday") each spell a ride their own way, so the
+ * map, LinePlay, Wait Times and the shelf disagreed. Every ride list already passes through
+ * plainRideName at its API boundary, so this one table gives every screen the same name with
+ * proper casing. Keys are normalized (lower case, straight quotes, no wrapping quotes); a key must
+ * mean one ride in every park (no "Castle", no "Transformers"). Seasonal overlays keep the ride's
+ * own name so its coin never changes name in December. Add a row here, never on a screen; the
+ * vocabulary test checks the map, LinePlay, Wait Times and shelf read the same names.
+ */
+export const RIDE_DISPLAY_NAMES: Readonly<Record<string, string>> = {
+  // Disneyland
+  'thunder mountain': 'Big Thunder Mountain Railroad',
+  'big thunder mountain': 'Big Thunder Mountain Railroad',
+  'tiki room': 'Enchanted Tiki Room',
+  "walt disney's enchanted tiki room": 'Enchanted Tiki Room',
+  'haunted mansion holiday': 'Haunted Mansion',
+  "it's a small world": "It's a Small World",
+  "it's a small world holiday": "It's a Small World",
+  'the many adventures of pooh': 'The Many Adventures of Winnie the Pooh',
+  'the many adventures of winnie the pooh': 'The Many Adventures of Winnie the Pooh',
+  'pirates': 'Pirates of the Caribbean',
+  'smugglers': 'Millennium Falcon: Smugglers Run',
+  'astro blasters': 'Buzz Lightyear Astro Blasters',
+  'matterhorn': 'Matterhorn Bobsleds',
+  'mr. lincoln': 'Great Moments with Mr. Lincoln',
+  'mr. toad': "Mr. Toad's Wild Ride",
+  'star wars: rise of the resistance': 'Rise of the Resistance',
+  'star tours - the adventures continue': 'Star Tours',
+  'submarine voyage': 'Finding Nemo Submarine Voyage',
+  "oga's cantina at the disneyland resort": "Oga's Cantina",
+  "adventureland treehouse inspired by walt disney's swiss family robinson": 'Adventureland Treehouse',
+  // Magic Kingdom
+  'dumbo the flying elephant': 'Dumbo the Flying Elephant',
+  'monsters inc laugh floor': 'Monsters, Inc. Laugh Floor',
+  'under the sea: journey of the little mermaid': 'Under the Sea - Journey of The Little Mermaid',
+  // Universal
+  'forbidden journey': 'Harry Potter and the Forbidden Journey',
+  'escape from gringotts': 'Harry Potter and the Escape from Gringotts',
+  'mummy': 'Revenge of the Mummy',
+  'revenge of the mummy': 'Revenge of the Mummy',
+  'revenge of the mummy - the ride': 'Revenge of the Mummy',
+  'men in black': 'Men in Black Alien Attack',
+  'men in black alien attack!': 'Men in Black Alien Attack',
+  'the cat in the hat': 'The Cat in the Hat',
+  'skull island reign of kong': 'Skull Island: Reign of Kong',
+  'amazing adventure of spider-man': 'The Amazing Adventures of Spider-Man',
+  'velocicoaster': 'Jurassic World VelociCoaster',
+  "hagrid's motorbike": "Hagrid's Magical Creatures Motorbike Adventure",
+  // California Adventure
+  'monsters to the rescue!': 'Monsters, Inc. Mike & Sulley to the Rescue!',
+  'monsters, inc. mike & sulley to the rescue!': 'Monsters, Inc. Mike & Sulley to the Rescue!',
+  'midway': 'Toy Story Midway Mania!',
+  'mission: breakout!': 'Guardians of the Galaxy - Mission: Breakout!',
+  'guardians of the galaxy - mission: breakout!': 'Guardians of the Galaxy - Mission: Breakout!',
+};
+
+/** The lookup key: lower case, straight apostrophes, plain hyphens, no wrapping quotes. */
+export function rideNameKey(name: string): string {
+  return name.toLocaleLowerCase('en-US')
+    .replace(/[\u2018\u2019\u02BC]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\s*[\u2013\u2014]\s*/g, ' - ')
+    .replace(/^"+|"+$/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
 export function plainRideName(name: string | null | undefined): string {
   if (typeof name !== 'string') return '';
-  return name.replace(MARKS, '').replace(/\s{2,}/g, ' ').trim();
+  const plain = name.replace(MARKS, '').replace(/\s{2,}/g, ' ').trim();
+  return RIDE_DISPLAY_NAMES[rideNameKey(plain)] ?? plain;
 }
 
 /** The same, for a list of rows with a `name` (returns new rows only when one changed). */
@@ -15,6 +85,17 @@ export function withPlainNames<T extends { name: string }>(rows: readonly T[]): 
   return rows.map(row => {
     const plain = plainRideName(row.name);
     return plain === row.name ? row : { ...row, name: plain };
+  });
+}
+
+/** The same for any name field ("ride_name", "task_name") on a list of rows. */
+export function withPlainField<T>(rows: readonly T[] | null | undefined, key: keyof T & string): T[] {
+  if (!Array.isArray(rows)) return rows as unknown as T[];
+  return rows.map(row => {
+    const value = row && typeof row === 'object' ? (row as Record<string, unknown>)[key] : undefined;
+    if (typeof value !== 'string') return row;
+    const plain = plainRideName(value);
+    return plain === value ? row : { ...row, [key]: plain };
   });
 }
 

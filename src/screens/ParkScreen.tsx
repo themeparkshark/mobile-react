@@ -46,6 +46,8 @@ import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day
 import { guide } from '../services/guide/nextCoin';
 import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
+import { openingTab } from '../services/collection/shelfModel';
+import Reanimated, { FadeIn } from 'react-native-reanimated';
 import { milestoneToday, nextTrophy, nextTrophyLine, partsWaiting, TROPHY_HELP, shelfCountLabel, shelfTabs, shelfTotals, storyOnTop,
   directoryNextCoin, landingTab, recapWaitMs, shownShelfTab, tabForSlot, visibleSecretSlots, visibleTabs, type ShelfTab } from '../services/collection/shelfModel';
 
@@ -325,11 +327,13 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   
   // Trigger park tutorial on first visit
   useEffect(() => {
-    if (isFocused && tutorialReady && !loading && !tutorialActive && !receivedArrival.current && !hasCompleted('park')) {
-      const timer = setTimeout(() => startTutorial('park'), 1000);
+    // Fix w3 T128: Finn's lesson waits for a painted shelf, never over a failed or blank one.
+    if (isFocused && tutorialReady && !loading && !!currentPark && !progressStale && !tutorialActive && !receivedArrival.current && !hasCompleted('park')) {
+      // Away from the park (home PLAN) the card has no GO, so Finn's line says what to tap there (T136).
+      const timer = setTimeout(() => startTutorial('park', { inPark: inThisPark }), 1000);
       return () => clearTimeout(timer);
     }
-  }, [isFocused, tutorialReady, loading, tutorialActive, hasCompleted, startTutorial]);
+  }, [isFocused, tutorialReady, loading, tutorialActive, hasCompleted, startTutorial, inThisPark, currentPark, progressStale]);
 
   const silver =
     currentPark && currentPark.park_coins_count >= 50
@@ -369,6 +373,16 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const shownSecret = visibleSecretSlots(secretTasks, completedSecretTasks, coinLevels.open);
   // Keep the landing's tab after the coin lands, so the shelf never jumps back to Rides under it.
   useEffect(() => { if (arrivalTab) setTab(arrivalTab); }, [arrivalTab]);
+  // Fix w3 T128: on its first paint for this park the shelf opens on the tab that holds your coins (a
+  // sights-only shelf opens on Sights, not "Rides 0 of 25"). A coin link or a landing coin picks its own tab.
+  const openedTabFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (loading || !currentPark || focusSlot || requestKey || openedTabFor.current === String(park)) return;
+    openedTabFor.current = String(park);
+    const owned = new Set(completedTasks.map(task => task.id));
+    const first = openingTab(split, limitedShelf, owned, tabs);
+    if (first !== 'rides') setTab(first);
+  }, [loading, currentPark, focusSlot, requestKey, park, completedTasks, split, limitedShelf, tabs]);
   // The story's place is decided when the shelf paints (placedRecap), never after: a story that comes in
   // later sits below the shelf until the next visit, so nothing jumps over the shelf under the thumb.
   // One exception: the map says this park day just ended (park_day_done). The day's story goes on top of
@@ -564,6 +578,9 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
         <Loading />
       </ImageBackground>}
       {!loading && (
+        // Fix w3 T128: the shelf arrives as one short fade (240 ms) after the loading shark, not in stages;
+        // a shelf seeded by a win paints at once (no fade over the flying coin), and Reduce Motion skips it.
+        <Reanimated.View style={{ flex: 1 }} entering={seed || reducedMotion ? undefined : FadeIn.duration(240)}>
         <View ref={frameRef} collapsable={false} onLayout={event => {
           const { width: frameWidth, height: frameHeight } = event.nativeEvent.layout;
           const previous = arrivalFrameSize.current;
@@ -846,6 +863,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
               </Pressable>
             </View>}
         </View>
+        </Reanimated.View>
       )}
     </Wrapper>
   );

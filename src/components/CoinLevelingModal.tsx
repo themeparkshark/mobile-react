@@ -47,6 +47,7 @@ function ridDay(iso: string): string {
 }
 import * as RootNavigation from '../RootNavigation';
 import OneTimeTip from './help/OneTimeTip';
+import RideFactLine from './collection/RideFactLine';
 import CoinTopUpOffer from './money/CoinTopUpOffer';
 import { storeAvailable } from '../services/purchases';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
@@ -149,7 +150,12 @@ export default function CoinLevelingModal({
   const coinPop = useSharedValue(1);
   const coinShake = useSharedValue(0);
   const successIn = useSharedValue(0);
-  const coinStyle = useAnimatedStyle(() => ({ transform: [{ scale: coinPop.value }, { translateX: coinShake.value }] }));
+  // Fix w3 T141: the coin flips over to its new level, so the level-up is the coin itself changing, not only
+  // a pill. A flat flip (the coin narrows to its edge and springs back wide) on the UI thread: a 3D rotateY
+  // passed behind the card's blue header and cut the coin in half on iOS.
+  const coinFlip = useSharedValue(1);
+  const coinStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.04, coinFlip.value) },
+    { scale: coinPop.value }, { translateX: coinShake.value }] }));
   const successStyle = useAnimatedStyle(() => ({
     transform: [{ scale: Math.max(0, successIn.value) }, { rotate: `${-15 * (1 - Math.min(1, successIn.value))}deg` }],
   }));
@@ -191,7 +197,7 @@ export default function CoinLevelingModal({
   const [fanScale, setFanScale] = useState(1.5);
   const budget = usePowerBudget();
   const [slowServer, setSlowServer] = useState(false);
-  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake].forEach(value => cancelUi(value)); };
+  const stopUiShow = () => { [charge, gold, bloom, sparkle, sparkle2, shine, ringPulse, bloomOut, slow, coinShake, coinFlip].forEach(value => cancelUi(value)); coinFlip.value = 1; };
   const chargeStyle = useAnimatedStyle(() => ({ transform: [{ scaleX: Math.max(0.001, charge.value) }] }));
   // 0 while charging, 1 once the server is slow (scheduled on the UI thread with the charge).
   const slow = useSharedValue(0);
@@ -397,7 +403,6 @@ export default function CoinLevelingModal({
           bloom.value = uiSequence(uiTiming(1, { duration: 140, easing: EASE.out }), uiTiming(0, { duration: DURATION.bloom, easing: EASE.out }));
           sparkle.value = uiTiming(1, { duration: DURATION.sparkle });
           if (payoff.sparkleWaves === 2) sparkle2.value = uiDelay(240, uiTiming(1, { duration: DURATION.sparkle }));
-          shine.value = uiDelay(380, uiTiming(1, { duration: 620, easing: EASE.inOut }));
           // The big fan peaks and then stays lit behind the card by tier: Legendary keeps most of it.
           bloomOut.value = uiSequence(uiTiming(payoff.fanPeak, { duration: 160, easing: EASE.out }),
             uiDelay(500, uiTiming(payoff.fanHold, { duration: 700, easing: EASE.out })));
@@ -412,6 +417,13 @@ export default function CoinLevelingModal({
           coinPop.value = 1; successIn.value = 1;
         } else {
           coinPop.value = uiSequence(uiTiming(1.35, { duration: 140, easing: EASE.out }), uiSpring(1, SPRING.pop));
+          // The flip: a quick turn onto its edge, then the new face springs round and settles (T141).
+          coinFlip.value = 1;
+          coinFlip.value = uiSequence(uiTiming(0.04, { duration: 160, easing: EASE.in }), uiSpring(1, SPRING.pop));
+          // The new rim catches the light twice more after the first sweep, then rests (no idle loop).
+          shine.value = uiDelay(380, uiSequence(uiTiming(1, { duration: 620, easing: EASE.inOut }), uiTiming(0, { duration: 0 }),
+            uiDelay(700, uiTiming(1, { duration: 620, easing: EASE.inOut })), uiTiming(0, { duration: 0 }),
+            uiDelay(900, uiTiming(1, { duration: 620, easing: EASE.inOut }))));
           // The success card springs in from an effect once it is mounted (see the state effect), never before.
         }
 
@@ -624,6 +636,10 @@ export default function CoinLevelingModal({
                   </TouchableOpacity>
                 </Reanimated.View>
 
+                {/* Something true about the ride (fix w3 T124, T137): its land and one fan note. Not during the level-up. */}
+                {state !== 'leveling' && state !== 'success' && <RideFactLine rideName={rideCoin.ride_name}
+                  parkId={(rideCoin as { park_id?: number | null }).park_id ?? null} style={{ marginTop: 6, marginBottom: 6 }} />}
+
                 {/* ── Ride Name ── */}
                 <UpperText style={{
                   fontFamily: 'Shark',
@@ -796,6 +812,11 @@ export default function CoinLevelingModal({
                 {/* ══════════════════════════════════════ */}
                 {!showEditions && (state === 'preview' || state === 'confirm') && !isMaxLevel && (
                   <>
+                    {/* First look at a coin card: what leveling costs and does, once. It sits above the cost box
+                        (fix w3 T127): under it, its OK sat where GET 1 RIDE PART slid up to once the tip left, so the
+                        same tap closed the whole card. Here nothing tappable moves under the finger. */}
+                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact
+                      style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     {/* ── Upgrade Cost Section ── */}
                     <View style={{
                       width: '100%',
@@ -960,9 +981,6 @@ export default function CoinLevelingModal({
                         {upgradeError}
                       </Text>
                     </View>}
-                    {/* First look at a coin card: what leveling costs and does, once. */}
-                    <OneTimeTip id="coin_card" ready={visible && state === 'preview'} compact
-                      style={{ alignSelf: 'stretch', marginBottom: 8 }} />
                     {/* ── Level Up Button ── */}
                     {canLevelUp || !missingAction ? <YellowButton
                       text="Level Up!"
@@ -1273,13 +1291,13 @@ function TierRim({ level, size }: { readonly level: number; readonly size: numbe
   const tier = coinTier(level);
   if (tier.level < 2) return null;
   // A metal band: a dark outer edge, a thick band in the tier colour and a bright inner lip.
-  const d = size + 16;
+  const d = size + 18;
   const band = d - 6;
-  const lip = band - 16;
+  const lip = band - 20;
   return (
     <View pointerEvents="none" style={{ position: 'absolute', width: d, height: d, borderRadius: d / 2, borderWidth: 3,
       borderColor: tier.ringDeep, alignItems: 'center', justifyContent: 'center' }}>
-      <View style={{ width: band, height: band, borderRadius: band / 2, borderWidth: 8, borderColor: tier.ring,
+      <View style={{ width: band, height: band, borderRadius: band / 2, borderWidth: 10, borderColor: tier.ring,
         alignItems: 'center', justifyContent: 'center' }}>
         <View style={{ width: lip, height: lip, borderRadius: lip / 2, borderWidth: 2, borderColor: tier.ringDeep }} />
       </View>

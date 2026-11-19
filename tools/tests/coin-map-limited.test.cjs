@@ -12,8 +12,10 @@ const IN = { active: true, ends_at: '2026-11-01T07:00:00+00:00', ends_on: '2026-
 const OUT = { active: false, ends_at: null, ends_on: null, returns: true };
 
 test('limited badges read as real dates: "Limited · leaves Oct 31" or "returns later"', () => {
-  assert.equal(limitedCoins.limitedLabel(IN), 'Limited · leaves Oct 31');
-  assert.equal(limitedCoins.limitedLabel({ ...IN, ends_on: '2026-12-01' }), 'Limited · leaves Dec 1');
+  // Fix w3 T228: the date in words, with its day.
+  assert.equal(limitedCoins.limitedLabel(IN), 'Limited · leaves Saturday, Oct 31');
+  assert.equal(limitedCoins.limitedLabel({ ...IN, ends_on: '2026-12-01' }), 'Limited · leaves Tuesday, Dec 1');
+  assert.equal(limitedCoins.limitedDayLabel('2026-11-30'), 'Monday, Nov 30');
   assert.equal(limitedCoins.limitedLabel(OUT), 'Limited · returns later');
   assert.equal(limitedCoins.limitedLabel({ ...IN, ends_on: null }), 'Limited');
   assert.equal(limitedCoins.limitedLabel(null), null, 'a permanent coin has no badge');
@@ -112,9 +114,12 @@ test('map markers: the limited badge sits under rush, adventure and goal', () =>
   assert.equal(m.markerBadge({ rush: true, adventure: false, goal: false, owned: false, limited: true }), 'rush');
   assert.equal(m.markerBadge({ rush: false, adventure: false, goal: false, owned: false }), 'new');
   const marker = fs.readFileSync('src/screens/ExploreScreen/TaskMarker.tsx', 'utf8');
-  assert.match(marker, /task\.limited\?\.active \? limitedLabel\(task\.limited\)/);
-  // One chip per island (the declutter places it): rush, adventure and goal outrank the leave date.
-  assert.match(marker, /tagKind === 'limited' && limited/);
+  // Fix w3 T228: the kid's map shows no Limited tag or date (the shelf does); the island keeps its shimmer.
+  assert.match(marker, /const limited: string \| null = task\.limited\?\.active \? '' : null;/);
+  assert.match(marker, /limited: false, selected: isSelected/);
+  assert.match(marker, /\{limited !== null && <LimitedShimmer/);
+  assert.doesNotMatch(fs.readFileSync('src/screens/ExploreScreen.tsx', 'utf8'), /limitedText: task\.limited\?\.active/);
+  assert.match(fs.readFileSync('src/screens/ParkCollectionHeader.tsx', 'utf8'), /`These limited coins leave \$\{limitedLeaves\}`/);
 });
 
 test('a limited coin out of rotation explains itself and cannot be played', () => {
@@ -127,7 +132,7 @@ test('a limited coin out of rotation explains itself and cannot be played', () =
   });
   const base = { isSecret: false, isArchived: false, isResting: false, kind: 'ride' };
   assert.equal(unfoundCoinCopy({ ...base, limited: IN }).ribbon, 'Limited Coin');
-  assert.equal(unfoundCoinCopy({ ...base, limited: IN }).hint, 'Here until Oct 31. Win it before then.');
+  assert.equal(unfoundCoinCopy({ ...base, limited: IN }).hint, 'Here until Saturday, Oct 31. Win it before then.');
   assert.match(unfoundCoinCopy({ ...base, limited: OUT }).hint, /comes back later/);
   assert.equal(unfoundCoinCopy({ ...base, limited: OUT }).challenge, 'PLAY! at the ride');
   assert.equal(unfoundCoinCopy(base).ribbon, 'Ride Coin');

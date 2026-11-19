@@ -60,7 +60,7 @@ test('T094: a stamp that did not come through stays on the row with RETRY, and t
   const retry = model.rewardsRows({ ...base, stamps: { claimable: 1, retry: true } }).find(r => r.key === 'stamps');
   assert.equal(retry.action, 'retry');
   assert.equal(retry.ready, 1);
-  assert.equal(retry.line, '1 stamp prize is still waiting');
+  assert.equal(retry.line, 'Tickets from 1 stamp still waiting', 'merge w3: lane shelf T126 retires the words stamp prize');
   assert.equal(model.stampClaimNote({ coins: 0, tickets: 1, energy: 0, xp: 95 }, 1), '+1 Ticket, +95 XP. 1 stamp is still waiting. Tap RETRY.');
   assert.equal(model.stampClaimNote({ coins: 0, tickets: 0, energy: 0, xp: 0 }, 2), '2 stamps are still waiting. Tap RETRY.');
   assert.equal(model.stampClaimNote({ coins: 55, tickets: 0, energy: 20, xp: 95 }, 0), '+55 Shark Coins, +20 Energy, +95 XP');

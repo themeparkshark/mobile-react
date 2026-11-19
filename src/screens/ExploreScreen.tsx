@@ -1,3 +1,4 @@
+import { parkLabel } from '../helpers/parkName';
 import { homeLevelUpCoin, useCoinCollection } from '../context/CoinCollection';
 import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
 import Constants from 'expo-constants';
@@ -136,7 +137,6 @@ import { openableKeys } from '../services/liveEvents/model';
 import { createDeclutterStore } from '../components/map/declutter/store';
 import type { MapDeclutterInput } from '../components/map/declutter/useMapDeclutter';
 import { offsetMeters, validPoint } from '../components/map/fright/geo';
-import { limitedLabel } from '../services/collection/limitedCoins';
 import FindMarker from './ExploreScreen/FindMarker';
 import { SLOTS, useMarkerSlots } from '../components/map/markerSlots';
 import { PARKED } from '../components/map/Marker';
@@ -1476,7 +1476,8 @@ export function ExploreScreenBody() {
     const selected = selectedTask?.id === task.id;
     const near = (taskDistance.get(task.id) ?? Infinity) <= 60;
     const tag = rideTagFor({ selected, rush, adventure: adventureTaskId === task.id, goal: goalTaskId === task.id,
-      owned: (task.times_completed ?? 0) > 0, limitedText: task.limited?.active ? limitedLabel(task.limited) : null, name: task.name,
+      // Fix w3 T228: no Limited tag on the map (the shelf shows it, with its date in words).
+      owned: (task.times_completed ?? 0) > 0, limitedText: null, name: task.name,
       expiresAt: gameTimestamp(task.active_to), near, now: mapNow, closed });
     // The guide's target island keeps a pick's priority: it never folds away or hides while it is the target (core loop 4.1).
     return { id: task.id, latitude: Number(task.latitude), longitude: Number(task.longitude), selected,
@@ -2041,7 +2042,7 @@ export function ExploreScreenBody() {
           accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
           style={{ position: 'absolute', top: slotTop, left: 0, right: GUIDE_CARD_RIGHT, height: GUIDE_CARD_HEIGHT + 8, zIndex: 40 }} />}
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
-        {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ?? null}
+        {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ? parkLabel(park) : null}
           coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}

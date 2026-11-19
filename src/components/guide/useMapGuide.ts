@@ -6,6 +6,7 @@
  * ExploreScreen calls it once, where its old inline block was; nothing here draws.
  * Owned by the guide-map lane.
  */
+import { parkLabel } from '../../helpers/parkName';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { TaskType } from '../../models/task-type';
 import type { PlayerType } from '../../models/player-type';
@@ -138,7 +139,7 @@ export default function useMapGuide(input: MapGuideInput) {
     return model && !visibleTasks.some(task => task.id === model.id) ? [...visibleTasks, model] : visibleTasks;
   }, [visibleTasks, playUp]);
   const nextCoin = useNextCoinGuide({
-    enabled: !!player && !!park, ready: guideReady, tripGoalLoaded: !!tripGoalData, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
+    enabled: !!player && !!park, ready: guideReady, tripGoalLoaded: !!tripGoalData, parkId: park?.id ?? null, parkName: park ? parkLabel(park) : null, location,
     tasks: guideTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null, dwellRideName: queueDwell?.rideName ?? null,
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,

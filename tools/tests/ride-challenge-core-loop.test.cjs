@@ -417,12 +417,18 @@ const win = loadTs('src/components/rewards/postWinModel.ts');
 test('the win card\'s shelf line: coins and wins each say their own unit (fix round W1 item 16)', () => {
   const at = (collected, available, wins) => win.shelfLine({ milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 0, collected, available }, next: null }, wins);
   // Trophies count wins (repeats too), so the trophy half reads the park's wins, never the coin count.
-  assert.equal(at(10, 35, 11), '10 of 35 coins. 1 more win for Bronze');
-  assert.equal(at(1, 35, 1), '1 of 35 coins. 11 more wins for Bronze');
-  assert.equal(at(13, 60, 20), '13 of 60 coins. 30 more wins for Silver', 'a small shelf still reaches Silver with repeat wins');
-  assert.equal(at(10, 35, null), '10 of 35 coins', 'no wins known: no trophy half, never "Bronze at 12" next to a coin count');
-  assert.equal(at(35, 35, 40), '35 of 35 coins. Shelf complete!');
+  // Fix w3 T123: the coins say where they are; the trophy is its own line.
+  assert.equal(at(10, 35, 11), '10 of 35 coins on your shelf');
+  assert.equal(win.trophyToGoLine(11), 'Bronze trophy: 1 more win');
+  assert.equal(win.trophyToGoLine(1), 'Bronze trophy: 11 more wins');
+  assert.equal(win.trophyToGoLine(20), 'Silver trophy: 30 more wins', 'a small shelf still reaches Silver with repeat wins');
+  assert.equal(win.trophyToGoLine(null), null, 'no wins known: no trophy line');
+  assert.equal(at(35, 35, 40), '35 of 35 coins on your shelf. Shelf complete!');
   assert.equal(win.shelfLine(null), null);
+  const line = win.winShelfLine({ milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 14, collected: 15, available: 35 }, next: null }, null, true, 15);
+  assert.equal(line.text, '15 of 35 coins on your shelf');
+  assert.equal(line.sub, 'Silver trophy: 35 more wins');
+  assert.doesNotMatch(read('src/components/rewards/postWinModel.ts'), /more \$\{[^}]*\} for \$\{/, 'never one line mixing coins and wins');
 });
 
 test('the win that reaches a trophy is its moment on the win card (fix round W1 item 17)', () => {
@@ -863,7 +869,7 @@ test('the win card answers a tap at once, and its shelf picture never depends on
   assert.equal(win.winButtonLabel(story, 'primary'), 'One moment', 'a story lookup never looks like a dead tap');
   assert.equal(win.winButtonLabel({ kind: 'map', label: 'Back to Map', detail: null }, 'primary'), 'Back to Map');
   const shelf = { milestones: [], progress: { park_id: 8, park_name: 'Disneyland', before: 0, collected: 1, available: 35 }, next: null };
-  assert.deepEqual({ ...win.winShelfLine(shelf, null, true, 1) }, { text: '1 of 35 coins. 11 more wins for Bronze', icon: 'trophyBronze' });
+  assert.deepEqual({ ...win.winShelfLine(shelf, null, true, 1) }, { text: '1 of 35 coins on your shelf', sub: 'Bronze trophy: 11 more wins', icon: 'trophyBronze' });
   assert.deepEqual({ ...win.winShelfLine(null, { active: true }, true) }, { text: 'Limited coin. Yours to keep!', icon: 'sparkle' });
   assert.equal(win.winShelfLine(null, { active: true }, false), null, 'a limited coin won again keeps quiet');
   assert.equal(win.winShelfLine(null, null, true), null);

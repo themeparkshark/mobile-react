@@ -6,10 +6,12 @@
 import type { LimitedWindow, TaskType } from '../../models/task-type';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 /**
- * "2026-10-31" -> "Oct 31". The server sends the last park-local day, so it is
- * read as a plain calendar date (never shifted through UTC). Null otherwise.
+ * "2026-11-30" -> "Monday, Nov 30" (fix w3 T228: the date in words, with its day). The server
+ * sends the last park-local day, so it is read as a plain calendar date (never shifted through
+ * UTC). Null otherwise.
  */
 export function limitedDayLabel(day: string | null | undefined): string | null {
   const match = day ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(day.trim()) : null;
@@ -17,10 +19,10 @@ export function limitedDayLabel(day: string | null | undefined): string | null {
   const [year, month, date] = [Number(match[1]), Number(match[2]), Number(match[3])];
   const value = new Date(Date.UTC(year, month - 1, date));
   if (value.getUTCMonth() !== month - 1 || value.getUTCDate() !== date) return null;
-  return `${MONTHS[month - 1]} ${date}`;
+  return `${WEEKDAYS[value.getUTCDay()]}, ${MONTHS[month - 1]} ${date}`;
 }
 
-/** "Limited · leaves Oct 31" in rotation, "Limited · returns later" out of it; null for a permanent coin. */
+/** "Limited · leaves Monday, Nov 30" in rotation, "Limited · returns later" out of it; null for a permanent coin. */
 export function limitedLabel(limited: LimitedWindow | null | undefined): string | null {
   if (!limited) return null;
   if (!limited.active) return limited.returns ? 'Limited · returns later' : 'Limited';

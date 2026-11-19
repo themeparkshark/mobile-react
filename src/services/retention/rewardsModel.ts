@@ -82,9 +82,10 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
     }
   }
   if (i.stamps && i.stamps.claimable > 0) {
+    // Fix w3 T094 (retry) and T126 (stamp Tickets, one name): never "stamp prizes".
     rows.push(i.stamps.retry
-      ? { key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize is', 'stamp prizes are')} still waiting`, ready: i.stamps.claimable, action: 'retry' }
-      : { key: 'stamps', title: 'Stamps', line: `${plural(i.stamps.claimable, 'stamp prize', 'stamp prizes')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
+      ? { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} still waiting`, ready: i.stamps.claimable, action: 'retry' }
+      : { key: 'stamps', title: 'Stamps', line: `Tickets from ${plural(i.stamps.claimable, 'stamp', 'stamps')} to claim`, ready: i.stamps.claimable, action: 'claim_all' });
   }
   if (i.events && i.events.chests > 0) {
     rows.push({ key: 'events', title: 'Event Chests', line: `${plural(i.events.chests, 'chest', 'chests')} to open`, ready: i.events.chests, action: i.events.door !== false ? 'open' : null });

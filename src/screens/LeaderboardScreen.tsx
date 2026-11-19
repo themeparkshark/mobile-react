@@ -25,6 +25,9 @@ import { onStandingsDemo, startStandingsDemo } from './LeaderboardsScreen/standi
 import { defaultStandingsTab, initialStandingsV2Tab, standingsV2Tabs, tabPillGeometry, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
+// Fix w3 T219: Standings sits on the plain seabed plate, never the backdrop with coin piles.
+import { SEABED_PLATE as STANDINGS_SEABED } from '../constants/backdrops';
+
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
 
 /**
@@ -137,7 +140,7 @@ function StandingsShell({ children }: { readonly children: React.ReactNode }) {
         </TopbarColumn>
       </Topbar>
       <View style={{ marginTop: -8, flex: 1 }}>
-        <ImageBackground style={{ flex: 1 }} source={require('../../assets/images/screens/leaderboard/standings-bg.png')}>
+        <ImageBackground style={{ flex: 1 }} source={STANDINGS_SEABED}>
           {children}
         </ImageBackground>
       </View>
@@ -264,7 +267,7 @@ function LegacyStandings() {
           style={{
             flex: 1,
           }}
-          source={require('../../assets/images/screens/leaderboard/standings-bg.png')}
+          source={STANDINGS_SEABED}
         >
           <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} onChange={index => {
             if (activeTab !== index) playSound(whooshSound);

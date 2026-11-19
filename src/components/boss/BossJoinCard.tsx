@@ -31,7 +31,7 @@ import { endsAtWords } from '../../helpers/calmTime';
 export function Wallet({ energy, tickets, showTickets, short }: {
   energy: number; tickets: number; showTickets: boolean; short: 'energy' | 'ticket' | null;
 }) {
-  return <View style={styles.wallet} accessible accessibilityLabel={`You have ${energy} Energy${showTickets ? ` and ${tickets} Tickets` : ''}`}>
+  return <View style={styles.wallet} accessible accessibilityLabel={`You have ${energy} Energy${showTickets ? ` and ${tickets} ${tickets === 1 ? 'Ticket' : 'Tickets'}` : ''}`}>
     <View style={[styles.walletItem, short === 'energy' && styles.walletShort]}><GameIcon name="energy" size={22} />
       <Text style={styles.walletNum} maxFontSizeMultiplier={1.3}>{countText(energy)}</Text>
       {short === 'energy' && <View style={styles.bang}><Text style={styles.bangText}>!</Text></View>}</View>
@@ -177,7 +177,7 @@ export function BossJoinCta({ raid, remote, inPark = false, energy, tickets, blo
       <Animated.View style={pulseStyle}>
         <Pressable testID="boss-fight" accessibilityRole="button" disabled={off} onPress={onFight}
           accessibilityState={{ disabled: off, busy: starting }}
-          accessibilityLabel={`${label}. Costs ${cost.ticket ? `${cost.ticket} Ticket and ` : ''}${cost.energy} Energy. You have ${energy} Energy${cost.ticket ? ` and ${tickets} Tickets` : ''}.`}
+          accessibilityLabel={`${label}. Costs ${cost.ticket ? `${cost.ticket} ${cost.ticket === 1 ? 'Ticket' : 'Tickets'} and ` : ''}${cost.energy} Energy. You have ${energy} Energy${cost.ticket ? ` and ${tickets} ${tickets === 1 ? 'Ticket' : 'Tickets'}` : ''}.`}
           style={({ pressed }) => [styles.cta, off && styles.ctaOff, pressed && { transform: [{ scale: 0.97 }] }]}>
           <Text style={[styles.ctaText, off && styles.ctaTextOff]} numberOfLines={1} adjustsFontSizeToFit maxFontSizeMultiplier={1.2}>
             {starting ? 'GETTING READY...' : label}</Text>

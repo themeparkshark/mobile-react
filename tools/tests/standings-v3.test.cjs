@@ -354,7 +354,7 @@ test('r7: podium beats TOP 10 on a tie (#12), reduced-motion haptic, climbing la
   // First paint: the pill is final from frame one (next Monday 00:00 Pacific).
   const mon = Date.parse('2026-10-05T18:00:00Z'); // Monday 11:00 PDT
   assert.equal(model.expectedWeekEnd(mon), '2026-10-12T07:00:00.000Z');
-  assert.equal(model.weekLeft(model.expectedWeekEnd(mon), mon).label, '7 days left');
+  assert.equal(model.weekLeft(model.expectedWeekEnd(mon), mon).label, 'Ends Sunday, Oct 11', 'fix w3 T138: the last day by name');
   const sunLate = Date.parse('2026-10-12T06:30:00Z'); // Sunday 23:30 PDT
   assert.equal(model.expectedWeekEnd(sunLate), '2026-10-12T07:00:00.000Z');
   const winter = Date.parse('2026-12-02T20:00:00Z'); // Wednesday, PST

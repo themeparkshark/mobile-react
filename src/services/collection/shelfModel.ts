@@ -51,6 +51,20 @@ export function shelfTabs<T extends { readonly id: number }>(permanent: readonly
 }
 
 /** The tabs a park shows, in order. Limited shows while a rotation or a past event has coins. */
+/**
+ * The tab a shelf opens on (fix w3 T128): the one that holds your coins. A player whose only coins are
+ * sights opens on Sights, never on an empty "Rides 0 of 25"; one whose only coin is limited opens on
+ * Limited. Rides when you own a ride (or nothing yet).
+ */
+export function openingTab(split: { readonly rides: readonly { readonly id: number }[]; readonly sights: readonly { readonly id: number }[] },
+  limited: readonly { readonly id: number }[], ownedIds: ReadonlySet<number>, tabs: readonly ShelfTab[]): ShelfTab {
+  const owns = (rows: readonly { readonly id: number }[]) => rows.some(row => ownedIds.has(row.id));
+  if (owns(split.rides)) return 'rides';
+  if (tabs.includes('sights') && owns(split.sights)) return 'sights';
+  if (tabs.includes('limited') && owns(limited)) return 'limited';
+  return 'rides';
+}
+
 export function visibleTabs(split: boolean, sightsCount: number, limitedCount: number, pastCount: number): ShelfTab[] {
   const tabs: ShelfTab[] = ['rides'];
   if (split && sightsCount > 0) tabs.push('sights');

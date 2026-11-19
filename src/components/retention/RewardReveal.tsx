@@ -84,7 +84,8 @@ export default function RewardReveal({ subtitle, closedArt, openArt, rewards, op
   const [stage, setStage] = useState<{ x: number; y: number } | null>(null);
   const rows = (rewards ? rewardRows(rewards) : [])
     .filter(r => pinBoxes || r.kind !== 'mystery_boxes')
-    .map(r => (energySaved && r.kind === 'energy' ? { ...r, label: 'Energy for growing coins' } : r));
+    // Fix w3 T125: Energy is called Energy everywhere (the reward row's own label), never a second name.
+    .map(r => (energySaved && r.kind === 'energy' ? { ...r, label: 'Energy' } : r));
   const revealed = !!rewards;
   const timers = useRef<ReturnType<typeof setTimeout>[]>([]);
   const scroll = useRef<ScrollView>(null);

@@ -231,8 +231,19 @@ test('Park Day shares only coin counts and coin art: never park, day, rides, mom
     moments: [{ type: 'new_coin', title: 'Collected Revenge of the Mummy coin', at: '2026-10-02T14:10:00Z' }],
   };
   const payload = JSON.parse(JSON.stringify(parkDayFlexPayload(recap)));
-  assert.deepEqual(Object.keys(payload).sort(), ['coinUrls', 'coinsCaught', 'newCoins']);
-  assert.deepEqual(payload, { coinsCaught: 7, newCoins: 3, coinUrls: ['https://cdn.example/a.png'] });
+  // Fix w3 T130: the line minutes and level ups ride along as plain numbers (still no names).
+  assert.deepEqual(Object.keys(payload).sort(), ['coinUrls', 'coinsCaught', 'extraStats', 'newCoins']);
+  assert.deepEqual(payload, { coinsCaught: 7, newCoins: 3, extraStats: [{ value: 36, label: 'MIN IN LINE' }, { value: 1, label: 'LEVEL UP' }],
+    coinUrls: ['https://cdn.example/a.png'] });
+  const { flexCopy, parkDaySub } = loadTs('src/share/copy.ts');
+  assert.equal(parkDaySub(payload.extraStats), '36 min in line \u00b7 1 level up');
+  assert.equal(flexCopy('park_day', payload).sub, '36 min in line \u00b7 1 level up');
+  assert.equal(parkDaySub([]), null);
+  // The in-app story names the day's coins (never the share card): new first, one per coin.
+  const { parkDayCoinRow } = loadTs('src/share/parkDay.ts');
+  assert.deepEqual(JSON.parse(JSON.stringify(parkDayCoinRow({ coins: [{ asset_id: 2, ride_name: 'Hulk', coin_url: null, new: false },
+    { asset_id: 1, ride_name: 'Pirates of the Caribbean', coin_url: 'u', new: true }, { asset_id: 1, ride_name: 'x', coin_url: 'u', new: true }] }))),
+    [{ assetId: 1, name: 'Pirates of the Caribbean', url: 'u', isNew: true }, { assetId: 2, name: 'Hulk', url: null, isNew: false }]);
   const json = JSON.stringify(payload);
   for (const leak of ['Universal', 'Mummy', 'Hulk', '2026', 'kiddo', 'America/']) assert.ok(!json.includes(leak), leak);
 

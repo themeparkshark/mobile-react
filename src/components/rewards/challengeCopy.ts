@@ -20,15 +20,37 @@ export function coinName(name: string | null | undefined): string {
 }
 
 /**
- * The challenge card's title: "Win the Walt Statue coin". A long name keeps
- * the short title ("Win this coin") on the ribbon; the coin's own name sits
- * under its picture. Secret coins say so.
+ * A long ride name's ribbon form: the part after a colon ("Smugglers Run"), without a franchise
+ * lead-in ("Harry Potter and the Forbidden Journey" says "Forbidden Journey").
+ */
+export function ribbonCoinName(name: string): string {
+  let out = coinName(name);
+  const colon = out.lastIndexOf(':');
+  if (colon > 0 && out.slice(colon + 1).trim().length >= 4) out = out.slice(colon + 1).trim();
+  out = out.replace(/^Harry Potter and the\s+/i, '').replace(/^Walt Disney['\u2019]s\s+/i, '');
+  return coinName(out);
+}
+
+/**
+ * The challenge card's title always names the coin (fix w3 T131): "Win the Walt Statue coin". A name
+ * too long for the ribbon tries its ribbon form, then drops "Win the", and the ribbon shrinks the
+ * rest; it never falls back to "Win this coin" while the coin has a name. Secret coins say so.
  */
 export function challengeTitle(taskType: 'task' | 'secret_task' | null, name?: string | null): string {
   if (taskType === 'secret_task') return 'Win the secret coin';
   const short = coinName(name);
-  const full = short ? `Win the ${short} coin` : 'Win this coin';
-  return full.length <= RIBBON_MAX_CHARS ? full : 'Win this coin';
+  if (!short) return 'Win this coin';
+  for (const candidate of [short, ribbonCoinName(short)]) {
+    const full = `Win the ${candidate} coin`;
+    if (full.length <= RIBBON_MAX_CHARS) return full;
+  }
+  const ribbon = ribbonCoinName(short);
+  if (`${ribbon} coin`.length <= RIBBON_MAX_CHARS) return `${ribbon} coin`;
+  if (ribbon.length <= RIBBON_MAX_CHARS) return ribbon;
+  // Still too long to read on an SE: the name's first words that fit (the full name sits under the picture).
+  const head = ribbon.slice(0, RIBBON_MAX_CHARS + 1);
+  const cut = /\s/.test(head) ? head.replace(/\s+\S*$/, '').trim() : '';
+  return cut || ribbon.slice(0, RIBBON_MAX_CHARS);
 }
 
 /**
@@ -100,7 +122,7 @@ export function challengeNextStep(wallet: ChallengeWallet): FreeTicketStep | nul
 export function challengeButtonLabel(step: FreeTicketStep | null, ticketCost: number): string {
   if (!step) return ticketCost > 1 ? `PLAY! ${ticketCost} Tickets` : 'PLAY!';
   switch (step.kind) {
-    case 'claim': return `Claim ${step.tickets} free Ticket${step.tickets === 1 ? '' : 's'}`;
+    case 'claim': return `Claim ${step.tickets} stamp Ticket${step.tickets === 1 ? '' : 's'}`;
     case 'free_try': return 'PLAY! Free try';
     case 'extra_try': return 'PLAY! Extra try';
     default: return 'Ways to get Tickets';

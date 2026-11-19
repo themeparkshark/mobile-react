@@ -88,5 +88,6 @@ export function findActionLine(distanceMeters: number): string {
 export function ticketLine(findsUntilTicket: number | null | undefined, capped = false): string | null {
   if (capped || findsUntilTicket == null || !Number.isFinite(findsUntilTicket)) return null;
   const finds = Math.max(1, Math.min(3, Math.round(findsUntilTicket)));
-  return finds === 1 ? 'Free Ticket on your next find' : `${finds} more finds = free Ticket`;
+  // Fix w3 T126: home pickups are treats everywhere ("3 treats at home = 1 Ticket").
+  return finds === 1 ? '1 more treat = 1 Ticket' : `${finds} more treats = 1 Ticket`;
 }

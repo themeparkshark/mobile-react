@@ -12,7 +12,7 @@ import { SHARKY_ART } from '../assets';
 
 /** Existing Sharky art for each unlock (no new art). */
 const UNLOCK_ART: Record<string, number> = {
-  'PRIZE BOXES': SHARKY_ART.prizeBox,
+  'SEA TREASURES': SHARKY_ART.prizeBox,
   OVERDRIVE: SHARKY_ART.dash,
   'RALLY YOUR CREW': SHARKY_ART.fanCheer,
   'POWER-UPS': SHARKY_ART.sparkle,
@@ -20,7 +20,7 @@ const UNLOCK_ART: Record<string, number> = {
 
 /** What each unlock does, said when a kid taps its picture (fix W3 T069). */
 export const UNLOCK_DETAIL: Record<string, string> = {
-  'PRIZE BOXES': 'Prize boxes now float in your swims. Grab them!',
+  'SEA TREASURES': 'Sea Treasures now float in your swims. Grab them!',
   OVERDRIVE: 'Fill the bar, then zoom!',
   'RALLY YOUR CREW': 'Your crew cheers you on.',
   'POWER-UPS': 'Grab sparkles for a super swim.',

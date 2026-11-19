@@ -226,7 +226,7 @@ test('T067 the boss sheet names the Energy cost once (the FIGHT! pill); the line
 });
 test('T069 the unlock picture answers a tap with what it unlocks', () => {
   assert.match(read('src/gamekit/results/UnlockTile.tsx'), /\{told && detail \? <Text style=\{styles\.caption\} numberOfLines=\{2\}>\{detail\}<\/Text>/);
-  assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /'PRIZE BOXES': 'Prize boxes now float in your swims\. Grab them!'/);
+  assert.match(read('src/games/sharky/hud/SharkyUnlock.tsx'), /'SEA TREASURES': 'Sea Treasures now float in your swims\. Grab them!'/);
 });
 
 test('a tap beside the card while PLAY! spends the Ticket never closes it (the game would start with no card)', () => {
