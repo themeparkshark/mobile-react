@@ -65,3 +65,31 @@ test('T088: one name (Ride Tracker), the timed wait is said not asked, and the r
   assert.match(sheet, />Not this time<\/Text>/);
   assert.doesNotMatch(sheet, /DID YOU JUST RIDE|Add My Ride/);
 });
+
+test('T087: Who\'s in line? is asked once a day, first, and the loading card crossfades to the queue card', async () => {
+  const store = new Map();
+  const S = loadTs('src/services/lineplay/lineGroupStore.ts', {
+    '@react-native-async-storage/async-storage': {
+      getItem: async key => store.get(key) ?? null, setItem: async (key, value) => { store.set(key, value); },
+    },
+  });
+  const crew = { version: 1, kind: 'family', players: [{ id: 'p1', name: 'Mom', kid: false }, { id: 'p2', name: 'Ava', kid: true }],
+    rounds: [{ id: 'r1' }], active: null };
+  const morning = new Date(2026, 10, 19, 10, 0).getTime();
+  assert.equal(await S.loadDayChoice(7, morning), null, 'not asked yet today');
+  await S.saveDayChoice(7, crew, morning);
+  const later = await S.loadDayChoice(7, morning + 3 * 3600_000);
+  assert.equal(later.kind, 'family');
+  assert.equal(later.players.length, 2);
+  assert.equal(later.rounds.length, 0, 'the next wait starts its own rounds');
+  assert.equal(await S.loadDayChoice(7, morning + 24 * 3600_000), null, 'tomorrow asks again');
+  assert.equal(await S.loadDayChoice(8, morning), null, 'per player');
+  const hook = read('src/services/lineplay/useLineGroup.ts');
+  assert.match(hook, /if \(!saved\.chosen && today\) \{/);
+  assert.match(hook, /if \(id != null && group\) void saveDayChoice\(id, group\);/);
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /const holdPages = groupPlay\.asking \|\| !pagesReady;/);
+  assert.match(screen, /\{holdPages && <Reanimated\.View exiting=\{reducedFx \? undefined : FadeOut\.duration\(240\)\}/);
+  const group = read('src/screens/LinePlay/group/useGroupPlay.tsx');
+  assert.match(group, /const asking = live && !editing && \(!crew\.loaded \|\| \(!crew\.chosen && !gameOpen\)\);/);
+});

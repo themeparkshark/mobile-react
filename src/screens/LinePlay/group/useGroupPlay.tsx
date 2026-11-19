@@ -199,7 +199,14 @@ export function useGroupPlay({ session, snapshot, playerId, ownerName, pages, ga
 
   /** The crew opener or a pass-the-phone card is up: one-time tips wait. */
   const sheetOpen = (openerVisible && !mode) || !!mode;
-  return { group, wantsRound, startRound, finishTurn, overlays, strip, bandStrip, recapSlot, sheetOpen };
+  /**
+   * T087: the wait's first question is still open (its answer is loading, or "Who's in line?" is up): the screen
+   * keeps its loading card, so the question comes first and the queue card arrives after it (never under it).
+   * Editing the crew mid-wait is not this.
+   */
+  const asking = live && !editing && (!crew.loaded || (!crew.chosen && !gameOpen));
+  if (__DEV__) console.log(`[crew] live=${live} loaded=${crew.loaded} chosen=${crew.chosen} opener=${openerVisible} key=${waitKey ?? '-'} t=${Date.now()}`);
+  return { group, wantsRound, startRound, finishTurn, overlays, strip, bandStrip, recapSlot, sheetOpen, asking };
 }
 
 export type { MiniGameId };

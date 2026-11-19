@@ -142,7 +142,7 @@ test('Details opens smoothly: one commit, the crew row fades and the page window
   // No glide through a square clip (it cut glyphs mid-move), and no blink: the window dips to 35%
   // (never 0), takes its new size inside its own rounded frame, then rises once it has its new size.
   assert.equal((screen.match(/LinearTransition/g) ?? []).length, 2, 'only the rail glides (import + one use)');
-  assert.match(screen, /<Reanimated\.View style=\{\[styles\.pages, pagesFadeStyle, !pagesShown && \[styles\.pagesAside, \{ bottom: railBlock \}\]\]\}/);
+  assert.match(screen, /<Reanimated\.View style=\{\[styles\.pages, pagesFadeStyle, pagesHoldStyle, !pagesShown && \[styles\.pagesAside, \{ bottom: railBlock \}\]\]\}/);
   // Dim on the UI thread and change at once (the new layout lands while dim), rise two frames after
   // the new layout, and the UI thread caps the dim so a busy JS thread never holds it.
   assert.match(screen, /pagesFade\.value = withSequence\(withTiming\(PAGES_DIP_OPACITY, \{ duration: PAGES_DIP_MS \}\),\n\s*withDelay\(PAGES_DIM_HOLD_MAX_MS, withTiming\(1, \{ duration: PAGES_RISE_MS \}\)\)\);\n\s*revealPending\.current = true;\n\s*change\(\);/);

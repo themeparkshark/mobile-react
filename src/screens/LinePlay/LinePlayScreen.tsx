@@ -1458,6 +1458,15 @@ export default function LinePlayScreen() {
   // One gold button per screen: every page carries its own gold action (PLAY NOW, PLAY, PLAY AGAIN, the
   // board's PLAY strip), so while a page is on screen the rail's Next (and More games) is a quiet white button.
   const railQuiet = visibleItem != null;
+  // T087: the loading card stays until the first question is answered and the queue card has laid out (no blank
+  // light-blue frame), then the two crossfade (UI thread).
+  const [pagesReady, setPagesReady] = useState(false);
+  const holdPages = groupPlay.asking || !pagesReady;
+  const pagesHoldFade = useSharedValue(holdPages ? 0 : 1);
+  useEffect(() => {
+    pagesHoldFade.value = reducedFx ? (holdPages ? 0 : 1) : withTiming(holdPages ? 0 : 1, { duration: 240 });
+  }, [holdPages, reducedFx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pagesHoldStyle = useAnimatedStyle(() => ({ opacity: pagesHoldFade.value }));
   const firstCalm = firstLinePlayCalm({ played: playedEver, roundsDone: snapshot.completedActivityIds.length,
     pageKind: activityPages[visiblePageIndex]?.kind, railMode });
   // The rail fades in only when it arrives after the calm first page (never on an ordinary open).
@@ -1763,12 +1772,18 @@ export default function LinePlayScreen() {
             <>
             {/* Each page is a framed window (PageScroll) that stays put above the rail while its content scrolls.
                 When Details opens or closes, the window takes its new size unseen and fades back in; the rail never moves. */}
-            <Reanimated.View style={[styles.pages, pagesFadeStyle, !pagesShown && [styles.pagesAside, { bottom: railBlock }]]}
-              pointerEvents={pagesShown ? 'auto' : 'none'}
+            {holdPages && <Reanimated.View exiting={reducedFx ? undefined : FadeOut.duration(240)}
+              style={[styles.pagesHoldCover, { height: pagesHeight || undefined }]} pointerEvents="none">
+              <ActivitySkeleton />
+            </Reanimated.View>}
+            <Reanimated.View style={[styles.pages, pagesFadeStyle, pagesHoldStyle, !pagesShown && [styles.pagesAside, { bottom: railBlock }]]}
+              pointerEvents={pagesShown && !holdPages ? 'auto' : 'none'}
               onLayout={event => {
                 setPagesHeight(Math.round(event.nativeEvent.layout.height));
                 setPagesMeasuredLent(lentAtCommit.current);
                 revealPages();
+                // The first page lays its blocks out on the next frame or two (ChapterCard measures first).
+                if (!pagesReady) requestAnimationFrame(() => requestAnimationFrame(() => setPagesReady(true)));
               }}>
             <View ref={pagesInnerRef} style={[styles.pagesInner, !pagesShown && styles.pagesHidden]}
               accessibilityElementsHidden={!pagesShown} importantForAccessibility={pagesShown ? 'auto' : 'no-hide-descendants'}>
@@ -2219,6 +2234,7 @@ const styles = StyleSheet.create({
   activityArea: { flex: 1, marginTop: spacing.lg },
   // Clipped, so while it glides (Details open/close) the page never slides under the rail.
   pages: { flex: 1 },
+  pagesHoldCover: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 2 },
   pagesInner: { flex: 1 },
   pagesHidden: { opacity: 0 },
   // A stepped-aside window leaves the flow but keeps its size; the rail stays at the bottom.

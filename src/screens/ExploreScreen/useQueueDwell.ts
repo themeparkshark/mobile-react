@@ -136,6 +136,8 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
     const speedMps = raw && typeof raw.timestamp === 'number' && now - raw.timestamp <= 5_000 ? raw.speedMps ?? null : null;
     samples.current = [...older, ...samples.current.filter(s => now - s.at <= DWELL_STILL_MS),
       { at: now, latitude: lat, longitude: lng, speedMps }];
+    // Dev builds only: each map fix the in-line card reads (N14 proof).
+    if (__DEV__) console.log(`[dwell] fix t=${now} speed=${speedMps ?? '-'}`);
     // Walking off ends a shown offer at this fix, not at the next 10 s check.
     if (walkingNow(samples.current, now)) {
       // Dev builds only: when a walk-off ended the in-line card (N14 proof reads this).

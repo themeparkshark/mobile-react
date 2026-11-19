@@ -78,7 +78,7 @@ function LineButton({ label, onPress, title }: { label: string; onPress: () => v
     style={({ pressed }) => [styles.lineButton, pressed && styles.pressed]}>
     <Image source={LINEPLAY_ICON} style={styles.lineIcon} contentFit="contain" />
     {/* A long ride name gives way, so LINEPLAY always reads whole (N14). */}
-    {title ? <Text style={[styles.lineButtonAsk, styles.lineButtonAskShrink]} numberOfLines={1}>{title}</Text> : null}
+    {title ? <Text style={[styles.lineButtonAsk, styles.lineButtonAskShrink]} numberOfLines={2}>{title}</Text> : null}
     <Text style={styles.lineButtonText} numberOfLines={1}>{label}</Text>
   </Pressable>;
 }
@@ -224,7 +224,8 @@ const styles = StyleSheet.create({
   lineButton: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND.white, borderRadius: 12,
     borderWidth: 2, borderColor: BRAND.blueBright, borderBottomWidth: 4, paddingHorizontal: 8, minHeight: 30, flexShrink: 1 },
   lineButtonAsk: { color: BRAND.blueBright, fontFamily: 'Knockout', fontSize: 12 },
-  lineButtonAskShrink: { flexShrink: 1 },
+  // Two short lines for a long ride name (In line for Big Thunder / Mountain Railroad?), never cut off.
+  lineButtonAskShrink: { flexShrink: 1, lineHeight: 14, paddingVertical: 2 },
   lineButtonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   buttonText: { color: BRAND.navy, fontFamily: 'Shark', fontSize: 14 },
   pressed: { transform: [{ scale: 0.95 }], opacity: 0.9 },
