@@ -195,3 +195,24 @@ test('T232 hold-2: a paid loss whose TRY AGAIN deals the other game says "New ga
   assert.match(modal, /const retryGameName = flowState === 'retrying' \? retryNextGameRef\.current : retryGameNameFor\(attemptRef\.current\);/);
   assert.match(modal, /message=\{retryingLine\(retryGameName\)\}/);
 });
+
+/* T158 hold-2: the Just once sticker reads whole on the 76 pt Profile badge (it clipped to "JUST ON..."). */
+test('T158 hold-2: a sticker sizes to its own words in a wide clear box, so a narrow picture never clips it', () => {
+  const fs = require('node:fs');
+  const ui = fs.readFileSync('src/components/money/moneyUi.tsx', 'utf8');
+  // The visible sticker is not the absolute view: it sits inside a STICKER_ROOM-wide clear box.
+  assert.match(ui, /export const STICKER_ROOM = 200;/);
+  assert.match(ui, /<View style=\{\[s\.stickerRoom, align === 'center' \? s\.stickerRoomCenter : s\.stickerRoomEnd, style\]\} pointerEvents="none">\n\s+<View style=\{\[s\.sticker, tone === 'gold' && s\.stickerGold\]\}>/);
+  assert.match(ui, /stickerRoom: \{ position: 'absolute', width: STICKER_ROOM \}/);
+  assert.match(ui, /stickerRoomCenter: \{ left: '50%', marginLeft: -STICKER_ROOM \/ 2, alignItems: 'center' \}/);
+  assert.doesNotMatch(ui, /sticker: \{ position: 'absolute'/, 'the sticker itself is never the absolute view its parent squeezes');
+  // "JUST ONCE" at 14 pt in the display face is about 100 pt with its padding and border: it fits the room, not a 76 pt badge.
+  const W = loadTs('src/components/money/StarterSticker.tsx', {
+    react: { useContext: () => ({}) }, 'react/jsx-runtime': { jsx: () => null, jsxs: () => null },
+    '../../context/AuthProvider': { AuthContext: {} }, '../../services/money/supplies': { useSupplies: () => ({}) },
+    '../../services/purchases': { storeAvailable: () => true }, './moneyUi': { Sticker: 'Sticker' },
+  });
+  assert.ok(W.STARTER_STICKER_TEXT.length * 10 + 20 < 200);
+  const profile = fs.readFileSync('src/screens/ProfileScreen.tsx', 'utf8');
+  assert.match(profile, /sticker: <StarterSticker align="center" style=\{\{ top: -10 \}\} \/>/, 'centered over the Profile badge, clear of the next badge');
+});

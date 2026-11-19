@@ -27,8 +27,8 @@ export function useStarterUnbought(): boolean {
   return !!player && storeAvailable() && starterUnbought(catalog);
 }
 
-export default function StarterSticker({ style }: { style?: StyleProp<ViewStyle> }) {
+export default function StarterSticker({ style, align }: { style?: StyleProp<ViewStyle>; align?: 'end' | 'center' }) {
   const on = useStarterUnbought();
   if (!on) return null;
-  return <Sticker text={STARTER_STICKER_TEXT} tone="gold" style={style} />;
+  return <Sticker text={STARTER_STICKER_TEXT} tone="gold" style={style} align={align} />;
 }

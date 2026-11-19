@@ -65,7 +65,7 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
           <View style={[s.blue, { alignItems: 'center' }]}>
             <View>
               <Image source={require('../../assets/images/screens/profile/shortcut_shark_shop.png')} style={{ width: 76, height: 76 }} contentFit="contain" />
-              <StarterSticker style={{ top: -6, right: -26 }} />
+              <StarterSticker align="center" style={{ top: -10 }} />
             </View>
             <Text style={s.label}>SHARK SHOP</Text>
           </View>

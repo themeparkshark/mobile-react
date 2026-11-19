@@ -257,7 +257,8 @@ export default function ProfileScreen() {
         image: require('../../assets/images/screens/profile/shortcut_shark_shop.png'),
         hint: 'Opens the shop for new gear',
         // T158: "Just once" while the Starter Pack is unbought (a door, never a price or a pop-up).
-        sticker: <StarterSticker style={{ top: -6, right: -26 }} />,
+        // Centered over the badge: the whole sticker reads, and it never covers the next badge (hold-2).
+        sticker: <StarterSticker align="center" style={{ top: -10 }} />,
         onPress: () => {
           if (sharkShop) RootNavigation.navigate('Store', { store: sharkShop.id });
           else RootNavigation.navigate('Store', { store: 'shark-shop' });

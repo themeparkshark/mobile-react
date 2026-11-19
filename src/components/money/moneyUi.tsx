@@ -150,11 +150,25 @@ export function PriceBar({ price, busy, note, big }: { price?: string | null; bu
   );
 }
 
-/** Alex's tilted red sticker (NEW!) carrying an honest note: "+21% MORE", "3X VALUE". */
-export function Sticker({ text, style, tone = 'red' }: { text: string; style?: StyleProp<ViewStyle>; tone?: 'red' | 'gold' }) {
+/**
+ * The room a sticker may use (pt). A sticker sits absolutely on a picture that is often narrower than its
+ * words (a 76 pt Profile badge under "JUST ONCE"), and an absolute view is measured inside its parent, so
+ * it used to clip to "JUST ON...". The sticker now sits in this wider clear box and sizes to its own text.
+ */
+export const STICKER_ROOM = 200;
+
+/**
+ * Alex's tilted red sticker (NEW!) carrying an honest note: "+21% MORE", "3X VALUE". `style` places it on
+ * its picture ({ top, right } puts its right edge there); `align="center"` centers it over the picture.
+ */
+export function Sticker({ text, style, tone = 'red', align = 'end' }: {
+  text: string; style?: StyleProp<ViewStyle>; tone?: 'red' | 'gold'; align?: 'end' | 'center';
+}) {
   return (
-    <View style={[s.sticker, tone === 'gold' && s.stickerGold, style]} pointerEvents="none">
-      <Text maxFontSizeMultiplier={1.1} style={[s.stickerText, tone === 'gold' && s.stickerTextGold]} numberOfLines={1}>{text}</Text>
+    <View style={[s.stickerRoom, align === 'center' ? s.stickerRoomCenter : s.stickerRoomEnd, style]} pointerEvents="none">
+      <View style={[s.sticker, tone === 'gold' && s.stickerGold]}>
+        <Text maxFontSizeMultiplier={1.1} style={[s.stickerText, tone === 'gold' && s.stickerTextGold]} numberOfLines={1}>{text}</Text>
+      </View>
     </View>
   );
 }
@@ -323,7 +337,10 @@ const s = StyleSheet.create({
   barPrice: { fontFamily: FONT.display, fontSize: 21, color: '#ffffff', textShadowColor: CARD.barDeep, textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1 },
   barPriceBig: { fontSize: 27 },
   barNote: { fontFamily: FONT.body, fontSize: 14, color: '#d5ecff', textAlign: 'center', lineHeight: 17 },
-  sticker: { position: 'absolute', backgroundColor: '#e8322a', borderWidth: 3, borderColor: '#ffffff', borderRadius: 10,
+  stickerRoom: { position: 'absolute', width: STICKER_ROOM },
+  stickerRoomEnd: { alignItems: 'flex-end' },
+  stickerRoomCenter: { left: '50%', marginLeft: -STICKER_ROOM / 2, alignItems: 'center' },
+  sticker: { backgroundColor: '#e8322a', borderWidth: 3, borderColor: '#ffffff', borderRadius: 10,
     paddingHorizontal: 7, paddingVertical: 1, transform: [{ rotate: '-8deg' }], shadowColor: BRAND.navy, shadowOpacity: 0.3, shadowRadius: 0, shadowOffset: { width: 0, height: 2 } },
   stickerGold: { backgroundColor: '#ffcf3b' },
   stickerText: { fontFamily: FONT.display, fontSize: 14, color: '#ffffff' },
