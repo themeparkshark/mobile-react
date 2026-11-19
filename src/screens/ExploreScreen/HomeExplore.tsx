@@ -713,7 +713,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       // (the nearest one in range) always keeps its own marker.
       const keep = placed.filter(entry => entry.inRange && entry.item.pivot_id != null && !covered.has(entry.item.pivot_id))
         .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))[0]?.item.pivot_id ?? null;
-      const groups = clusterFinds([...next.entries()].filter(([pivot]) => !covered.has(pivot))
+      // A caught find never leads a group (it is hidden while the list refresh catches up), so the rest show at once.
+      const groups = clusterFinds([...next.entries()].filter(([pivot]) => !covered.has(pivot) && !caughtPivots.has(pivot))
         .map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })), { shark, keep });
       setFindGroups(current => (JSON.stringify(current) === JSON.stringify(groups) ? current : groups));
       // What each visible find occupies on screen: the HUD row and the peek keep clear of these.
@@ -725,7 +726,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       setCoveredPivots(current => (current.size === covered.size && [...covered].every(p => current.has(p)) ? current : covered));
     })();
     return () => { alive = false; };
-  }, [mapSettled, placed, containerSize.width, containerSize.height, toLocal, reservedKey]);
+  }, [mapSettled, placed, containerSize.width, containerSize.height, toLocal, reservedKey, caughtPivots]);
 
   // Stable callbacks for the catch (refs, so memo holds across renders).
   const callbacks = useRef({ onCatchCollected, onCatchUnavailable, onCatchDone, onPrepItemNearby, catchRequest });

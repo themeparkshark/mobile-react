@@ -194,7 +194,7 @@ test('(h) the shark is reserved: a treat on it folds into the nearest marker sti
   assert.deepEqual(plain(lone.hidden), []);
   // HomeExplore groups only the finds that show, around the real shark, keeping the hand's treat.
   const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(homeSrc, /clusterFinds\(\[\.\.\.next\.entries\(\)\]\.filter\(\(\[pivot\]\) => !covered\.has\(pivot\)\)/);
+  assert.match(homeSrc, /clusterFinds\(\[\.\.\.next\.entries\(\)\]\.filter\(\(\[pivot\]\) => !covered\.has\(pivot\) && !caughtPivots\.has\(pivot\)\)/);
   assert.match(homeSrc, /\{ shark, keep \}\)/);
 });
 
