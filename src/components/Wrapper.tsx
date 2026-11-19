@@ -45,34 +45,62 @@ function useTopRoute(): string | undefined {
   return name;
 }
 
-export default function Wrapper({
-  children,
-  previewMode = false,
-  onNavigate,
-}: {
-  readonly children: ReactNode;
-  readonly previewMode?: boolean;
-  readonly onNavigate?: (screen: string) => void;
-}) {
-  const { theme } = useContext(ThemeContext);
+/** The footer's five tabs, in today's order, with their sounds and the Profile permission. */
+export const FOOTER_TABS = [
+  {
+    icon: require('../../assets/images/toolbar/news.png'),
+    screen: 'News',
+    size: 'normal',
+    sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+    text: 'News',
+  },
+  {
+    icon: require('../../assets/images/toolbar/leaderboard.png'),
+    screen: 'Leaderboard',
+    size: 'normal',
+    sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+    text: 'Standings',
+  },
+  {
+    icon: require('../../assets/images/toolbar/explore.png'),
+    screen: 'Explore',
+    // Every tab says what it is; the big compass is the map (kids asked what it did).
+    text: 'Map',
+    size: 'large',
+    sound: require('../../assets/sounds/explore_button_press.mp3'),
+  },
+  {
+    icon: require('../../assets/images/toolbar/social.png'),
+    screen: 'Social',
+    size: 'normal',
+    sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+    text: 'Social',
+  },
+  {
+    icon: require('../../assets/images/toolbar/profile.png'),
+    screen: 'Profile',
+    size: 'normal',
+    sound: require('../../assets/sounds/wrapper_button_press.mp3'),
+    text: 'Profile',
+    permission: PermissionEnums.ViewProfile,
+  },
+] as const;
+
+export type FooterTab = (typeof FOOTER_TABS)[number] & { readonly permission?: PermissionEnums };
+
+/**
+ * What the footer does, shared by today's bar (Wrapper) and the sticker look's Footer (Screen in
+ * src/ui/sticker/LookScreen.tsx), so both take the same taps the same way: the Standings warm-up,
+ * the open tab, the Profile badge, permissions, the tab-reselect scroll and the catch guard.
+ */
+export function useFooterTabs({ previewMode = false, onNavigate }: { readonly previewMode?: boolean; readonly onNavigate?: (screen: string) => void }) {
   const { player } = useContext(AuthContext);
   // Standings v2: warm This Week and Friends once, so the first tap paints a real board.
   useEffect(() => { if (!previewMode) warmStandings(player?.id); }, [player?.id, previewMode]);
-  
-  // Default theme URLs if theme not loaded
-  const bottomBarSource = theme?.bottom_bar_url
-    ? { uri: theme.bottom_bar_url }
-    : require('../../assets/images/original-bottom-bar.png');
   const { checkPermission, hasPermission } = usePermissions();
   const { notificationCount } = useContext(NotificationContext);
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const topRoute = useTopRoute();
-  // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
-  // A common catch keeps the tab bar in place and only softens it (catchDim): the header and footer never move for it.
-  // Round 5: a commit here mid-catch re-sends the softened bar (commitHeal), so it never flashes back to full.
-  // Wave 4: only while a catch has the chrome (Wrapper is on every screen; nothing heals at rest).
-  useCommitHeal(chromeHeal, catchHasChrome);
-  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - 0.4 * catchDim.value + touchHeal(chromeHeal), transform: [{ translateY: 160 * catchShown.value }] }));
 
   const goTo = (item: { screen: string; permission?: PermissionEnums }) => {
     if (isCatchShown()) return;
@@ -89,46 +117,30 @@ export default function Wrapper({
       else RootNavigation.navigate(item.screen);
     }
   };
+  return { items: FOOTER_TABS as readonly FooterTab[], goTo, topRoute, notificationCount, playSound, hasPermission };
+}
 
-  const items = [
-    {
-      icon: require('../../assets/images/toolbar/news.png'),
-      screen: 'News',
-      size: 'normal',
-      sound: require('../../assets/sounds/wrapper_button_press.mp3'),
-      text: 'News',
-    },
-    {
-      icon: require('../../assets/images/toolbar/leaderboard.png'),
-      screen: 'Leaderboard',
-      size: 'normal',
-      sound: require('../../assets/sounds/wrapper_button_press.mp3'),
-      text: 'Standings',
-    },
-    {
-      icon: require('../../assets/images/toolbar/explore.png'),
-      screen: 'Explore',
-      // Every tab says what it is; the big compass is the map (kids asked what it did).
-      text: 'Map',
-      size: 'large',
-      sound: require('../../assets/sounds/explore_button_press.mp3'),
-    },
-    {
-      icon: require('../../assets/images/toolbar/social.png'),
-      screen: 'Social',
-      size: 'normal',
-      sound: require('../../assets/sounds/wrapper_button_press.mp3'),
-      text: 'Social',
-    },
-    {
-      icon: require('../../assets/images/toolbar/profile.png'),
-      screen: 'Profile',
-      size: 'normal',
-      sound: require('../../assets/sounds/wrapper_button_press.mp3'),
-      text: 'Profile',
-      permission: PermissionEnums.ViewProfile,
-    },
-  ];
+export default function Wrapper({
+  children,
+  previewMode = false,
+  onNavigate,
+}: {
+  readonly children: ReactNode;
+  readonly previewMode?: boolean;
+  readonly onNavigate?: (screen: string) => void;
+}) {
+  const { theme } = useContext(ThemeContext);
+  // Default theme URLs if theme not loaded
+  const bottomBarSource = theme?.bottom_bar_url
+    ? { uri: theme.bottom_bar_url }
+    : require('../../assets/images/original-bottom-bar.png');
+  const { items, goTo, topRoute, notificationCount, playSound, hasPermission } = useFooterTabs({ previewMode, onNavigate });
+  // A catch moment owns the whole screen: the tab bar slides away on the UI thread (no re-render).
+  // A common catch keeps the tab bar in place and only softens it (catchDim): the header and footer never move for it.
+  // Round 5: a commit here mid-catch re-sends the softened bar (commitHeal), so it never flashes back to full.
+  // Wave 4: only while a catch has the chrome (Wrapper is on every screen; nothing heals at rest).
+  useCommitHeal(chromeHeal, catchHasChrome);
+  const barSlide = useAnimatedStyle(() => ({ opacity: 1 - 0.4 * catchDim.value + touchHeal(chromeHeal), transform: [{ translateY: 160 * catchShown.value }] }));
 
   return (
     // The tab bar's own blue behind it: when it slides back after a catch it never uncovers grey.
