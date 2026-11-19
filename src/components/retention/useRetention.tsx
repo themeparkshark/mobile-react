@@ -9,6 +9,7 @@ import {
   setRetentionMode, type DailyThreeState, type LevelChest, type PaidRewards,
 } from '../../api/endpoints/retention';
 import { claimStampReward, getStamps } from '../../api/endpoints/me/stamps';
+import { noteLevelUp } from '../../services/rewards/levelUps';
 import { getSharkPass, type SharkPassEvent } from '../../api/endpoints/me/shark-pass';
 import { AuthContext } from '../../context/AuthProvider';
 import { DailyGiftContext } from '../../context/DailyGiftProvider';
@@ -608,7 +609,12 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         // T094: a claim whose answer was lost is read back (the server may still be paying); only a stamp the
         // server still holds after its window counts as failed, and that stamp stays on the row with RETRY.
         const res = await claimOrReconcile(
-          async () => (await claimStampReward(st.id)).rewards ?? st.rewards,
+          async () => {
+            const answer = await claimStampReward(st.id);
+            // Fix w4 T102: the claim skips banners; a level it reached still gets its moment.
+            if ((answer.levels_gained ?? 0) > 0) noteLevelUp(answer.level ?? null);
+            return answer.rewards ?? st.rewards;
+          },
           async () => (stampClaimed(await getStamps(), st.id) ? st.rewards : null),
           { waits: LOST_CLAIM_WAITS_MS, alive: () => mounted.current });
         if (!res.paid) { failed += 1; continue; }

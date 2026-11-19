@@ -38,6 +38,7 @@ import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
 import { addBreadcrumb } from './services/telemetry';
 import { markUserTouch } from './hooks/useUserIdle';
+import LevelUpMoment from './components/rewards/LevelUpMoment';
 
 const Stack = createNativeStackNavigator();
 
@@ -110,6 +111,8 @@ export default function App() {
         The service itself never asks for Always permission during app startup. */}
     <RideDetectionDriver enabled={!isStandalonePreview && !!player && permissionGranted && !!currentPark}
       parkId={currentPark?.id ?? null} />
+    {/* Fix w4 T102: a level-up gets its moment wherever it happens (a short toast that points to the chest). */}
+    {!!player && <LevelUpMoment />}
     <NavigationContainer
       ref={navigationRef}
       onReady={flushPendingNavigation}

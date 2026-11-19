@@ -127,3 +127,25 @@ test('T101 the park day starter plays as a moment: fly to the header with its re
   assert.match(host, /gap\.current = setTimeout/, 'the gap timer survives re-renders');
   assert.match(read('src/screens/ExploreScreen.tsx'), /<TicketGrantMoment calm=\{mapFocused && !isActive/);
 });
+
+/* T102: a level-up has its moment. */
+test('T102 level lines become one moment (in their turn), and a stamp claim\'s level counts too', () => {
+  const lv = loadTs('src/services/rewards/levelUps.ts');
+  lv.resetLevelUpsForTests();
+  let heard = 0;
+  lv.onLevelUp(() => { heard += 1; });
+  const banners = lv.takeLevelUps(['You earned 25 XP!', 'You reached Level 3!', 'Welcome to Disneyland Park!']);
+  assert.deepEqual(plain(banners), ['You earned 25 XP!', 'Welcome to Disneyland Park!'], 'the level line leaves the banner list');
+  assert.equal(heard, 1);
+  assert.equal(lv.takeLevelMoment(), 3);
+  lv.noteLevelUp(3);
+  assert.equal(heard, 1, 'never the same level twice');
+  lv.noteLevelUp(4); lv.noteLevelUp(5);
+  assert.equal(lv.takeLevelMoment(), 5, 'two quick levels fold into one moment');
+  assert.equal(lv.levelUpLine(5, true), 'Level 5! Your Level 5 Chest is in Rewards');
+  assert.equal(lv.levelUpLine(5, false), 'You reached Level 5!');
+  assert.match(read('src/hooks/useAxiosSetup.ts'), /routeBroadcasts\(shown, messages => \{ const banners = takeLevelUps\(messages\);/,
+    'routed through the win card hold, so it waits behind the card');
+  assert.match(read('src/components/retention/useRetention.tsx'), /if \(\(answer\.levels_gained \?\? 0\) > 0\) noteLevelUp\(answer\.level \?\? null\);/);
+  assert.match(read('src/Root.tsx'), /\{!!player && <LevelUpMoment \/>\}/);
+});
