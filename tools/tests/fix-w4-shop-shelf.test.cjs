@@ -127,7 +127,7 @@ test('T233: the coin cards and the tab header read the edition', () => {
 });
 
 // ---------- T174: the name check runs before LET'S GO; never a raw server sentence ----------
-const welcome = loadTs('src/screens/welcomeCopy.ts', { mocks: { '../services/connectionCopy': { tryAgainWith: () => 'The game is slow. Try again.' } } });
+const welcome = loadTs('src/screens/welcomeCopy.ts');
 
 test('T174: a taken name is caught before the save; unknown answers never block', () => {
   assert.equal(welcome.nameTaken({ available: false, yours: false }), true);
@@ -140,4 +140,15 @@ test('T174: a taken name is caught before the save; unknown answers never block'
   assert.match(screen, /takenNow \? NAME_TAKEN_LINE : status\.hint/, 'the hint says taken while typing');
   const api = read('src/api/endpoints/me/username-check.ts');
   assert.doesNotMatch(api, /message/, "the server's sentence is never read");
+});
+
+// ---------- T242: a Ride Passport's title shows as worn at the claim ----------
+test('T242: the claim answer that wore a title shows it on the card at once', () => {
+  const stamps = loadTs('src/api/endpoints/me/stamps.ts', { '../../client': { default: {} } });
+  assert.equal(stamps.titleWornByClaim({ title_worn: true, equipped_title: 'Disneyland Ride Master' }), 'Disneyland Ride Master');
+  assert.equal(stamps.titleWornByClaim({ title_worn: false, equipped_title: 'Explorer' }), null, 'a title was already worn');
+  assert.equal(stamps.titleWornByClaim({ success: true }), null, 'older server');
+  const book = read('src/screens/StampBookScreen.tsx');
+  assert.match(book, /const res = await claimStampReward\(stamp\.id\);\s*pendingPatch\.current\.push\(stamp\.id\);\s*showClaimTitle\(res\);/, 'Claim all too');
+  assert.match(book, /if \(!showClaimTitle\(res\)\) refreshPlayer\(\)/);
 });
