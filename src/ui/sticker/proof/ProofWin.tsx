@@ -198,7 +198,7 @@ function WinCard({ coins }: { readonly coins: Readonly<Record<string, ImageSourc
         <ProgressBar value={found / TOTAL} label={`${found} of ${TOTAL} coins`} width={inner}
           prize={{ source: ART.bronze, width: 46, height: Math.round(46 / ART_RATIO.bronze) }} style={{ marginTop: SPACE.base }} />
         <Card style={{ marginTop: SPACE.cardGapLoose + PRIZE_ART / 2 }}>
-          <View style={{ flexDirection: 'row', paddingTop: PRIZE_ART / 2 + SPACE.base, paddingBottom: SPACE.base * 2 }}>
+          <View style={{ flexDirection: 'row', paddingTop: PRIZE_ART / 2 + SPACE.base, paddingBottom: SPACE.base * 2, paddingHorizontal: SPACE.base, gap: SPACE.base }}>
             {PRIZES.map((p, i) => (
               <Arrive key={p.key} delay={WIN_BEATS.prizes + i * WIN_BEATS.prizeGap} style={{ flex: 1, alignItems: 'center' }}>
                 {() => (
