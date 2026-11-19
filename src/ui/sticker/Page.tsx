@@ -30,7 +30,7 @@ import { PlaceProvider, useFrameWidth, useStickerPlace } from './StickerContext'
 import { LOCK_ART, edgeRise, labelReach, pageRise, ribbonGeometry, ribbonWidth, sideArtRoom, type RibbonKind } from './layout';
 import { edgeFor, insidePage } from './level';
 import { TEXT } from './textRoles';
-import { DROP, FLOAT_SHADOW, INK, LINE, RADIUS, RIBBON, SHADE, SPACE, TYPE, WAVE } from './tokens';
+import { DROP, FLOAT_SHADOW, INK, LABEL, LINE, RADIUS, RIBBON, SHADE, SPACE, TYPE, WAVE } from './tokens';
 
 export type PageLabel = { readonly text: string; readonly tone?: TitleLabelTone; readonly large?: boolean; readonly art?: 'lock' };
 export type PageRibbon = { readonly text: string; readonly kind?: RibbonKind; readonly size?: 'title' | 'small' };
@@ -123,9 +123,8 @@ function PageImpl({ floating = false, small = false, label, ribbon, topArt, onEd
           </View>
         ) : null}
       </PlaceProvider>
-      {label ? <Label label={label} leftRoom={onEdge?.start?.width} /> : null}
-      {onEdge?.start ? <View pointerEvents="box-none" style={{ position: 'absolute', left: EDGE_INSET - SPACE.base * 3, top: -edgeRise(onEdge.start.height) }}>{onEdge.start.node}</View> : null}
-      {onEdge?.end ? <View pointerEvents="box-none" style={{ position: 'absolute', right: EDGE_INSET, top: -edgeRise(onEdge.end.height) }}>{onEdge.end.node}</View> : null}
+      {label && !onEdge ? <Label label={label} /> : null}
+      {onEdge ? <EdgeRow start={onEdge.start} end={onEdge.end} label={label && label.art !== 'lock' ? label : undefined} /> : null}
       {sideArt ? <Lift source={sideArt.source} width={sideArt.width} height={sideArt.height} style={{ position: 'absolute', left: -sideOver, top: sideArt.along ?? 0 }} /> : null}
       {ribbon && ribbonG ? <RibbonTitle text={ribbon.text} width={ribbonW} height={ribbonG.height} overlap={ribbonG.overlap} small={ribbon.size === 'small'} /> : null}
       {topArt ? <Lift source={topArt.source} width={topArt.width} height={topArt.height} style={{ position: 'absolute', right: SPACE.artClear, top: -topArt.rise }} /> : null}
@@ -135,13 +134,32 @@ function PageImpl({ floating = false, small = false, label, ribbon, topArt, onEd
   return <View style={outer}>{body()}</View>;
 }
 
+/**
+ * The pieces on the top edge in one row, each centred on the edge: the start piece, the label, then
+ * the end piece pushed to the right. Being one row they can never overlap: at large text the label
+ * gives way (it shrinks to fit) instead of running under the tag.
+ */
+function EdgeRow({ start, end, label }: { readonly start?: PageEdgePiece; readonly end?: PageEdgePiece; readonly label?: PageLabel }) {
+  const labelH = label ? (label.large ? LABEL.heightLarge : LABEL.height) + DROP.label : 0;
+  const h = Math.max(labelH, start?.height ?? 0, end?.height ?? 0);
+  return (
+    <View pointerEvents="box-none" style={{ position: 'absolute', left: start ? EDGE_INSET - SPACE.base * 3 : EDGE_INSET, right: EDGE_INSET, top: -edgeRise(h), height: h,
+      flexDirection: 'row', alignItems: 'center', gap: SPACE.base * 2 }}>
+      {start ? <View style={{ height: start.height, justifyContent: 'center' }}>{start.node}</View> : null}
+      {label ? <View style={{ flexShrink: 1, height: labelH, justifyContent: 'flex-start' }}><TitleLabel tone={label.tone} large={label.large}>{label.text}</TitleLabel></View> : null}
+      <View style={{ flex: 1 }} />
+      {end ? <View style={{ height: end.height, justifyContent: 'center', flexShrink: 0 }}>{end.node}</View> : null}
+    </View>
+  );
+}
+
 const LOCK = { height: LOCK_ART.height, width: Math.round(LOCK_ART.height * ART_RATIO.locked) };
 
 /** The title label on the page's top edge (and Alex's lock hanging off its left end), in the page's own place. */
-function Label({ label, leftRoom }: { readonly label: PageLabel; readonly leftRoom?: number }) {
+function Label({ label }: { readonly label: PageLabel }) {
   const lock = label.art === 'lock';
   const top = label.large ? 19 : 17;
-  const left = (lock ? EDGE_INSET - LOCK_ART.left : EDGE_INSET) + (leftRoom ? leftRoom - SPACE.base * 2 : 0);
+  const left = lock ? EDGE_INSET - LOCK_ART.left : EDGE_INSET;
   return (
     <View style={{ position: 'absolute', top: -top, left, right: EDGE_INSET }} pointerEvents="box-none">
       <TitleLabel tone={label.tone} large={label.large} padLeft={lock ? LOCK.width + LOCK_ART.left + 8 : undefined}>{label.text}</TitleLabel>
