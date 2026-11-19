@@ -171,6 +171,7 @@ test('T150: Settings uses the game toggle (no stock iOS Switch) and 56 pt rows',
   assert.match(src, /minHeight: 56,/);
   const toggle = read('src/ui/GameToggle.tsx');
   assert.match(toggle, /accessibilityRole="switch"/);
+  assert.match(toggle, /export function thumbX\(progress: number\): number \{\n\s+'worklet';/, 'called from useAnimatedStyle: must be a worklet');
   assert.match(toggle, /withSpring\(value \? 1 : 0, SPRING\.stamp\)/);
   assert.match(toggle, /borderColor: BRAND\.navy/);
   assert.doesNotMatch(toggle, /'#[0-9a-f]{6}'/i, 'colours from BRAND only');

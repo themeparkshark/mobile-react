@@ -17,6 +17,8 @@ import { BRAND, OUTLINE } from './tokens';
 import { SPRING } from './motion';
 
 export const TOGGLE = { width: 56, height: 32, thumb: 24, inset: 2 } as const;
+/** How far the thumb travels inside the outline (a plain number, so the UI-thread worklet reads no objects). */
+const TRAVEL = TOGGLE.width - TOGGLE.thumb - 2 * TOGGLE.inset - 2 * OUTLINE.thick;
 
 export type GameToggleProps = {
   readonly value: boolean;
@@ -29,8 +31,8 @@ export type GameToggleProps = {
 
 /** Where the thumb sits (0 off, 1 on): pure, so it is unit tested. */
 export function thumbX(progress: number): number {
-  const travel = TOGGLE.width - TOGGLE.thumb - 2 * TOGGLE.inset - 2 * OUTLINE.thick;
-  return Math.max(0, Math.min(1, progress)) * travel;
+  'worklet';
+  return Math.max(0, Math.min(1, progress)) * TRAVEL;
 }
 
 export default function GameToggle({ value, label, onChange, disabled = false, testID }: GameToggleProps) {
