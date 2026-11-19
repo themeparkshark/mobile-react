@@ -181,7 +181,7 @@ test('out of Tickets PLAY! never vanishes: today\'s free try wears a gift, a hel
     'no gift until the Stamp Book lookup answers, so PLAY! and the card always agree');
   const redeem = read('src/components/RedeemModal.tsx');
   // The pill shows for an open ride whatever the Ticket count (no ticket check hides it).
-  assert.match(redeem, /const available = !otherSelected && !secretLocked && nearbyOpportunityOpen\(redeemable, liveStatus\);/);
+  assert.match(redeem, /const available = !secretLocked && nearbyOpportunityOpen\(redeemable, liveStatus\);/);
   assert.doesNotMatch(redeem, /tickets\s*(>|>=|<=|<)\s*\d.*available/);
 });
 

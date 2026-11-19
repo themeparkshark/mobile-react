@@ -13,6 +13,7 @@ const load = props => runtime('src/components/RedeemModal.tsx', {
   '../gamekit/audio/playMoment': { studioMoment: () => false },
   '../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon' },
   './map/mapCover': { useCoverArt: () => () => undefined },
+  './guide/playPressQueue': loadTs('src/components/guide/playPressQueue.ts'),
 }, { park: { id: 1 }, onPress: () => undefined, ...props });
 const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1 } };
 
@@ -22,11 +23,13 @@ test('PLAY! names the ride and its Ticket price', () => {
   assert.ok(app.find(n => n.props?.text === 'PLAY!'), 'one word for the one action (core loop 4.5)');
 });
 
-test('PLAY RIDE hides while a different ride is selected on the map', () => {
+test('fix round w3 T001: PLAY! rises for the coin in range whatever island is selected (a stray tap never hides it)', () => {
   const other = load({ redeemable: ride, selectedTaskId: 12 });
-  assert.equal(other.find(n => n.props?.text === 'PLAY!'), undefined);
+  assert.ok(other.find(n => n.props?.text === 'PLAY!'), 'another island selected: PLAY! still up');
   const same = load({ redeemable: ride, selectedTaskId: 11 });
   assert.ok(same.find(n => n.props?.text === 'PLAY!'));
+  const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/RedeemModal.tsx'), 'utf8');
+  assert.doesNotMatch(src, /otherSelected|selectedTaskId/, 'no selection rule left on PLAY!');
 });
 
 const later = new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString();
@@ -61,9 +64,14 @@ test('at a resting or closed ride the PLAY spot says why, in a soft pill that is
   assert.ok(down.find(n => n.props?.name === 'wrench'));
   assert.ok(text(load({ redeemable: ride, liveStatus: 'CLOSED' })).includes('Closed now'));
   assert.ok(text(load({ redeemable: ride, liveStatus: 'REFURBISHMENT' })).includes('Closed for repairs'));
-  // Looking at another ride, or an open ride: no pill.
-  assert.equal(text(load({ redeemable: resting, selectedTaskId: 12 })).find(t => t.startsWith('Back ')), undefined);
+  // An open ride: no pill.
   assert.equal(text(load({ redeemable: ride })).find(t => t.startsWith('Back ') || t === 'Closed now'), undefined);
+  // Fix round w3 T012: a timed find whose window ended moved on: coin words, never "Closed now".
+  const gone = { ...ride, model: { ...ride.model, active_from: null, active_to: new Date(Date.now() - 60_000).toISOString() } };
+  const moved = text(load({ redeemable: gone }));
+  assert.ok(moved.includes('This coin moved on'), moved.join('|'));
+  assert.ok(moved.includes('A new one appears soon'));
+  assert.equal(moved.find(t => /closed/i.test(t)), undefined, 'never closed');
   // A coin that is not out yet gets no ride pill.
   const coin = { type: 'coin', model: { id: 3, active_from: later } };
   assert.equal(text(load({ redeemable: coin })).find(t => t.startsWith('Back ')), undefined);

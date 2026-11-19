@@ -337,7 +337,7 @@ test('state B at the gate through the first coin: the map wiring keeps chests, r
   assert.match(explore, /&& !\(chestUnclaimed && !!dailyGift && !chestDismissed\(dailyGift\.id\)\) && attentionFor\('reward'\),/, 'level chests and Daily 3 sheets');
   assert.match(explore, /eventsRung\.open && attentionFor\('event_recap'\)/);
   assert.doesNotMatch(explore, /<ParkDayOffer|<NextUpRail|<DwellCard|<MapSuggestionStub/, 'no offer, rail or extra card over the map');
-  assert.match(explore, /walkingToTarget: !!park && nextCoin\.state === 'walk', playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,/);
+  assert.match(explore, /walkingToTarget: busyWithCoin, playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,/);
 });
 
 test('the Rewards button: one chest, one number; the flame after rung 4, the Trail ring after rung 6', () => {
@@ -368,7 +368,7 @@ test('teaching: park help page 1 opens itself once, only for an account that nev
   assert.match(explore, /if \(!attentionQueue\.take\(appOpenId, 'help_page'\)\) return;[\s\S]{0,200}openHelpSheet\('park_map'\);/);
   // "Tap PLAY!": the guide card's picture every time PLAY! rises until the first win (no second Finn card).
   assert.match(explore, /teachPlay=\{!hasWonACoin\}/);
-  assert.match(explore, /rideCoinInRange: false \}\);/);
+  assert.match(explore, /rideCoinInRange: false, playUp: playableTaskId != null \|\| playRideShown \}\);/);
   const card = fs.readFileSync(path.join(root, 'src/components/guide/NextCoinCard.tsx'), 'utf8');
   assert.match(card, /\{copy\.pointsAtPlay && teachPlay && <View style=\{styles\.teach\}><CoinTipPicture \/><\/View>\}/);
 });

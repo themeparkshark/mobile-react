@@ -1390,6 +1390,7 @@ test('wave 5 round 3: a ride in range when the map opens has PLAY RIDE on the fi
     '../context/SoundEffectProvider': { SoundEffectContext: { value: { playSound: async () => undefined } } },
     '../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon' },
     './map/mapCover': { useCoverArt: enabled => { waits.push(enabled); return () => undefined; } },
+    './guide/playPressQueue': loadTs('src/components/guide/playPressQueue.ts'),
   }, { park: { id: 1 }, onPress: () => undefined, ...props });
   const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1 } };
   const app = load({ redeemable: ride, covered: true });
@@ -1522,7 +1523,7 @@ test('wave 5 round 3: the islands that hold the cover are the ten nearest (ranks
 test('wave 5 round 3: the loading cover waits (within its cap) for the first in-range check, so PLAY RIDE is on the first map frame', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   assert.match(explore, /useCoverArt\(!!park && !!player && !!redeemables && !!location\?\.latitude && !rangeChecked\);/);
-  assert.match(explore, /void checkForRedeemable\(\)\.then\(redeemable => \{\s*setRangeChecked\(true\);/);
+  assert.match(explore, /\(redeemable, point\) => \{\s*setRangeChecked\(true\);/);
 });
 
 test('wave 5 round 3: the slow-tile sheet has no shark of its own (the player shark stands at the middle already)', () => {

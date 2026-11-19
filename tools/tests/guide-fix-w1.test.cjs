@@ -92,9 +92,10 @@ test('item 7: the win card NEXT COIN is not a player pick: a line or a PLAY! bea
   assert.equal(atPlay.taskId, 1);
   assert.equal(atPlay.reason, 'in_range');
   // The player's own pick (the shelf) still holds for 10 minutes, then the line wins.
+  // (PLAY! down: with PLAY! up, the card names PLAY!'s coin over any pick, fix round w3 T003.)
   const shelf = { ...fromWin, source: 'shelf' };
-  assert.equal(G.pickNextCoin(input({ coins: RIDES, live, current: shelf, currentPickedAt: NOW - 60_000, inLineTaskId: 1 })).taskId, 2);
-  assert.equal(G.pickNextCoin(input({ coins: RIDES, live, current: shelf, currentPickedAt: NOW - G.PICK_HOLD_MS - 1, inLineTaskId: 1 })).taskId, 1);
+  assert.equal(G.pickNextCoin(input({ coins: RIDES, live, current: shelf, currentPickedAt: NOW - 60_000, inLineTaskId: 1, playableTaskId: null })).taskId, 2);
+  assert.equal(G.pickNextCoin(input({ coins: RIDES, live, current: shelf, currentPickedAt: NOW - G.PICK_HOLD_MS - 1, inLineTaskId: 1, playableTaskId: null })).taskId, 1);
   for (const source of ['win_card', 'lineplay_recap', 'ride_logged']) assert.ok(G.SUGGESTION_SOURCES.has(source));
 });
 
@@ -102,11 +103,11 @@ test('item 7: the pick hold ends on screen while standing still (the map re-reso
   G.guide.reset();
   const RIDES = [coin(1, 'Jungle Cruise', 10), coin(2, 'Frontierland', 90)];
   G.guide.setTarget(2, 'win_card');
-  G.guide.resolve(input({ coins: RIDES, live: { 1: 'open', 2: 'open' } }));
+  G.guide.resolve(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, playableTaskId: null }));
   assert.equal(G.guide.current().taskId, 2);
   assert.equal(G.guide.pickHoldEndsAt(), null, 'a suggestion never holds, so nothing to wait for');
   G.guide.setTarget(2, 'shelf');
-  G.guide.resolve(input({ coins: RIDES, live: { 1: 'open', 2: 'open' } }));
+  G.guide.resolve(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, playableTaskId: null }));
   const ends = G.guide.pickHoldEndsAt();
   assert.ok(Number.isFinite(ends) && ends - Date.now() <= G.PICK_HOLD_MS && ends - Date.now() > G.PICK_HOLD_MS - 5000);
   const hook = read('src/components/guide/useNextCoinGuide.ts');
@@ -123,9 +124,13 @@ test('item 8: no 364 m pull back to an owned Adventure ride past a coin 30 m awa
   // Standing at the ride right after its win: the Line story.
   const atRide = G.pickNextCoin(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(360) }));
   assert.equal(atRide.reason, 'line_story');
-  // A ride with no line (a show) has no Line story pull at all.
-  const show = G.pickNextCoin(input({ coins: [{ ...lincoln, queue: false }, alice], live: { 71: 'open' }, adventure, location: north(360) }));
-  assert.equal(show.taskId, 71);
+  // A ride with no line (a show) has no Line story pull back. Standing at it right after its coin, its story still
+  // leads, so the card and today's ticket name one coin (fix round w3 T004).
+  const show = G.pickNextCoin(input({ coins: [{ ...lincoln, queue: false }, alice], live: { 71: 'open' }, adventure, location: north(250) }));
+  assert.equal(show.taskId, 71, 'away from the show: no pull back');
+  const atShow = G.pickNextCoin(input({ coins: [{ ...lincoln, queue: false }, alice], live: { 71: 'open' }, adventure, location: north(360) }));
+  assert.equal(atShow.taskId, 70);
+  assert.equal(atShow.reason, 'line_story');
   // Walking away toward a nearer coin passes on the Line story for this step: no flip back on the way.
   G.guide.reset();
   G.guide.resolve(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(360) }));

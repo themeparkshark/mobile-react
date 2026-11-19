@@ -55,13 +55,15 @@ export interface AdventurePrompt {
  * line always moves, so the copy promises play-as-you-shuffle, not pausing.
  */
 export function adventurePrompt(ticket: AdventureTicket, closed = false,
-  gate: { state: 'near' | 'far' | 'unknown'; meters: number | null } = { state: 'unknown', meters: null }): AdventurePrompt {
+  gate: { state: 'near' | 'far' | 'unknown'; meters: number | null } = { state: 'unknown', meters: null },
+  /** The player already has coins on a shelf: never "Your first chapter awaits" (fix round w3 T024). */
+  returning = false): AdventurePrompt {
   if (ticket.phase === 'complete') return { title: 'Your Adventure souvenir', chip: 'Souvenir ready', action: 'Visit my coin', detail: 'A coin, a story, a day to remember.', intent: 'shelf' };
   // A first ticket (nothing stamped yet) never says "detour": it simply offers another ride.
   if (closed && ticket.phase !== 'celebrate') return ticket.discover || ticket.play
     ? { title: 'Today\'s Adventure moves on', chip: 'Pick another ride', action: 'Pick another ride', detail: 'Keep every stamp you have earned.', intent: 'detour' }
     : { title: 'This ride is resting', chip: 'Pick another ride', action: 'Pick another ride', detail: 'Today\'s Adventure can start at another ride.', intent: 'detour' };
-  if (ticket.phase === 'discover') return { title: 'Your first chapter awaits', chip: 'Find your coin', action: 'Find this coin', detail: 'Win its coin challenge at the ride.', intent: 'discover' };
+  if (ticket.phase === 'discover') return { title: returning ? `Today's ride: ${ticket.ride.ride_name}` : 'Your first chapter awaits', chip: 'Find your coin', action: 'Find this coin', detail: 'Win its coin challenge at the ride.', intent: 'discover' };
   if (ticket.phase === 'play') {
     if (ticket.play_hint === 'get_in_line') {
       return { title: `Get in line at ${ticket.ride.ride_name}`, chip: 'Get in its line', action: gate.state === 'far' ? 'Show me the line' : 'Play its line story',

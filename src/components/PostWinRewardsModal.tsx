@@ -68,6 +68,8 @@ const WIN_COVER_MS = 500;
 interface Props {
   visible: boolean;
   rideName: string;
+  /** A sight coin (a statue, a show, a land): NEW COIN, never NEW RIDE COIN (fix round w3 T019). */
+  sight?: boolean;
   /** A limited coin's rotation: its win says where it lives when the shelf has no count for it. */
   limited?: LimitedWindow | null;
   taskCoinUrl?: string;
@@ -217,6 +219,7 @@ function RewardChip({ chip, index, enter, reduced, started }: {
 export default function PostWinRewardsModal({
   visible,
   rideName,
+  sight = false,
   limited = null,
   taskCoinUrl,
   coinsEarned,
@@ -481,7 +484,7 @@ export default function PostWinRewardsModal({
 
             <Animated.View style={[{ alignItems: 'center', alignSelf: 'stretch' }, textStyle]}>
               <Text style={styles.heroEyebrow}>{hasCoin
-                ? isNewCoin ? 'NEW RIDE COIN' : `WON ${coinTimesCollected} TIMES`
+                ? isNewCoin ? (sight ? 'NEW COIN' : 'NEW RIDE COIN') : `WON ${coinTimesCollected} TIMES`
                 : 'YOU WON'}</Text>
               <Text style={styles.heroTitle} numberOfLines={2} adjustsFontSizeToFit minimumFontScale={0.8}>{rideName}</Text>
               {earnedEdition && <View style={styles.edition}>
@@ -549,7 +552,7 @@ export default function PostWinRewardsModal({
         </View>
       </Animated.View>
       </View>
-      {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName}
+      {visible && hasCoin && !caught && <CoinCatchReveal coinUrl={coinArtFailed ? undefined : taskCoinUrl} rideName={rideName} sight={sight}
         isNewCoin={isNewCoin} handoff={handoff}
         onDone={() => setCaught(true)} />}
     </>

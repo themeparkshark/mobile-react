@@ -22,6 +22,7 @@ import useNextCoinGuide from './useNextCoinGuide';
 import { goalLevelUpTaskId, guideWallet, ownedTaskIdsFor } from './guideCoins';
 import useClaimableTickets from './useClaimableTickets';
 import useWelcomeBack from './useWelcomeBack';
+import { coinArtCache } from './coinArtCache';
 
 /** Within this distance of one of today's coins the player is really at the park (the guide's 1.5 km reach). */
 const AT_PARK_METERS = 1500;
@@ -130,14 +131,21 @@ export default function useMapGuide(input: MapGuideInput) {
     const timer = setTimeout(() => setAdventureWonTaskId(null), 30_000);
     return () => clearTimeout(timer);
   }, [adventureWonTaskId]);
+  // The coin PLAY! is up for is always one the guide can name, even when the map's list has it out of its window (a
+  // timed coin the server still answers for): the card and PLAY! never name two coins.
+  const guideTasks = useMemo(() => {
+    const model = playUp?.type === 'task' ? playUp.model as TaskType : null;
+    return model && !visibleTasks.some(task => task.id === model.id) ? [...visibleTasks, model] : visibleTasks;
+  }, [visibleTasks, playUp]);
   const nextCoin = useNextCoinGuide({
     enabled: !!player && !!park, ready: guideReady, tripGoalLoaded: !!tripGoalData, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
-    tasks: visibleTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null,
+    tasks: guideTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null,
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,
-    // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone.
-    playableTaskId: rangeChecked ? playableTaskId : undefined,
+    // PLAY! itself decides "You're here": the server's range check, never the guide's geometry alone. Before its first
+    // answer PLAY! is down, so the card never says "Tap PLAY!" with no PLAY! on screen (T009).
+    playableTaskId: rangeChecked ? playableTaskId ?? null : null,
     daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
     lineStoryNear: adventureGate?.state !== 'far',
     freeTryDaily: guideFlags.ride_rescue_pass === true,
@@ -154,6 +162,10 @@ export default function useMapGuide(input: MapGuideInput) {
     }));
   const guideTargetId = nextCoin.target?.taskId ?? null;
   // The target's own coin art: the map list has none, so the trip goal's ride list (or PLAY!'s coin) supplies it.
+  // Every read that names coin art is remembered, so a late or failed trip goal read never leaves the card on the
+  // generic gold coin (T015).
+  coinArtCache.rememberAll(tripGoalData?.rides);
+  if (activeRedeemable?.type === 'task') coinArtCache.remember((activeRedeemable.model as TaskType).id, (activeRedeemable.model as TaskType).coin_url);
   const guideCoinUrl = useMemo(() => {
     if (guideTargetId == null) return null;
     const fromMap = nextCoin.targetTask?.coin_url;
@@ -162,7 +174,7 @@ export default function useMapGuide(input: MapGuideInput) {
     if (fromTrip) return fromTrip;
     const here = activeRedeemable?.type === 'task' && (activeRedeemable.model as TaskType).id === guideTargetId
       ? (activeRedeemable.model as TaskType).coin_url : null;
-    return here || null;
+    return here || coinArtCache.get(guideTargetId);
   }, [guideTargetId, nextCoin.targetTask, tripGoalData?.rides, activeRedeemable]);
   // Until the first coin is won, the guide's "Tap PLAY!" picture shows every time PLAY! rises.
   const hasWonACoin = (player?.completed_tasks_count ?? 0) > 0 || (player?.ride_coins_collected ?? 0) > 0 || parkWins > 0;
@@ -209,9 +221,12 @@ export default function useMapGuide(input: MapGuideInput) {
     return () => clearTimeout(timer);
   }, [nextCoin.arrivedAt, flowClosedAt]);
   const appOpenId = currentAppOpen();
+  // Walking to the guide's coin, or standing at a coin with PLAY! up: nothing opens by itself over the one next thing
+  // (fix round w3: the Ride Journal opened over PLAY! at the Castle mid-walk).
+  const busyWithCoin = !!park && (nextCoin.state === 'walk' || playableTaskId != null);
   const attentionFor = (kind: Parameters<typeof autoOpenAllowed>[0]) => autoOpenAllowed(kind, {
     atPark: !!park, now: attentionClock >= 0 ? Date.now() : 0, arrivedAt: nextCoin.arrivedAt,
-    walkingToTarget: !!park && nextCoin.state === 'walk', playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,
+    walkingToTarget: busyWithCoin, playing: redeemFlowOpen, winCardClosedAt: flowClosedAt,
     autoOpenUsed: attentionQueue.used(appOpenId, kind),
   });
   // Other lanes ask the same rules through attentionGate (the ride question, the membership look).
@@ -219,9 +234,9 @@ export default function useMapGuide(input: MapGuideInput) {
   const placeKnown = parkLoaded && (!!park || homeLocationConfirmed);
   useEffect(() => {
     if (!placeKnown) { attentionGate.hold(); return; }
-    attentionGate.publish({ atPark: !!park, arrivedAt: nextCoin.arrivedAt, walkingToTarget: !!park && nextCoin.state === 'walk',
+    attentionGate.publish({ atPark: !!park, arrivedAt: nextCoin.arrivedAt, walkingToTarget: busyWithCoin,
       playing: redeemFlowOpen, winCardClosedAt: flowClosedAt }, appOpenId);
-  }, [placeKnown, park, nextCoin.arrivedAt, nextCoin.state, redeemFlowOpen, flowClosedAt, appOpenId]);
+  }, [placeKnown, park, nextCoin.arrivedAt, busyWithCoin, redeemFlowOpen, flowClosedAt, appOpenId]);
 
   // Today's Adventure ticket tab on the guide card while the guide points elsewhere: opens its sheet.
   const adventureStampsKey = adventure ? `${+!!adventure.discover}${+!!adventure.play}${+(adventure.phase === 'complete')}` : '';

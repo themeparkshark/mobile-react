@@ -140,7 +140,8 @@ test('nearbyRideClosedReason says why a ride in range cannot be played', () => {
   assert.equal(timing.nearbyRideClosedReason(ride({}), 'DOWN', now).kind, 'down');
   assert.equal(timing.nearbyRideClosedReason(ride({}), 'REFURBISHMENT', now).kind, 'repairs');
   assert.equal(timing.nearbyRideClosedReason(ride({}), 'CLOSED', now).kind, 'closed');
-  assert.equal(timing.nearbyRideClosedReason(ride({ active_to: '2026-10-23 17:00:00' }), null, now).kind, 'closed');
+  // Fix round w3 T012: a find whose window ended moved on (never 'closed').
+  assert.equal(timing.nearbyRideClosedReason(ride({ active_to: '2026-10-23 17:00:00' }), null, now).kind, 'moved_on');
   assert.equal(timing.nearbyRideClosedReason({ type: 'coin', model: { active_from: '2026-10-23 20:00:00' } }, null, now), null);
   assert.equal(timing.nearbyRideClosedReason(null, null, now), null);
 });

@@ -291,12 +291,17 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     ? [!!input.adventure.discover, !!input.adventure.play, input.adventure.phase === 'complete'] : null;
   const adventureStep = adventureDots && input.adventure?.phase === 'celebrate' ? 'celebrate' : 'play';
   const playUp = input.playableTaskId != null;
+  // The coin the card goes back to after a coin in passing, and the closed coin it moved on from (T003, T008).
+  const resumed = shown ? guide.resumed() : null;
+  const thenName = resumed && resumed.taskId !== shown?.taskId ? resumed.name : null;
+  const replacedBy = shown ? guide.replacedBy() : null;
+  const replacedName = replacedBy && answers[replacedBy.taskId] === 'closed' ? replacedBy.name : null;
   const copy = oneGoldButton(restingSightCopy(guideCardCopy(state, shown, {
     parkName: input.parkName, ridesResting, allOwned, outOfReach,
     tickets: input.wallet?.tickets ?? 0, freeStep: input.wallet ? nextFreeTicket(input.wallet) : null,
     queueTicketsOn: input.queueTicketsOn, adventureDots, lineStoryNear: input.lineStoryNear, adventureStep,
     welcomed, ownedHere: coins.filter(coin => coin.owned).length + (input.ownedTaskIds?.size ?? 0) > 0 ? 1 : 0, playUp,
-    freeTryDaily: input.freeTryDaily, leaving: leaving ? { parkName: leavingFrom?.parkName ?? null,
+    freeTryDaily: input.freeTryDaily, thenName, replacedName, leaving: leaving ? { parkName: leavingFrom?.parkName ?? null,
       coins: coinsToday(dayRecord, leavingFrom?.parkId, today) } : null,
   }), shown, ridesResting), playUp);
   const targetTask = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;

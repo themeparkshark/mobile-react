@@ -1202,6 +1202,8 @@ export default function RedeemRedeemableModal({
         onCovered={() => setWinCovered(true)}
         visible={open === true && flowState === 'postwin'}
         rideName={taskName}
+        // The server types ride coins coin_kind 'ride'; a sight (no kind) never reads "NEW RIDE COIN" (T019).
+        sight={redeemable?.type === 'task' && (redeemable.model as { coin_kind?: string | null }).coin_kind !== 'ride'}
         limited={redeemable?.type === 'task' ? (redeemable.model as TaskType)?.limited ?? null : null}
         taskCoinUrl={
           redeemable?.type === 'task'

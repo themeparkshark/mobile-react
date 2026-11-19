@@ -94,7 +94,14 @@ export interface GuideCopyContext {
   readonly freeTryDaily?: boolean;
   /** Goodbye: the park the player is leaving and the coins they won there today. */
   readonly leaving?: { readonly parkName: string | null; readonly coins: number } | null;
+  /** PLAY! took the card for a coin in passing: the coin the card goes back to once the player walks on (T003, T008). */
+  readonly thenName?: string | null;
+  /** The guide moved on because the coin it held closed (T008): that coin's name, said in one line while it stays closed. */
+  readonly replacedName?: string | null;
 }
+
+/** Within this many meters of its coin, PLAY! is about to rise: the card says "Almost there" (T009), never a number. */
+export const ALMOST_THERE_METERS = 16;
 
 /**
  * One gold button per screen (fix W1 item 9): while PLAY! is up, the card's own gold button becomes its quiet
@@ -166,7 +173,9 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
   const running = target?.checkRunning ? 'Check it\'s running' : null;
   const leaving = target?.reason === 'leaves_soon' ? leavesLine(target.leavesOn) : null;
   const base = { secondary: null, dots: ctx.adventureDots, pointsAtPlay: false } as const;
-  const kickerFor = () => target?.reason === 'adventure' || target?.reason === 'line_story' ? 'TODAY\'S ADVENTURE'
+  // One title per state on every phone (T004): TODAY'S ADVENTURE only on today's Adventure ride, always with its stamp
+  // dots, whatever set the pointer there (the guide, the ticket's FIND THIS COIN, a Wait Times pick).
+  const kickerFor = () => ctx.adventureDots ? 'TODAY\'S ADVENTURE'
     : target?.reason === 'chosen' ? 'YOUR NEXT COIN'
       : target?.reason === 'star_rush' ? 'SHORT WAIT'
         : target?.reason === 'leaves_soon' ? 'LIMITED COIN'
@@ -199,8 +208,8 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
       return card({
         kicker: 'NEXT PARK DAY',
         title: ctx.parkName ? `${ctx.parkName}: ${tickets(ctx.tickets)} ready` : `${tickets(ctx.tickets)} ready`,
-        line: ctx.planName ? `Next coin: ${ctx.planName}. ${meter}` : shelf && shelf.total > 0
-          ? `Your shelf: ${shelf.owned} of ${shelf.total}. ${meter}` : meter,
+        // PLAN plans (T016): with no coin planned yet the line says what the button does.
+        line: ctx.planName ? `Next coin: ${ctx.planName}. ${meter}` : `Pick your next coin. ${meter}`,
         button: { label: 'PLAN', action: 'plan' },
         dots: null,
       });
@@ -239,18 +248,25 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         dots: null,
       });
     }
-    case 'walk':
+    case 'walk': {
+      // A few steps out, PLAY! is about to rise: "Almost there", never "5 m" with no button (T009).
+      const almost = target?.meters != null && target.meters <= ALMOST_THERE_METERS ? 'Almost there' : null;
+      // Why the coin changed by itself, in one line (T008).
+      const why = ctx.replacedName ? `${ctx.replacedName} is closed now` : null;
       return card({
         kicker: kickerFor(),
         title: name,
-        line: [far, leaving, running].filter(Boolean).join(' · ') || null,
+        line: [almost ?? far, leaving, why ?? running].filter(Boolean).join(' · ') || null,
         button: null,
       });
+    }
     case 'here':
+      // Standing at the coin, PLAY! is the answer even with no live word yet: a small "Check it's running" (T014).
+      // A coin in passing says where the card goes next, so the change back is never a surprise (T003, T008).
       return card({
         kicker: kickerFor(),
         title: 'You\'re here! Tap PLAY!',
-        line: name,
+        line: [name, running, ctx.thenName && ctx.thenName !== name ? `Then: ${ctx.thenName}` : null].filter(Boolean).join(' · ') || null,
         button: null,
         pointsAtPlay: true,
       });
