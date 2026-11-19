@@ -27,11 +27,16 @@ export default memo(function NewCoinGlow({ size, reduced }: { readonly size: num
     return () => cancelAnimation(glow);
   }, [glow, reduced]);
   const style = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 0.85 + glow.value * 0.15 }] }));
-  const box = size * 1.75;
+  // The soft spot fades to nothing well inside its square, so it is drawn larger than the coin (as GoldBurst does)
+  // and twice: a wide warm glow and a brighter ring hugging the rim.
+  const box = size * 2.3;
+  const rim = size * 1.55;
   return (
     <Animated.View pointerEvents="none" accessible={false}
       style={[styles.wrap, { width: box, height: box, left: (size - box) / 2, top: (size - box) / 2 }, style]}>
       <Image source={SOFT} style={StyleSheet.absoluteFill} contentFit="fill" transition={0} tintColor={GOLD_FX.glow} />
+      <Image source={SOFT} style={{ position: 'absolute', width: rim, height: rim, left: (box - rim) / 2, top: (box - rim) / 2 }}
+        contentFit="fill" transition={0} tintColor={GOLD_FX.rays} />
     </Animated.View>
   );
 });
