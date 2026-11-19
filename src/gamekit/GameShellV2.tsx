@@ -43,6 +43,7 @@ import {
   AppState,
   BackHandler,
   type LayoutChangeEvent,
+  type GestureResponderEvent,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -1417,7 +1418,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // dropped: it skips the new count once the reset is in (the count effect reads skipWantedRef).
     const skipCountdownRef = useRef(skipCountdown);
     skipCountdownRef.current = skipCountdown;
-    const queueRetrySkip = useCallback(() => {
+    const queueRetrySkip = useCallback((e: GestureResponderEvent) => {
+      // Only a touch on the root itself: the touch it took while it was box-only (taps on the board bubble past).
+      // Read when JS gets to it, which on a busy thread is after the reset is in, so the handler is always set.
+      if (e.target !== e.currentTarget) return;
       pressTrace('shell.skipqueued', () => gameIdRef.current);
       if (retryRoundSeen.current === retryRoundRef.current) skipCountdownRef.current();
       else skipWantedRef.current = true;
@@ -1541,7 +1545,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const retryResetPending = retryRound !== retryRoundSeen.current;
     const gameContent = (
         <View style={styles.root} pointerEvents={retryResetPending ? 'box-only' : 'auto'}
-          onTouchEnd={retryResetPending ? queueRetrySkip : undefined}>
+          onTouchEnd={rideChallenge ? queueRetrySkip : undefined}>
           {/* Header */}
           {/* While results are up the card is the only thing to read: the
               game's title and score step back and the close X dims (it still

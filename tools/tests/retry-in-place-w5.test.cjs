@@ -155,7 +155,8 @@ test('w5 N04: the kept board is live while the deal travels; only GO waits for i
   const veil = Number(/replayVeil: \{ opacity: ([0-9.]+) \}/.exec(modal)?.[1]);
   assert.ok(veil >= 0.015 && veil <= 0.03, String(veil));
   // The shell takes no touch in the render that brings a new try number, until its reset has run.
-  assert.match(shell, /const retryResetPending = retryRound !== retryRoundSeen\.current;\n\s+const gameContent = \(\n\s+<View style=\{styles\.root\} pointerEvents=\{retryResetPending \? 'box-only' : 'auto'\}\n\s+onTouchEnd=\{retryResetPending \? queueRetrySkip : undefined\}>/);
+  assert.match(shell, /const retryResetPending = retryRound !== retryRoundSeen\.current;\n\s+const gameContent = \(\n\s+<View style=\{styles\.root\} pointerEvents=\{retryResetPending \? 'box-only' : 'auto'\}\n\s+onTouchEnd=\{rideChallenge \? queueRetrySkip : undefined\}>/);
+  assert.match(shell, /if \(e\.target !== e\.currentTarget\) return;/);
   // That tap is kept: it skips the new count once the reset is in (never dropped, never a press on the last try).
   assert.match(shell, /if \(retryRoundSeen\.current === retryRoundRef\.current\) skipCountdownRef\.current\(\);\n\s+else skipWantedRef\.current = true;/);
   assert.match(shell, /raf2 = nextFrame\(\(\) => \(skipWantedRef\.current \? startCount\(\[steps\[steps\.length - 1\]\], 0\) : startCount\(steps, lead\)\)\);/);
