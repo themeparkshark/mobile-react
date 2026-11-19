@@ -17,8 +17,12 @@ test('T036: a fresh spend starts the punch before the server answers', () => {
   // w5 N04: a kept board waiting for its deal is the one fresh spend that keeps its game on screen.
   // w5 T036: the day's dealt game (or the game a switched TRY AGAIN named) mounts held from the press; the punch
   // still pops only the server's own deal (selectedGameData stays null until it answers).
-  assert.match(modal, /const optimistic = !saved;\n(\s+\/\/.*\n)?\s+if \(optimistic && !replayRef\.current\) \{\n(\s+\/\/.*\n)+\s+const early = earlyGameFor\(retryNextIdRef\.current \? \{ game: retryNextIdRef\.current \} : redeemable\?\.deal\);\n\s+retryNextIdRef\.current = null;\n\s+earlyGameRef\.current = early;\n\s+setSelectedGame\(early\);\n\s+setSelectedGameData\(null\);\n\s+setFlowState\('spinning'\);/);
-  const spinAt = modal.indexOf("setFlowState('spinning');\n    }\n    try {\n      const result = await recoverTaskAttempt(checkpoint);");
+  // w5 T036: the punch starts before the who-is-playing reads and the checkpoint write; the early game mounts once
+  // the request is on its way.
+  assert.match(modal, /const optimistic = !saved;\n(\s+\/\/.*\n)?\s+const punchNow = optimistic && !replayRef\.current;\n\s+if \(punchNow\) \{\n\s+setSelectedGame\(null\);\n\s+setSelectedGameData\(null\);\n\s+setFlowState\('spinning'\);\n\s+\}\n(\s+\/\/.*\n)+\s+const pictureOnly = /);
+  assert.match(modal, /if \(punchNow\) \{\n(\s+\/\/.*\n)+\s+const early = earlyGameFor\(retryNextIdRef\.current \? \{ game: retryNextIdRef\.current \} : redeemable\?\.deal\);\n\s+retryNextIdRef\.current = null;\n\s+earlyGameRef\.current = early;\n\s+setSelectedGame\(early\);\n\s+\}\n\s+try \{\n\s+const result = await recoverTaskAttempt\(checkpoint\);/);
+  const spinAt = modal.indexOf("const punchNow = optimistic && !replayRef.current;");
+  assert.ok(spinAt > 0 && spinAt < modal.indexOf('await writeTaskAttemptCheckpoint(checkpoint);'), 'the punch starts before the write');
   assert.ok(spinAt > 0, 'the punch is set before the spend request');
   assert.match(modal, /\{flowState === 'spinning' && \(\n\s+<TicketPunch\n\s+gameName=\{selectedGameData\?\.name \?\? null\}/);
   // The punch waits for the dealt game, and a tap never skips past an undealt game.

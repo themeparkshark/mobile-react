@@ -696,6 +696,18 @@ export default function RedeemRedeemableModal({
       return;
     }
     startLocationRef.current = startLocation;
+    // T036: a fresh spend starts the punch at once; the game card pops as soon as the server deals it
+    // (the request id makes the spend safe to repeat, so nothing waits on ONE MOMENT).
+    // w5: the punch starts here, before the who-is-playing reads and the checkpoint write (0.3 to 0.9 s on a loaded
+    // phone): its ticket flight is UI-thread animation, so it lands while those finish and the request travels.
+    const optimistic = !saved;
+    // A kept board waiting for its deal stays on screen (w5 N04); every other fresh spend starts the punch.
+    const punchNow = optimistic && !replayRef.current;
+    if (punchNow) {
+      setSelectedGame(null);
+      setSelectedGameData(null);
+      setFlowState('spinning');
+    }
     // Picture games only (a child who cannot read yet): the server deals Whack or Memory, never trivia.
     const pictureOnly = saved ? saved.pictureOnly === true : await pictureAsk;
     pictureOnlyRef.current = pictureOnly;
@@ -737,20 +749,15 @@ export default function RedeemRedeemableModal({
       spendingRef.current = false;
       return;
     }
-    // T036: a fresh spend starts the punch at once; the game card pops as soon as the server deals it
-    // (the request id makes the spend safe to repeat, so nothing waits on ONE MOMENT).
-    const optimistic = !saved;
-    // A kept board waiting for its deal stays on screen (w5 N04); every other fresh spend starts the punch.
-    if (optimistic && !replayRef.current) {
-      // T036 (w5): this ride's game for the day (the coin card's deal) mounts held under the punch now, so its
-      // board draws while the Ticket is on its way; the server's own deal decides at the tear.
+    if (punchNow) {
+      // T036 (w5): this ride's game for the day (the coin card's deal) mounts held under the punch once the request
+      // is on its way (its mount is JS work, kept off the reads and the write in front of the request), so its
+      // board draws while the Ticket travels; the server's own deal decides at the tear.
       // TRY AGAIN that the server switched (T232) mounts the game it named; PLAY mounts the day's game.
       const early = earlyGameFor(retryNextIdRef.current ? { game: retryNextIdRef.current } : redeemable?.deal);
       retryNextIdRef.current = null;
       earlyGameRef.current = early;
       setSelectedGame(early);
-      setSelectedGameData(null);
-      setFlowState('spinning');
     }
     try {
       const result = await recoverTaskAttempt(checkpoint);

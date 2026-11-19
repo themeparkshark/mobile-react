@@ -60,7 +60,7 @@ test('N04: the ride card keeps the board mounted, held and full-window under the
   // Memory's re-deal for the newly dealt seed snaps in place before GO (no second fly-in under the count).
   assert.match(memory, /const offStage = stageHeldRef\.current \|\| retryDealRef\.current;/);
   assert.match(memory, /const onStart = useCallback\(\(\) => \{\n\s+retryDealRef\.current = false;/);
-  assert.match(modal, /if \(optimistic && !replayRef\.current\) \{/);
+  assert.match(modal, /const punchNow = optimistic && !replayRef\.current;/);
   assert.match(modal, /setFlowState\(dealtFlow\(\)\);/);
   // Stable game callbacks, so the memoized game is not re-rendered by the card.
   assert.match(modal, /onClose=\{onGameLose\}\n\s+onComplete=\{onGameWin\}/);
