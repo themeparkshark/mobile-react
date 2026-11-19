@@ -14,6 +14,8 @@ import { onTicketGrant, pendingTicketGrants, takeTicketGrant, ticketGrantLine } 
 const TICKET_ART = require('../../../assets/images/ticket-icon.png');
 /** The gap between two grants, so each toast is read before the next. */
 export const TICKET_GRANT_GAP_MS = 2800;
+/** How long the map stays calm before a grant plays (a cover that is about to come up cancels it). */
+export const TICKET_GRANT_SETTLE_MS = 1500;
 
 export default function TicketGrantMoment({ calm }: { readonly calm: boolean }) {
   const { triggerFly, getTarget } = useCurrencyFly();
@@ -24,17 +26,23 @@ export default function TicketGrantMoment({ calm }: { readonly calm: boolean }) 
   useEffect(() => onTicketGrant(() => setWaiting(pendingTicketGrants())), []);
   useEffect(() => () => { if (gap.current) clearTimeout(gap.current); }, []);
   useEffect(() => {
-    if (!calm || busy || waiting === 0 || !getTarget('tickets')) return;
-    const grant = takeTicketGrant();
-    setWaiting(pendingTicketGrants());
-    if (!grant) return;
-    setBusy(true);
-    const { width, height } = Dimensions.get('window');
-    triggerFly({ imageSource: TICKET_ART, amount: Math.min(grant.amount, 6), startX: width / 2, startY: height * 0.45, targetPosition: 'tickets' });
-    showToast({ type: 'reward', icon: 'ticket', message: ticketGrantLine(grant), duration: 2600 });
-    haptic('success');
-    // The gap timer lives in a ref: a re-render never cancels it (the next grant always gets its turn).
-    gap.current = setTimeout(() => { gap.current = null; setBusy(false); }, TICKET_GRANT_GAP_MS);
+    if (!calm || busy || waiting === 0) return undefined;
+    // The map must stay calm for a beat first: the grant arrives with the park check-in, a moment before the
+    // walking-in sky covers the map, and it must play after that cover, on the map (device run, Nov 19).
+    const settle = setTimeout(() => {
+      if (!getTarget('tickets')) return;
+      const grant = takeTicketGrant();
+      setWaiting(pendingTicketGrants());
+      if (!grant) return;
+      setBusy(true);
+      const { width, height } = Dimensions.get('window');
+      triggerFly({ imageSource: TICKET_ART, amount: Math.min(grant.amount, 6), startX: width / 2, startY: height * 0.45, targetPosition: 'tickets' });
+      showToast({ type: 'reward', icon: 'ticket', message: ticketGrantLine(grant), duration: 2600 });
+      haptic('success');
+      // The gap timer lives in a ref: a re-render never cancels it (the next grant always gets its turn).
+      gap.current = setTimeout(() => { gap.current = null; setBusy(false); }, TICKET_GRANT_GAP_MS);
+    }, TICKET_GRANT_SETTLE_MS);
+    return () => clearTimeout(settle);
   }, [calm, busy, waiting, getTarget, triggerFly, showToast]);
   return null;
 }
