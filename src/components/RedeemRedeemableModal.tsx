@@ -140,7 +140,7 @@ export const NEED_TICKET_BUTTON = BACK_TO_MAP;
 /** "3 treats at home": the treat art from How to Play (the churro), never the compass. */
 const TREAT_ART = require('../../assets/images/prep-items/churros/churro_18.png');
 /** One shell per try on a Ticket (the Memory try card's shells, Alex's conch). */
-const SHELL_ART = require('../../assets/games/current-quest/conch.png');
+const SHELL_ART = require('../assets/games/current-quest/conch.png');
 /** Taps beside the challenge card in its first moment on screen are queued PLAY! taps, not a close. */
 export const SCRIM_GRACE_MS = 900;
 /** The card waits this long on a sheet that registered before it, then asks the native door itself. */

@@ -154,3 +154,9 @@ test('T070 Parts the line already paid get their own quiet chip that never flies
   assert.match(modal, /lineParts=\{linePartsEarned\}/);
   assert.match(read('src/components/PostWinRewardsModal.tsx'), /if \(chip\.noFly\) continue;/);
 });
+
+test('T039 the shell art the coin card requires exists', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  const rel = modal.match(/const SHELL_ART = require\('([^']+)'\)/)[1];
+  assert.ok(fs.existsSync(path.join(root, 'src/components', rel)), rel);
+});
