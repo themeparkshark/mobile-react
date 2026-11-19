@@ -342,19 +342,19 @@ function ButtonSection() {
     <Section id="button" title="StickerButton">
       <World>
         <Row>
-          <StickerButton label="PLAY!" size="large" width={170} />
-          <PressedSample label="PLAY!" size="large" width={170} />
-          <StickerButton label="PLAY!" size="large" width={170} disabled />
-          <StickerButton label="PLAY!" accessibilityLabel="Play, loading" size="large" width={170} busy />
+          <StickerButton variant="primary" label="PLAY!" size="large" width={170} />
+          <PressedSample variant="primary" label="PLAY!" size="large" width={170} />
+          <StickerButton variant="primary" label="PLAY!" size="large" width={170} disabled reason="Come back tomorrow" />
+          <StickerButton variant="primary" label="PLAY!" accessibilityLabel="Play, loading" size="large" width={170} busy />
         </Row>
         <Note>Primary: rest with the glint and the white edge, pressed by its lip, off, busy.</Note>
         <Row><StickerButton label="OPEN" variant="second" width={96} /><StickerButton label="SEE" variant="third" width={80} /></Row>
         <Note>Second and third on the world: no white edge (only the one primary wears it).</Note>
       </World>
-      <MapGround><Row><StickerButton label="PLAY!" size="large" width={170} /><Tag>Shelf</Tag></Row></MapGround>
+      <MapGround><Row><StickerButton variant="primary" label="PLAY!" size="large" width={170} /><Tag>Shelf</Tag></Row></MapGround>
       <InPage>
         <Row gap={10}>
-          <StickerButton label="OPEN" width={96} />
+          <StickerButton variant="primary" label="OPEN" width={96} />
           <StickerButton label="OPEN" variant="second" width={96} />
           <StickerButton label="SEE" variant="third" width={80} />
           <StickerButton label="DELETE" variant="danger" width={110} />
@@ -466,7 +466,7 @@ function WaveFootSample() {
   return (
     <WaveFoot width={width - 32} height={130}>
       <View style={{ alignSelf: 'stretch', paddingHorizontal: 20, alignItems: 'center' }}>
-        <StickerButton label="NEXT COIN" size="large" fullWidth />
+        <StickerButton variant="primary" label="NEXT COIN" size="large" fullWidth />
         <GhostButton label="See my shelf" />
       </View>
     </WaveFoot>
