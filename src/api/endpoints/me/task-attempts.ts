@@ -60,6 +60,8 @@ export interface TaskAttempt {
   ticket_cost: number;
   rescue_pass?: boolean;
   rescue_retry_available?: boolean;
+  /** Which free way paid for this try (daily free try, a held extra try, or the retry after one). */
+  rescue_source?: 'daily' | 'held' | 'held_retry' | null;
   game: TaskAttemptGame;
   seed?: number;
   status: TaskAttemptStatus;

@@ -87,3 +87,40 @@ test('W4-SMOKE-3a while the answer loads, the row keeps its place with the pack 
   const card = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(card, /if \(open && outOfTickets && !previewOnly\) warmCalmOffer\(player\?\.id, 'need_ticket'\)/);
 });
+
+/* SAFETY-shutdown-extra-try: a try lost to an app shutdown comes back once, and the coin's card says so in one line. */
+test('SAFETY-shutdown-extra-try a try that ran out unplayed leaves one line for its coin card, shown once', () => {
+  const stub = { getTaskAttempt: async () => ({}) };
+  const store = { listTaskAttemptCheckpoints: async () => [], removeTaskAttemptCheckpoint: async () => undefined };
+  const pending = loadTs('src/services/task-attempt/pendingWins.ts', {
+    '../../api/endpoints/me/task-attempts': stub, './checkpoint': store,
+  });
+  assert.equal(pending.returnedTryLine({ status: 'expired', ticket_cost: 0, rescue_pass: true, rescue_source: 'held' }),
+    'Game not finished. Your extra try came back.');
+  assert.equal(pending.returnedTryLine({ status: 'expired', ticket_cost: 0, rescue_pass: true, rescue_source: 'daily' }),
+    'Game not finished. Your free try came back.');
+  assert.equal(pending.returnedTryLine({ status: 'expired', ticket_cost: 1, rescue_pass: false }), 'Game not finished. Your Ticket came back.');
+  assert.equal(pending.returnedTryLine({ status: 'lost', ticket_cost: 0, rescue_pass: true, rescue_source: 'held' }), null, 'a lost try is old news');
+  pending.noteReturnedTry('task', 119, 'Game not finished. Your extra try came back.');
+  assert.equal(pending.takeReturnedTry('task', 120), null, 'only its own coin');
+  assert.equal(pending.takeReturnedTry('task', 119), 'Game not finished. Your extra try came back.');
+  assert.equal(pending.takeReturnedTry('task', 119), null, 'once');
+});
+
+test('SAFETY-shutdown-extra-try the map notes it as it clears the saved try, and the card shows it in place of its step line', async () => {
+  const saved = [{ version: 1, playerId: 96, taskType: 'task', taskId: 119, requestId: 'r'.repeat(20), attemptId: 1720, latitude: 1, longitude: 1, savedAt: 1 }];
+  let removed = 0;
+  const pending = loadTs('src/services/task-attempt/pendingWins.ts', {
+    '../../api/endpoints/me/task-attempts': { getTaskAttempt: async () => ({ attempt: { status: 'expired', ticket_cost: 0, rescue_pass: true, rescue_source: 'held' } }) },
+    './checkpoint': { listTaskAttemptCheckpoints: async () => saved, removeTaskAttemptCheckpoint: async () => { removed += 1; } },
+  });
+  const result = await pending.findPendingWin(96);
+  assert.equal(result.win, null);
+  assert.equal(removed, 1, 'the saved try is still cleared');
+  assert.equal(pending.takeReturnedTry('task', 119), 'Game not finished. Your extra try came back.');
+  const card = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(card, /const line = takeReturnedTry\(taskType, taskId\);/);
+  assert.match(card, /\{returnedLine && <Text style=\{styles\.stepLine\} numberOfLines=\{1\}/);
+  assert.match(card, /\{!returnedLine && playsNow && outOfTickets && challengeStepLine\(freeStep\)/, 'one line, never two');
+  assert.match(card, /'This extra try timed out, so it came back to you\.'/);
+});
