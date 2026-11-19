@@ -84,7 +84,7 @@ test('N04: the shell and every ride game reset in place on a new try number (not
   // Beat the Buzzer: results, hold, tiles and clock let go; the repeat start is GO! alone, then the dealt round.
   assert.match(trivia, /useOnRetryRound\(\(\) => \{/);
   assert.match(trivia, /const steps = repeat \? \['GO!'\] : \['3', '2', '1', 'GO!'\];/);
-  assert.match(trivia, /later\(\(steps\.length - 1\) \* COUNTDOWN\.stepMs \+ COUNTDOWN\.goMs/);
+  assert.match(trivia, /later\(repeat \? 0 : 3 \* COUNTDOWN\.stepMs \+ COUNTDOWN\.goMs, \(\) => \{ void beginMatch\(false\); \}\);/);
 });
 
 test('T036: the ride card warms the Whack board art while the coin card is up', () => {

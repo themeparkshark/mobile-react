@@ -1745,7 +1745,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
       sfx(CUE.tick, { volume: label === 'GO!' ? 0.7 : 0.45 });
       Haptic.tickSelection();
     }));
-    later((steps.length - 1) * COUNTDOWN.stepMs + COUNTDOWN.goMs, () => { void beginMatch(false); });
+    // A repeat start deals the round under its GO! (the first question lands as the stamp settles).
+    later(repeat ? 0 : 3 * COUNTDOWN.stepMs + COUNTDOWN.goMs, () => { void beginMatch(false); });
   }, [beginMatch, later, stamp, W]);
 
   const onPause = useCallback(() => {
