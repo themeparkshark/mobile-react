@@ -29,6 +29,8 @@ import ClueDots from './ClueDots';
 const CARD_BACK: ImageSourcePropType = require('../../../assets/games/memory/card-back.png');
 /** Card faces are 3 wide by 4 tall on Alex's sheets. */
 const FACE_RATIO = 4 / 3;
+/** How far inside each sheet cell the crop sits (a share of the cell). */
+const FACE_INSET = 0.02;
 
 interface Props {
   readonly kind: PicturePuzzleKind;
@@ -56,9 +58,12 @@ function Face({ deck, symbol, width }: { deck: Deck; symbol: number; width: numb
   const rows = extra ? 1 : 2;
   const slot = extra ? sym.extraSheetSlot! : sym.sheetSlot ?? 0;
   if (!sheet) return <View style={[styles.faceFallback, { width, height, backgroundColor: sym.tint }]} />;
+  // The sheet's cells touch, so a plain crop shows a sliver of the next card: crop a little inside the cell.
+  const cellW = width / (1 - 2 * FACE_INSET);
+  const cellH = height / (1 - 2 * FACE_INSET);
   return <View style={[styles.faceClip, { width, height }]}>
-    <Image source={sheet} resizeMode="stretch" fadeDuration={0} style={{ position: 'absolute', width: width * cols, height: height * rows,
-      left: -(slot % cols) * width, top: -Math.floor(slot / cols) * height }} />
+    <Image source={sheet} resizeMode="stretch" fadeDuration={0} style={{ position: 'absolute', width: cellW * cols, height: cellH * rows,
+      left: -(slot % cols) * cellW - FACE_INSET * cellW, top: -Math.floor(slot / cols) * cellH - FACE_INSET * cellH }} />
   </View>;
 }
 
@@ -132,8 +137,9 @@ export default function PicturePuzzleCard({ kind, deckId, seed, title, completed
   const tall = pageHeight > 0 ? pageHeight : 360;
   const rowTile = Math.floor(Math.min(64, (usable - 5 * 6) / 6));
   const choiceTile = Math.floor(Math.min(92, (usable - 2 * 14) / 3, (tall - 96 - rowTile * FACE_RATIO) / FACE_RATIO));
-  const gridTile = Math.floor(Math.min(74, (usable - 108 - 2 * 8) / 3, (tall - 72) / (2 * FACE_RATIO) - 6));
-  const targetTile = Math.floor(Math.min(96, gridTile * 1.25));
+  // The twin row: the target (1.25 tiles plus its 14 pt frame), the 30 pt arrow, the gaps, then three grid tiles.
+  const gridTile = Math.floor(Math.min(74, (usable - 72) / 4.25, (tall - 72) / (2 * FACE_RATIO) - 6));
+  const targetTile = Math.floor(gridTile * 1.25);
 
   const tap = (symbol: number) => {
     if (paused || right != null || showSolved) return;
@@ -207,7 +213,8 @@ export default function PicturePuzzleCard({ kind, deckId, seed, title, completed
         <Text style={styles.factText}>{fact}</Text>
         {factSourceLine(factSource) ? <Text style={styles.factSource}>{factSourceLine(factSource)}</Text> : null}
       </View> : null}
-      <GameButton label="Play again" icon="retry" variant="secondary" size="compact" disabled={paused} onPress={again}
+      {/* Quiet: the rail's Next is the one big step after a solve. */}
+      <GameButton label="Play again" icon="retry" variant="ghost" size="compact" disabled={paused} onPress={again}
         accessibilityLabel={`Play ${title ?? 'this puzzle'} again`} />
     </View>}
   </View>;
