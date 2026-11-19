@@ -189,3 +189,19 @@ test('T023: while the first coin is picked the card breathes softly (UI thread, 
   assert.match(card, /<Animated\.View style=\{breathStyle\}><Image source=\{art\}/);
   assert.match(read('src/screens/ExploreScreen.tsx'), /loading=\{nextCoin\.state === 'arrive' && !nextCoin\.target\}/);
 });
+
+test('N11: the ride name under PLAY! is one line, fitted, and a very long name keeps its main words', () => {
+  const P = loadTs('src/components/guide/playCaption.ts');
+  assert.equal(P.playCaptionName('The Many Adventures of Winnie the Pooh'), 'The Many Adventures of Winnie the Pooh');
+  assert.equal(P.playCaptionName('Meet Cinderella and a Visiting Princess at Princess Fairytale Hall'), 'Princess Fairytale Hall');
+  assert.equal(P.playCaptionName("Meet Daring Disney Pals as Circus Stars at Pete's Silly Sideshow"), "Pete's Silly Sideshow");
+  assert.equal(P.playCaptionName("A Pirate's Adventure ~ Treasures of the Seven Seas"), "A Pirate's Adventure");
+  assert.equal(P.playCaptionName('Monsters Unchained: The Frankenstein Experiment'), 'Monsters Unchained');
+  assert.equal(P.playCaptionName('Hagrid\'s Magical Creatures Motorbike Adventure'), 'Hagrid\'s Magical Creatures Motorbike Adventure', 'no subtitle: as is, it shrinks');
+  for (const n of ['Under the Sea - Journey of The Little Mermaid', 'Harry Potter and the Battle at the Ministry', 'Finding Nemo Submarine Voyage']) {
+    assert.ok(P.playCaptionName(n).length <= 45, n);
+  }
+  const modal = read('src/components/RedeemModal.tsx');
+  assert.match(modal, /<Text style=\{styles\.captionText\} numberOfLines=\{1\} adjustsFontSizeToFit minimumFontScale=\{0\.7\}>\{playCaptionName\(coin\.name\)\}<\/Text>/);
+  assert.match(modal, /accessibilityLabel=\{badge === 'free_try' \? `\$\{coin\.name\}\. Free try today\.`/, 'the spoken label keeps the full name');
+});
