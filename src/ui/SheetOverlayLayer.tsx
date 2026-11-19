@@ -46,6 +46,7 @@ export default function SheetOverlayLayer({ leaving, children }: { readonly leav
     const tap = held.current;
     held.current = null;
     const press = pressRef.current;
+    pressTrace('layer.drop', () => `held=${!!tap}`);
     if (!tap || !press) return;
     setTimeout(() => {
       pressTrace('layer.heldTap.deliver', () => `x=${Math.round(tap.x)} y=${Math.round(tap.y)}`);

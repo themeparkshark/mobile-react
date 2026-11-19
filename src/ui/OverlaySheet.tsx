@@ -132,7 +132,7 @@ export default function OverlaySheet(props: DoorModalProps) {
     const frame = requestAnimationFrame(() => {
       if (!live.current || now.current.phase !== 'up' || showTold.current) return;
       showTold.current = true;
-      pressTrace('door.nativeShow', () => `id=${id.current} overlay=1`);
+      pressTrace('door.nativeShow', () => `id=${id.current} ${now.current.props.testID ?? 'sheet'} overlay=1`);
       now.current.props.onShow?.({ nativeEvent: {} });
     });
     return () => cancelAnimationFrame(frame);
