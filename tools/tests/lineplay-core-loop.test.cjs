@@ -169,7 +169,8 @@ test('Story and Games: one word per tab, crew pages only for a crew, new rounds 
 
 test('"Adventure" means only Today\'s Adventure: LinePlay and Ride Tracker strings say story, ride or line', () => {
   // Real names that hold the word (lands, a park, film series, trivia answers) are facts, not our word.
-  const allowed = /Today[’']s Adventure|Adventureland|California Adventure|True-Life Adventure/g;
+  // Ride names too (the line story land table, fix pass w4): Indiana Jones Adventure is the ride's real name.
+  const allowed = /Today[’']s Adventure|Adventureland|California Adventure|True-Life Adventure|Indiana Jones Adventure|Bayou Adventure|Pirate\\?[’']s Adventure|Many Adventures of Winnie|The Adventures Continue|Islands of Adventure/gi;
   const files = walk('src/screens/LinePlay').concat(walk('src/services/lineplay'), walk('src/components/RideTracker'),
     walk('src/screens/RideTracker'), ['src/screens/QueueTimesScreen.tsx']);
   for (const file of files) {

@@ -7,7 +7,7 @@ function load() {
   const values = new Map();
   const storage = { getItem: async key => values.get(key) ?? null, setItem: async (key, value) => { values.set(key, value); } };
   const rideTheme = loadTs('src/services/rideTheme.ts');
-  const chapters = loadTs('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme });
+  const chapters = loadTs('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme, './rideLands': loadTs('src/services/lineplay/rideLands.ts') });
   const deck = loadTs('src/services/lineplay/triviaDeck.ts', {
     '@react-native-async-storage/async-storage': { __esModule: true, default: storage },
     '../../api/endpoints/lineplay/trivia': { __esModule: true, default: async () => { throw new Error('offline'); } },

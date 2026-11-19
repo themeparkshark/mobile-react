@@ -32,6 +32,13 @@ import type { CircuitTheme } from '../../../services/lineplay/circuitTheme';
 import { factSourceLine } from '../../../services/lineplay/labels';
 import { BRAND, GameButton, GameIcon, SharkLoader } from '../../../ui';
 import { SPACE_NAVIGATOR_ART } from '../spaceNavigatorArt';
+import { AuthContext } from '../../../context/AuthProvider';
+import { usePlayPrefs } from '../../../services/playPrefs';
+import { chapterFact, getLinePlayChapterById, type LinePlayChapter } from '../../../services/lineplay/chapters';
+import { cachedRideFacts } from '../../../services/lineplay/triviaDeck';
+import { rideFact } from '../../../services/collection/rideFacts';
+import PicturePuzzleCard from './PicturePuzzleCard';
+import { puzzleSeed, storyPuzzleFor, triviaFactKicker } from '../../../services/lineplay/picturePuzzle';
 
 export interface ActivitySlotProps {
   readonly item: ActivityItem;
@@ -149,6 +156,21 @@ export default function ActivitySlot({
   newGame,
   crew = false,
 }: ActivitySlotProps) {
+  // Fix pass w4 (T075): the story's clues 1 and 2 are picture puzzles at every ride without an authored
+  // chapter, and at every ride while Picture games is on (zero reading). Authored chapters keep their ride
+  // trivia and field notes for readers.
+  const { player } = useContext(AuthContext);
+  const { prefs, available } = usePlayPrefs(player?.id ?? null);
+  const chapter = chapterId ? getLinePlayChapterById(chapterId) : null;
+  const puzzle = chapter ? storyPuzzleFor(chapter, item, available && prefs.pictureOnly) : null;
+  if (puzzle && chapter) {
+    const facts = storyFacts(chapter, parkId, rideId);
+    return <PageScroll fill={CARD_FILL}>
+      <PicturePuzzleCard kind={puzzle.kind} deckId={puzzle.deckId} seed={puzzleSeed(chapter.id, item.kind === 'trivia' || item.kind === 'lore' ? item.seed : 0)}
+        title={missionTitle} completed={completed} paused={paused} fact={chapterFact(chapter, facts)}
+        onSolved={() => onActivityCompleted(item.id)} />
+    </PageScroll>;
+  }
   switch (item.kind) {
     case 'minigame':
       return <MiniGameSlot title={missionTitle} item={item} navigator={navigationPanel && item.id === `${chapterId}-star-chart`} completed={completed} paused={paused}
@@ -164,7 +186,11 @@ export default function ActivitySlot({
         return <NavigationPanelCard seed={item.seed} title={navigationTitle} targetHeight={navigationTargetHeight}
           progress={navigationProgress} completed={completed} paused={paused}
           onTurn={onNavigationTurn} onNewRound={onNavigationReplay} onNext={onNavigationNext} onMakeRoom={onNavigationMakeRoom} />;
-      return <TriviaSlot title={missionTitle} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed} completed={completed} paused={paused} crew={crew} onAnswered={() => onActivityCompleted(item.id)} />;
+      // Free-play questions at a ride without an authored chapter come from the checked deck, never the
+      // story's word riddles (T075: FAN FACT only on real ride facts).
+      return <TriviaSlot title={missionTitle} rideId={rideId} parkId={parkId}
+        chapterId={chapter?.adaptive && item.id !== `${chapterId}-trivia` ? undefined : chapterId}
+        seed={item.seed} completed={completed} paused={paused} crew={crew} onAnswered={() => onActivityCompleted(item.id)} />;
     case 'lore':
       return <LoreSlot title={missionTitle} navigator={navigationPanel && item.id === `${chapterId}-field-note`} rideId={rideId} parkId={parkId} chapterId={chapterId} seed={item.seed}
         selectedClue={savedLoreChoice} completed={completed} paused={paused}
@@ -175,6 +201,17 @@ export default function ActivitySlot({
     default:
       return null;
   }
+}
+
+/** This ride's own true facts: its checked deck rows, else its authored coin note, else its chapter's sourced facts. */
+function storyFacts(chapter: LinePlayChapter, parkId?: number, rideId?: number): readonly string[] {
+  const server = cachedRideFacts(parkId, rideId);
+  if (server.length) return server;
+  if (chapter.adaptive) {
+    const note = rideFact(chapter.ride?.name, parkId);
+    return note && parkId === 8 ? [note.note] : [];
+  }
+  return chapter.trivia.filter(question => question.source && question.fact).map(question => question.fact!);
 }
 
 // -- minigame launch card ----------------------------------------------------
@@ -378,7 +415,7 @@ function TriviaSlot({
       </>}</WhenQuizCompact>
       {revealed && q.fact && (
         <View style={styles.factBox}>
-          <Text style={styles.factKicker}>{picked == null ? 'THE ANSWER' : picked === q.correctIndex ? 'CORRECT · FAN FACT' : 'FAN FACT'}</Text>
+          <Text style={styles.factKicker}>{triviaFactKicker(q, picked)}</Text>
           <Text style={styles.factText}>{q.fact}</Text>
           {factSourceLine(q.source) && <Text style={styles.factSource}>{factSourceLine(q.source)}</Text>}
         </View>

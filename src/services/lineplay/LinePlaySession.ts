@@ -1563,14 +1563,14 @@ export class LinePlaySession {
     const savedEpisode = savedEpisodeId?.match(/-episode-(\d+)-intro$/);
     this.adaptiveEpisodeRecorded = false;
     this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName,
-      saved ? savedEpisode ? Number(savedEpisode[1]) : undefined : this.playlistSeedOffset);
+      saved ? savedEpisode ? Number(savedEpisode[1]) : undefined : this.playlistSeedOffset, ride.rideId);
     if (!saved && (this.chapter?.episodeCount ?? 1) > 1 && playerId) {
       // Authored chapters start every new player on episode 1 (the original
       // story); returning players move on. Adaptive stories start anywhere.
       const nextEpisode = await selectAdaptiveEpisode(playerId, ride.parkId, ride.rideId,
         this.chapter!.episodeCount!, this.chapter!.adaptive ? playerId * 31 + ride.rideId * 17 : 0);
       if (this.disposed) return;
-      this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName, nextEpisode);
+      this.chapter = getLinePlayChapter(ride.parkId, ride.rideSlug, ride.rideName, nextEpisode, ride.rideId);
     }
     this.lastServerStartAttemptAt = 0;
     this.rewards = saved?.rewards ?? null;

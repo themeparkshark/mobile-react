@@ -48,6 +48,21 @@ export function cachedServerTrivia(parkId: number | undefined, rideId: number | 
   return decks.get(keyFor(parkId, rideId)) ?? decks.get(keyFor(parkId)) ?? [];
 }
 
+/**
+ * This ride's own checked fact sentences (fix pass w4, T077), for its line story and puzzle rewards. Only
+ * rows keyed to this ride id: a park row or another ride's row never stands in for this ride.
+ */
+export function cachedRideFacts(parkId: number | undefined, rideId: number | undefined): readonly string[] {
+  if (parkId == null || rideId == null) return [];
+  const deck = decks.get(keyFor(parkId, rideId)) ?? [];
+  const out: string[] = [];
+  for (const question of deck) {
+    const fact = question.rideId === rideId ? question.fact?.trim() : undefined;
+    if (fact && !out.includes(fact)) out.push(fact);
+  }
+  return out;
+}
+
 /** Load the deck from storage, then refresh it from the server when online. */
 export async function primeTriviaDeck(parkId: number | undefined, rideId?: number,
   fetchDeck: (parkId: number, rideId?: number) => Promise<ServerTriviaDeck> = getLinePlayTrivia): Promise<void> {

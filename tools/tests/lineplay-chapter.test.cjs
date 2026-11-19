@@ -25,7 +25,7 @@ function load(file, mocks = {}) {
 }
 
 const rideTheme = load('src/services/rideTheme.ts');
-const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme });
+const chapters = load('src/services/lineplay/chapters.ts', { '../rideTheme': rideTheme, './rideLands': load('src/services/lineplay/rideLands.ts') });
 const content = load('src/services/lineplay/content.ts', { './chapters': chapters,
   './triviaDeck': { cachedServerTrivia: () => [] }, './triviaHistory': { recentTriviaIds: () => new Map(), markTriviaSeen() {}, dealtTriviaId() {} } });
 

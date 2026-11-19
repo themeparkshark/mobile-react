@@ -1,5 +1,6 @@
 import type { LoreCard, TriviaQuestion } from './content';
 import { deckIdForRideName, type RideDeckId } from '../rideTheme';
+import { landDeck, landLine, parkPlainName, rideLand, type LandDeckId } from './rideLands';
 
 export interface LinePlayChapter {
   readonly id: string;
@@ -50,7 +51,25 @@ export interface LinePlayChapter {
   readonly palette?: 'night';
   /** One line shown as the chapter opens (the Shusher in haunt lines). */
   readonly introLine?: string;
+  /**
+   * Fix pass w4 (T077): the ride this story is told at, so every page names it, its land and a true fact
+   * about it (read live from the ride's checked trivia deck). Set on adaptive chapters.
+   */
+  readonly ride?: {
+    readonly parkId?: number;
+    readonly rideId?: number;
+    readonly name: string;
+    readonly land: string | null;
+    readonly park: string | null;
+  };
+  /** Fix pass w4 (T075): clues 1 and 2 are picture puzzles from this picture deck (zero reading). */
+  readonly puzzleDeckId?: string;
+  /** The adaptive story set this chapter came from (its land or ride theme), for the next-story teaser. */
+  readonly storyTheme?: StoryTheme;
 }
+
+/** Adaptive story sets: the broad ride themes plus the Old West (Frontierland). */
+export type StoryTheme = RideDeckId | 'frontier';
 
 const adaptiveChapters = new Map<string, LinePlayChapter>();
 
@@ -103,7 +122,7 @@ function adaptiveClueQuestions(chapterId: string, story: AdaptiveStory): readonl
 }
 
 /** Original shark fiction and matching card art; the name supplies a theme, never attraction facts. */
-const ADAPTIVE_STORIES: Record<RideDeckId, readonly AdaptiveStory[]> = {
+const ADAPTIVE_STORIES: Record<StoryTheme, readonly AdaptiveStory[]> = {
   park: [
     { title: 'The Missing Park Map', artifact: 'park map', clue: 'landmark', routeA: 'Follow the signs', routeB: 'Explore the midway' },
     { title: 'The Lost Golden Ticket', artifact: 'golden ticket', clue: 'stamp', routeA: 'Trace the ticket', routeB: 'Search the fair' },
@@ -160,15 +179,43 @@ const ADAPTIVE_STORIES: Record<RideDeckId, readonly AdaptiveStory[]> = {
     { title: 'The Toucan’s Lost Echo', artifact: 'toucan echo', clue: 'call', routeA: 'Answer the call', routeB: 'Search the treetops' },
     { title: 'The Hidden Waterfall Crystal', artifact: 'waterfall crystal', clue: 'splash', routeA: 'Follow the splash', routeB: 'Look behind the falls' },
   ],
+  // Fix pass w4 (T077): Old West stories for Frontierland lines (the old park set told a parade story there).
+  frontier: [
+    { title: 'The Lost Gold Nugget', artifact: 'gold nugget', clue: 'glint', routeA: 'Follow the glint', routeB: 'Pan the river' },
+    { title: 'The Runaway Mine Cart', artifact: 'mine cart', clue: 'track', routeA: 'Follow the tracks', routeB: 'Check the canyon' },
+    { title: 'The Missing Lantern Signal', artifact: 'trail lantern', clue: 'flicker', routeA: 'Follow the flicker', routeB: 'Search the mine' },
+    { title: 'The Riverboat Whistle', artifact: 'riverboat whistle', clue: 'toot', routeA: 'Follow the toot', routeB: 'Check the dock' },
+    { title: 'The Canyon Echo', artifact: 'canyon bell', clue: 'echo', routeA: 'Follow the echo', routeB: 'Climb the ridge' },
+    { title: 'The Prospector’s Map', artifact: 'prospector’s map', clue: 'mark', routeA: 'Follow the map', routeB: 'Ask at the depot' },
+  ],
 };
+
+/** The memory and puzzle deck for each story set (Alex's face sheets in games/memory/decks.ts). */
+const STORY_PICTURE_DECK: Record<StoryTheme, string> = {
+  park: 'park', space: 'space', pirates: 'pirates', mansion: 'mansion', backlot: 'backlot', ocean: 'ocean',
+  jungle: 'jungle', frontier: 'rainbow-ridge',
+};
+
+const LAND_STORY_THEME: Record<LandDeckId, StoryTheme> = {
+  space: 'space', jungle: 'jungle', pirates: 'pirates', 'rainbow-ridge': 'frontier', mansion: 'mansion',
+  park: 'park', backlot: 'backlot', ocean: 'ocean',
+};
+
+/** The ride's own theme when its name says one (Space Mountain, Pirates), else its land's, else the park set. */
+export function storyThemeFor(parkId: number | undefined, rideName: string): StoryTheme {
+  const byName = deckIdForRideName(rideName);
+  if (byName !== 'park') return byName;
+  const byLand = landDeck(rideLand(parkId, rideName));
+  return byLand ? LAND_STORY_THEME[byLand] : 'park';
+}
 
 /**
  * The adventure this ride plays next visit (episodes rotate per ride), for the recap's
  * "next time" teaser. Null for editorial chapters or a single-story theme.
  */
-export function nextAdaptiveStoryTitle(chapter: Pick<LinePlayChapter, 'id' | 'adaptive'> | null | undefined, rideName: string): string | null {
+export function nextAdaptiveStoryTitle(chapter: Pick<LinePlayChapter, 'id' | 'adaptive' | 'storyTheme'> | null | undefined, rideName: string): string | null {
   if (!chapter?.adaptive) return null;
-  const stories = ADAPTIVE_STORIES[deckIdForRideName(rideName.trim().slice(0, 60))];
+  const stories = ADAPTIVE_STORIES[chapter.storyTheme ?? deckIdForRideName(rideName.trim().slice(0, 60))];
   if (stories.length < 2) return null;
   const match = /-episode-(\d+)$/.exec(chapter.id);
   const current = match ? Number(match[1]) : stories.findIndex(story => chapter.id.includes(story.artifact));
@@ -180,21 +227,26 @@ export const ADAPTIVE_STORY_TOTAL = Object.values(ADAPTIVE_STORIES).reduce((n, l
 
 /** A repeatable, offline shark adventure for rides without an editorial chapter. */
 function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefined, rideName: string,
-  episodeSeed?: number): LinePlayChapter {
+  episodeSeed?: number, rideId?: number): LinePlayChapter {
   const safeName = rideName.trim().slice(0, 60);
   const slug = (rideSlug?.trim() || safeName.toLowerCase().replace(/[^a-z0-9]+/g, '-'))
     .toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 70) || 'ride';
-  const rideTheme = deckIdForRideName(safeName);
+  // T077: the story set follows the ride (its name, else its land), never a parade story at Autopia.
+  const rideTheme = storyThemeFor(parkId, safeName);
   const stories = ADAPTIVE_STORIES[rideTheme];
   const episode = episodeSeed == null ? null : Math.abs(Math.floor(episodeSeed)) % stories.length;
   const id = `queue-${parkId ?? 0}-${slug}${episode == null ? '' : `-episode-${episode}`}`; // clarity-allow: id
   const cached = adaptiveChapters.get(id);
-  if (cached) return cached;
+  // A chapter first built without the ride's id (a game picker) is rebuilt once the line knows it.
+  if (cached && (rideId == null || cached.ride?.rideId === rideId)) return cached;
 
   let hash = 0;
   for (const char of id) hash = (Math.imul(hash, 31) + char.charCodeAt(0)) >>> 0;
   const storyIndex = episode ?? hash % stories.length;
   const story = stories[storyIndex];
+  const land = rideLand(parkId, safeName);
+  const park = parkPlainName(parkId);
+  const pictureDeck = STORY_PICTURE_DECK[rideTheme];
   const finaleGameId = (['memory', 'tap', 'shark'] as const)[storyIndex % 3];
   const finaleTitle = finaleGameId === 'memory' ? `Rebuild the ${story.artifact}`
     : finaleGameId === 'tap' ? `Follow the ${story.clue}`
@@ -204,19 +256,27 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
     : finaleGameId === 'tap'
       ? 'Tap the sharks that pop up with the clue and skip the decoys. One thumb is all it takes.'
       : `Guide your shark through a short swim to find the ${story.artifact}. One thumb, about a minute.`;
+  const place = land ?? park;
   const chapter: LinePlayChapter = {
-    id, adaptive: true, episodeCount: stories.length, parkLabel: 'YOUR QUEUE',
+    id, adaptive: true, episodeCount: stories.length,
+    // T077: the page's header is where you stand (TOMORROWLAND), never a generic YOUR QUEUE.
+    parkLabel: (place ?? 'YOUR QUEUE').toUpperCase(),
+    ride: { parkId, rideId, name: safeName, land, park },
+    puzzleDeckId: pictureDeck,
+    storyTheme: rideTheme,
     // Every ride shows where this adventure sits in its series, like Space Mountain's flights.
     ...(episode == null ? {} : { episodeLabel: `STORY ${episode + 1} OF ${stories.length}` }),
     title: story.title,
-    story: `While you wait for ${safeName}, your shark crew needs to recover a ${story.artifact}. Solve a clue, notice something from your place in line, then rebuild it.`,
+    // The ride's own true fact joins this line at render (chapterStoryText); offline it stands alone.
+    story: `${rideIntro(safeName, land, park)} Your shark crew is in line, and a ${story.artifact} has gone missing nearby. Fix its picture row, spot the twin pictures, then ${finaleTitle[0].toLowerCase()}${finaleTitle.slice(1)}.`,
     completedTitle: `${story.artifact[0].toUpperCase()}${story.artifact.slice(1)} recovered!`,
-    completedStory: 'Your crew finished this line story. Try another game while your time near the ride keeps earning Ride Parts.',
+    completedStory: `Your crew finished this ${place ?? 'line'} story. Try another game while your time near the ride keeps earning Ride Parts.`,
     progressNoun: 'clues found',
-    missionNames: ['Decode a clue', 'Notice a signal', finaleTitle],
+    // T075: clues 1 and 2 are picture puzzles (a picture row, a twin hunt), not word riddles.
+    missionNames: [`Fix the ${story.artifact} row`, 'Spot the twin pictures', finaleTitle],
     finale: {
       idSuffix: 'finale', title: finaleTitle, preview: finalePreview,
-      memoryDeckId: rideTheme, gameId: finaleGameId,
+      memoryDeckId: pictureDeck, gameId: finaleGameId,
     },
     relay: {
       title: `${story.title} Crew Relay`,
@@ -279,8 +339,42 @@ function adaptiveChapter(parkId: number | undefined, rideSlug: string | undefine
   return chapter;
 }
 
-export function adaptiveEpisodeCountForRide(rideName: string): number {
-  return ADAPTIVE_STORIES[deckIdForRideName(rideName)].length;
+export function adaptiveEpisodeCountForRide(rideName: string, parkId?: number): number {
+  return ADAPTIVE_STORIES[storyThemeFor(parkId, rideName)].length;
+}
+
+/** "Autopia, in Tomorrowland." The ride and where it stands, in plain words. */
+function rideIntro(name: string, land: string | null, park: string | null): string {
+  return land ? `${name}, in ${land}.` : park ? `${name}, at ${park}.` : `${name}.`;
+}
+
+/** A checked fact short enough for a story line; long ones only when nothing shorter exists. */
+const STORY_FACT_MAX = 170;
+
+/**
+ * The true fact a chapter tells (T077): one of this ride's own checked facts, turning with the episode so a
+ * returning player meets a new one. Never another ride's: callers pass only facts keyed to this ride.
+ */
+export function chapterFact(chapter: Pick<LinePlayChapter, 'id'>, rideFacts: readonly string[]): string | null {
+  const clean = rideFacts.map(fact => fact.trim()).filter(Boolean);
+  if (clean.length === 0) return null;
+  const short = clean.filter(fact => fact.length <= STORY_FACT_MAX);
+  const pool = short.length ? short : clean;
+  const episode = Number(/-episode-(\d+)$/.exec(chapter.id)?.[1] ?? 0);
+  return pool[episode % pool.length];
+}
+
+/**
+ * The story line a chapter page reads (T077). Adaptive stories name the ride and its land, then tell this
+ * ride's own fact; a ride with no checked fact gets a true line about its land instead. Authored chapters
+ * keep their own story.
+ */
+export function chapterStoryText(chapter: LinePlayChapter, rideFacts: readonly string[], done = false): string {
+  if (done) return chapter.completedStory;
+  if (!chapter.adaptive || !chapter.ride) return chapter.story;
+  const fact = chapterFact(chapter, rideFacts);
+  const extra = fact ? `Fan fact: ${fact}` : landLine(chapter.ride.land);
+  return extra ? `${chapter.story} ${extra}` : chapter.story;
 }
 
 /**
@@ -1158,7 +1252,7 @@ function frightChapter(parkId: number | undefined, rideSlug: string, rideName: s
 }
 
 export function getLinePlayChapter(parkId?: number, rideSlug?: string, rideName?: string,
-  episodeSeed?: number): LinePlayChapter | null {
+  episodeSeed?: number, rideId?: number): LinePlayChapter | null {
   if (rideSlug?.startsWith('fright-')) return frightChapter(parkId, rideSlug, rideName ?? '');
   if (parkId === 8 &&
       (rideSlug === 'space-mountain-8' || rideName?.trim().toLowerCase() === 'space mountain')) {
@@ -1195,7 +1289,7 @@ export function getLinePlayChapter(parkId?: number, rideSlug?: string, rideName?
       (rideSlug === 'haunted-mansion-8' || rideName?.trim().toLowerCase() === 'haunted mansion')) {
     return DISNEYLAND_HAUNTED_MANSION;
   }
-  return rideName?.trim() ? adaptiveChapter(parkId, rideSlug, rideName, episodeSeed) : null;
+  return rideName?.trim() ? adaptiveChapter(parkId, rideSlug, rideName, episodeSeed, rideId) : null;
 }
 
 export function getLinePlayChapterById(id?: string): LinePlayChapter | null {
