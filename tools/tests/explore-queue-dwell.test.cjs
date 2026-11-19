@@ -153,3 +153,23 @@ test('T074 hold: after standing at Submarine Voyage, Autopia\'s line is Autopia 
     assert.ok(named.every(id => id === 571), `the detector names Autopia every time: ${named.join(',')}`);
   } finally { Date.now = realNow; }
 });
+
+test('T074 hold: an offer shown at Matterhorn goes during the walk to Mad Tea Party, never in front of a player standing there', () => {
+  const D = loadTs('src/screens/ExploreScreen/useQueueDwell.ts', { react: {}, '../../services/RideDetectionService': { currentRideDwell: () => null } });
+  const at = (lat, lng, t) => ({ at: t, latitude: lat, longitude: lng });
+  const anchor = at(33.813453, -117.91782, 0);
+  // One GPS jump 40 m off while standing still is not a walk.
+  assert.equal(D.walkedOffFrom(anchor, [at(33.813453, -117.91782, 1), at(33.8138, -117.91782, 2)]), false);
+  // Two fixes in a row 35 m or more away: walked off.
+  assert.equal(D.walkedOffFrom(anchor, [at(33.8135, -117.9182, 1), at(33.81352, -117.91825, 2)]), true);
+  assert.equal(D.walkedOffFrom(null, [at(33.8135, -117.9182, 1), at(33.81352, -117.91825, 2)]), false);
+  const matter = { rideId: 584, rideName: 'Matterhorn Bobsleds', parkId: 8 };
+  const base = { endedRideId: null, endedAt: null, lastShownAt: 0 };
+  // The detector still names Matterhorn from the time gathered there, the walk is 20 s old: walked off wins.
+  assert.equal(D.nextDwell(matter, matter, false, { ...base, now: 20_000, still: false, walkedOff: true }), null);
+  // Standing still at Matterhorn, a missed poll still holds.
+  assert.equal(D.nextDwell(matter, null, false, { ...base, now: 20_000, still: true, walkedOff: false }), matter);
+  const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/screens/ExploreScreen/useQueueDwell.ts'), 'utf8');
+  assert.match(hook, /const walkedOff = walkedOffFrom\(shownAt\.current, samples\.current\);/);
+  assert.match(hook, /still: nearlyStill\(samples\.current, at\), walkedOff \}\)\);/);
+});

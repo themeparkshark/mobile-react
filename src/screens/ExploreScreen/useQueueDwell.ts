@@ -54,14 +54,27 @@ export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, 
   readonly endedAt: number | null;
   /** Nearly still (no walk): a missed poll with no movement holds; walking off never does. */
   readonly still?: boolean;
+  /**
+   * The last two fixes are both more than DWELL_STILL_METERS from where the offer last showed: the player walked
+   * off. It goes at once, even while the detector still names that line from the time gathered there (T074 hold:
+   * Matterhorn's offer walked along to Mad Tea Party, then dropped in front of a player standing in that line).
+   */
+  readonly walkedOff?: boolean;
 }): QueueDwell | null {
   if (seen && shows) return previous?.rideId === seen.rideId ? previous : seen;
   if (!previous || input.lastShownAt == null) return null;
+  if (input.walkedOff) return null;
   if (seen && seen.rideId !== previous.rideId) return null;
   // Out of that line's zone and walking: gone at once (never carried to the next ride).
   if (!seen && input.still === false) return null;
   if (input.endedRideId === previous.rideId && input.endedAt != null && input.now - input.endedAt < WAIT_ENDED_QUIET_MS) return null;
   return input.now - input.lastShownAt <= DWELL_HOLD_MS ? previous : null;
+}
+
+/** Pure: the last two fixes are both farther than DWELL_STILL_METERS from `anchor` (one GPS jump is not a walk). */
+export function walkedOffFrom(anchor: Sample | null, samples: readonly Sample[]): boolean {
+  if (!anchor || samples.length < 2) return false;
+  return samples.slice(-2).every(s => meters(anchor, s) > DWELL_STILL_METERS);
 }
 
 let waitEnded: { rideId: number; at: number } | null = null;
@@ -81,6 +94,8 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
   const [dwell, setDwell] = useState<QueueDwell | null>(null);
   const samples = useRef<Sample[]>([]);
   const lastShownAt = useRef<number | null>(null);
+  /** Where the player stood the last time the offer showed (its walk-off check). */
+  const shownAt = useRef<Sample | null>(null);
   const lat = location?.latitude, lng = location?.longitude;
   useEffect(() => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -95,11 +110,15 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
       const shows = !!now && now.parkId === parkId && dwellShows({ rideId: now.rideId, rideName: now.rideName, parkId: now.parkId }, {
         still: nearlyStill(samples.current, at), endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null, now: at,
       });
-      if (now && shows) lastShownAt.current = at;
+      if (now && shows) {
+        lastShownAt.current = at;
+        shownAt.current = samples.current[samples.current.length - 1] ?? shownAt.current;
+      }
+      const walkedOff = walkedOffFrom(shownAt.current, samples.current);
       setDwell(previous => nextDwell(previous,
         now && now.parkId === parkId ? { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId } : null, shows,
         { now: at, lastShownAt: lastShownAt.current, endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null,
-          still: nearlyStill(samples.current, at) }));
+          still: nearlyStill(samples.current, at), walkedOff }));
     };
     check();
     const timer = setInterval(check, everyMs);
