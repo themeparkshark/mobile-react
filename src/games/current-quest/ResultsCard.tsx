@@ -243,7 +243,7 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, againF
                 <Text style={styles.podPlace}>{['1st', '2nd', '3rd', '4th'][r.place - 1] ?? `${r.place}th`}</Text>
                 <Image source={AVATAR[r.avatar] ?? AVATAR.you} style={styles.podAvatar} />
                 <Text style={styles.podName} numberOfLines={1}>{r.you ? 'You' : r.name}</Text>
-                <Text style={styles.podStat}>{r.finished ? `${r.shells} shells, ${r.strokes} strokes` : 'out of time'}</Text>
+                <Text style={styles.podStat}>{r.finished ? `${r.shells} shells, ${r.strokes} strokes` : 'still swimming'}</Text>
               </View>
             ))}
           </View>

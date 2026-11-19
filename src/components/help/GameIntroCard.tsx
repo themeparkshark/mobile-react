@@ -103,8 +103,8 @@ export function IntroPictures({ kind }: { readonly kind: MiniGameKind }) {
 /**
  * How to play one mini-game, shown once per game type before it starts.
  * Pictures first (shark with a check, anglerfish with a cross), then one short
- * line. The game has not started yet, so nothing is interrupted; the timer
- * only begins after Play. The Trivia card offers "Can't read yet? Picture
+ * line. The game has not started yet, so nothing is interrupted; the round
+ * only begins after Play. No how-to line ever names time (N06, vocabulary rule time-words). The Trivia card offers "Can't read yet? Picture
  * games" (a question bubble with a cross, then the shark) whenever the server deals
  * picture games: it turns on Picture games only for this player.
  */
@@ -146,7 +146,7 @@ export default function GameIntroCard({ kind, onStart, name, win }: {
             <GameIcon name={play.prefs.pictureOnly ? 'check' : 'arrow'} size={24} />
           </Pressable>
         )}
-        <GameButton label="Play" icon="play" onPress={onStart} accessibilityHint="Starts the game and its timer" />
+        <GameButton label="Play" icon="play" onPress={onStart} accessibilityHint="Starts the game" />
       </Animated.View>
     </View>
   );

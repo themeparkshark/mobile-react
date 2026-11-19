@@ -150,6 +150,7 @@ export function polaroidBolts(rows: readonly { label: string; value: string }[])
 
 /** What VoiceOver says for the Best Moment ("0.4s on Q2" -> "Best moment: 0.4 seconds on question 2"). */
 export function bestMomentSpoken(label: string): string {
+  // vocab-allow: VoiceOver only; the card draws bolts, and Trivia Duel (a reading game) has a real answer clock.
   return `Best moment: ${label.replace(/(\d+(?:\.\d+)?)s\b/, '$1 seconds').replace(/\bQ(\d+)/, 'question $1')}`;
 }
 

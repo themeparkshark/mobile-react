@@ -31,6 +31,18 @@ const STRICT = true;
  */
 const PENDING_LANES = new Set([]);
 
+/** N06: clock words on a how-to or results card. */
+const TIME_WORDS = /\b(time runs? out|before time|out of time|time'?s up|time up|run(s|ning)? out of time|seconds?|secs?|\d+(\.\d+)?s|hurry|countdown|count(s|ing)? down|beat the clock|timer|time left)\b/i;
+/** The how-to cards and every game's own results card (fix pass w4 N06); every other file skips time-words. */
+const TEACH_OR_RESULTS_FILES = [
+  'src/services/help/helpTopics.ts', 'src/services/help/howToCards.ts', 'src/components/help/GameIntroCard.tsx',
+  'src/components/MemoryMatchMiniGame.tsx', 'src/games/memory/lossCopy.ts', 'src/games/memory/MemoryResults.tsx',
+  'src/games/memory/TryCard.tsx', 'src/games/current-quest/ResultsCard.tsx', 'src/games/current-quest/CurrentQuestGame.tsx',
+  'src/games/sharky/hud/SharkyResults.tsx', 'src/games/sharky/hud/RallyOverlays.tsx', 'src/games/trivia-duel/ui/DuelResults.tsx',
+  'src/games/boss/BossResults.tsx', 'src/games/boss/bash/BashResults.tsx', 'src/games/whack/ui/Overlays.tsx',
+  'src/games/rhythm/RhythmTapGame.tsx', 'src/gamekit/results/',
+];
+const NOT_TEACH_OR_RESULTS = { test: file => !TEACH_OR_RESULTS_FILES.some(f => (f.endsWith('/') ? file.startsWith(f) : file === f)) };
 /** [id, pattern, say instead, files it skips]. Case matters only where the old word is a caps label. */
 const RULES = [
   ['park-coins', /\bPark Coins?\b/i, 'Shark Coins (the money) or ride coin (the collectible)'],
@@ -90,6 +102,9 @@ const RULES = [
   // T228: no deal wording on a kid's shop shelf.
   ['deal-words', /\b(new )?deal every day\b/i, "TODAY'S PICK (the band) and 'Changes each day'"],
   ['wins-for-trophy', /\bmore wins? for (Bronze|Silver|Gold)\b/, '"Silver trophy: 35 more wins" on its own line'],
+  // Fix pass w4 N06 (lane play-teach): a how-to or results card never names time ("before time runs out",
+  // TIME'S UP, "18 seconds"): a picture-games kid has no clock to read. Only the how-to and results files.
+  ['time-words', TIME_WORDS, 'what the player did ("Fill the meter to win.", GOOD TRY!, RACE OVER), never the clock', NOT_TEACH_OR_RESULTS],
 ];
 
 /**
@@ -348,6 +363,14 @@ if (require.main === module || process.env.NODE_TEST_CONTEXT) {
     assert.equal(scanSource('const a = `${lead} Bronze at ${at}`;', 'x.ts')[0].rule, 'trophy-at');
     assert.equal(scanSource('const a = `+${n} coins`;', 'x.ts')[0].rule, 'money-coins');
     assert.equal(scanSource("const a = 'Explore the park'; const b = 'Win ride coins'; const c = '9 of 35 coins'; const d = 'Medium';", 'x.ts').length, 0);
+    // Fix pass w4 N06: no clock words on a how-to or results card; other files (a real race HUD) are not this rule's.
+    assert.equal(scanSource("const a = 'Fill the meter before time runs out.';", 'src/services/help/helpTopics.ts')[0].rule, 'time-words');
+    assert.equal(scanSource('const a = "TIME\'S UP!";', 'src/games/memory/lossCopy.ts')[0].rule, 'time-words');
+    assert.equal(scanSource("const a = 'Out of time';", 'src/games/current-quest/CurrentQuestGame.tsx')[0].rule, 'time-words');
+    assert.equal(scanSource("const a = '18 seconds. Same course.';", 'src/games/sharky/hud/RallyOverlays.tsx')[0].rule, 'time-words');
+    assert.equal(scanSource('const el = <Text>3s left</Text>;', 'src/gamekit/results/ResultsCard.tsx')[0].rule, 'time-words');
+    assert.equal(scanSource("const a = 'Fill the meter to win.'; const b = 'GOOD TRY!'; const c = 'Time never counts.';", 'src/services/help/helpTopics.ts').length, 0);
+    assert.equal(scanSource("const a = '20 SECONDS';", 'src/gamekit/party/PartyLobby.tsx').length, 0, 'a race lobby with a real clock is not a how-to card');
     // Ledger 39: the Green Train Toy is server data only.
     assert.equal(scanSource("const a = 'Green Train Toy';", 'x.ts')[0].rule, 'green-train');
   });

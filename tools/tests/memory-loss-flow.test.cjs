@@ -11,14 +11,14 @@ const src = fs.readFileSync(path.join(root, 'src/games/memory/MemoryGame.tsx'), 
 const { memoryLossCopy, memoryLossBanner, triesLeftLine } = loadTs('src/games/memory/lossCopy.ts');
 
 test('SO CLOSE only when the player really was close', () => {
-  assert.equal(memoryLossCopy(0, 8).title, "TIME'S UP!");
+  assert.equal(memoryLossCopy(0, 8).title, 'GOOD TRY!');
   assert.doesNotMatch(memoryLossCopy(0, 8).line, /close/i);
   assert.equal(memoryLossCopy(2, 8).title, 'GOOD START!');
   assert.equal(memoryLossCopy(1, 8).line, '1 of 8 pairs!');
   assert.equal(memoryLossCopy(4, 8).title, 'NICE TRY!');
   assert.equal(memoryLossCopy(6, 8).title, 'SO CLOSE!');
   assert.equal(memoryLossCopy(7, 8).line, '7 of 8 pairs! Just 1 to go!');
-  assert.equal(memoryLossBanner(0, 8), "TIME'S UP!");
+  assert.equal(memoryLossBanner(0, 8), 'GOOD TRY!');
   for (let p = 0; p <= 7; p++) assert.doesNotMatch(memoryLossCopy(p, 8).title, /\d/, 'no numbers jammed into the title');
 });
 
