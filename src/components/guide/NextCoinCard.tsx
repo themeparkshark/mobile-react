@@ -105,7 +105,7 @@ function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean,
 }
 
 export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, onDotsPress, teachPlay = false,
-  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null, art: artOverride = null, loading = false }: {
+  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null, art: artOverride = null, loading = false, onHeight }: {
   readonly copy: GuideCardCopy;
   /** Standing in an open ride line (T074): "In line? LINEPLAY" as its own picture button under the card's words. */
   readonly lineOffer?: { readonly title: string; readonly label: string; readonly action?: GuideAction } | null;
@@ -132,6 +132,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   readonly art?: number | null;
   /** The coin is still being picked (arrive with no target yet): the words and coin breathe softly until it lands (T023). */
   readonly loading?: boolean;
+  /** The card's real height (a long name wraps to two lines): the map's chrome layout reserves exactly that. */
+  readonly onHeight?: (height: number) => void;
 }) {
   const reduced = useReducedGameMotion();
   const enter = useSharedValue(reduced ? 1 : 0);
@@ -155,7 +157,8 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   // The goodbye is about the park day, not a coin to win next: the house gold coin, never the next park's coin art.
   // At home with no coin planned yet, the card pictures the Tickets waiting for the next park day (T016).
   const art = artOverride != null ? artOverride : state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet || state === 'home' ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
-  return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}>
+  return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}
+    onLayout={onHeight ? event => onHeight(Math.round(event.nativeEvent.layout.height)) : undefined}>
     {/* The park name chip and today's Adventure ticket tab sit on the card's top edge, so the kicker never shortens. */}
     {(adventureTab || (parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase())) && <View pointerEvents="box-none" style={styles.edgeRow}>
       {adventureTab && <AdventureTab stamps={adventureTab.stamps} onPress={adventureTab.onPress} />}

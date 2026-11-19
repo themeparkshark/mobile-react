@@ -1477,6 +1477,8 @@ export function ExploreScreenBody() {
     ? null : parkTipFor({ inPark: atParkNow, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
       // The guide card's "Tap PLAY!" picture replaces Finn's one-time coin card (one card at a time, core loop 4.1).
       rideCoinInRange: false, playUp: playableTaskId != null || playRideShown });
+  // The park guide card's measured height: the compass hint tucks under the real card (a long name wraps).
+  const [guideCardHeight, setGuideCardHeight] = useState(GUIDE_CARD_HEIGHT);
   // One map tip per app open (mapChrome rule b): the park tip, the compass hint and the home tip share it.
   const parkTipReady = !mapCovered && mapCalm && (!parkTip || mapTipAllowed(currentAppOpen(), parkTip)) && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
@@ -2145,7 +2147,7 @@ export function ExploreScreenBody() {
           style={{ position: 'absolute', top: slotTop, left: 0, right: GUIDE_CARD_RIGHT, height: GUIDE_CARD_HEIGHT + 8, zIndex: 40 }} />}
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ? parkLabel(park) : null}
-          coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
+          coinUrl={guideCoinUrl} top={slotTop} onHeight={setGuideCardHeight} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
           loading={nextCoin.state === 'arrive' && !nextCoin.target}
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
@@ -2179,7 +2181,7 @@ export function ExploreScreenBody() {
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); setClusterFan(null); }}
           coverHost="screen"
           hintReady={parkTipReady && !parkTipShowing}
-          tipCard={guideShown ? { rect: { x: 12, y: slotTop, w: WINDOW_WIDTH - GUIDE_CARD_RIGHT - 12, h: GUIDE_CARD_HEIGHT }, key: String(guideTargetId ?? 'guide') } : null}
+          tipCard={guideShown ? { rect: { x: 12, y: slotTop, w: WINDOW_WIDTH - GUIDE_CARD_RIGHT - 12, h: guideCardHeight }, key: String(guideTargetId ?? 'guide') } : null}
           sharkCheer={openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task'}
           underShark={underShark}
           onUserPan={() => setClusterFan(null)}

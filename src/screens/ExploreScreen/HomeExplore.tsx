@@ -656,10 +656,13 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   // The map's chrome, laid out once (mapChrome): the top card, the raid chip and the rail, the menu and the Shelf.
   // A raid chip lives in the rail column (it never pushes the card down); every area here is reserved.
   const guideShown = !!homeGuide && homeLocationConfirmed && !firstHunt && !quiet;
+  // The card's measured height (a long ride name wraps to two lines on the SE); the design height until it lays out.
+  const [cardHeight, setCardHeight] = useState(GUIDE_CARD_HEIGHT);
+  const onCardHeight = useCallback((h: number) => setCardHeight(current => (h > 0 && Math.abs(current - h) >= 1 ? h : current)), []);
   const chrome = useMemo(() => mapChrome({ width: containerSize.width, height: containerSize.height,
-    card: guideShown ? { height: GUIDE_CARD_HEIGHT, rightGap: GUIDE_CARD_RIGHT } : null, raidChip: !quiet && liveBar != null,
+    card: guideShown ? { height: cardHeight, rightGap: GUIDE_CARD_RIGHT } : null, raidChip: !quiet && liveBar != null,
     railExtras: chestButtonCount ?? (chestButton ? 1 : 0), menu: !quiet, shelf: !quiet }),
-  [containerSize.width, containerSize.height, guideShown, quiet, liveBar, chestButtonCount, chestButton]);
+  [containerSize.width, containerSize.height, guideShown, cardHeight, quiet, liveBar, chestButtonCount, chestButton]);
   const reservedRects = useMemo(() => chrome.reserved.map(entry => entry.rect), [chrome]);
   const reservedRef = useRef<readonly Rect[]>(reservedRects);
   reservedRef.current = reservedRects;
@@ -774,7 +777,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   }, []);
   // The top slot never drops for a raid: the raid chip sits in the rail column at the top right (mapChrome).
   const rowTop = chrome.cardTop;
-  const guideBlock = guideShown ? GUIDE_CARD_HEIGHT + 8 : 0;
+  const guideBlock = guideShown ? cardHeight + 8 : 0;
   // Edge tokens (48 pt) centre below the chip row's home row.
   const edgeTop = rowTop + guideBlock + 30 + 8 + 24;
   // One arrow per side, slid clear of the chrome, touching arrows merged (mapChrome rule d). While a treat is in
@@ -808,8 +811,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
 
   // The compass hint fits around the card, the chips, every treat, the edge arrows and the shark, or it waits.
   const tipCard = useMemo(() => (guideShown && homeCopy && containerSize.width > 0
-    ? { rect: { x: 12, y: cardTop, w: containerSize.width - GUIDE_CARD_RIGHT - 12, h: GUIDE_CARD_HEIGHT }, key: `${homeStep?.key ?? ''}:${cardTop}` }
-    : null), [guideShown, homeCopy, containerSize.width, cardTop, homeStep?.key]);
+    ? { rect: { x: 12, y: cardTop, w: containerSize.width - GUIDE_CARD_RIGHT - 12, h: cardHeight }, key: `${homeStep?.key ?? ''}:${cardTop}` }
+    : null), [guideShown, homeCopy, containerSize.width, cardTop, cardHeight, homeStep?.key]);
   const tipObstacles = useMemo(() => obstacles.concat(hudWidth > 0 ? [{ x: 12, y: hudTop, w: hudWidth, h: 30 }] : []),
     [obstacles, hudWidth, hudTop]);
 
@@ -865,7 +868,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         <Animated.View style={[StyleSheet.absoluteFill, chipsBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
           <NextCoinCard testID="home-guide-card" copy={homeCopy} state={homeStep?.key === 'welcome_back' ? 'welcome_back' : 'home'} parkName={null}
             coinUrl={homeStep?.art === 'coin' ? homeStep.coin?.coinUrl ?? null : null} art={homeStep ? HOME_ART[homeStep.art] : null}
-            top={cardTop} onAction={onHomeAction} onCardPress={homeCopy.button ? () => onHomeAction(homeCopy.button!.action) : undefined} />
+            top={cardTop} onHeight={onCardHeight} onAction={onHomeAction} onCardPress={homeCopy.button ? () => onHomeAction(homeCopy.button!.action) : undefined} />
         </Animated.View>
       )}
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}
