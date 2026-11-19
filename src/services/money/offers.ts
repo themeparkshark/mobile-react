@@ -177,6 +177,76 @@ export function vipWinLine(coins: number, xp: number, multiplier: number | null)
   return `VIP members get ${times}x ${what}`;
 }
 
+/** "doubles" for 2x, "triples" for 3x, else "gives 4x on". */
+function timesWord(m: number): string {
+  return m === 2 ? 'doubles' : m === 3 ? 'triples' : `gives ${m}x on`;
+}
+
+/**
+ * The win card's VIP line (T230, Dustin's Nov 18 default "one calm grown-up-gated VIP doubles this line
+ * for non-VIP on the win card"), for lane shop's win_vip placement. Copy and numbers only, from this
+ * win's own coins and XP and the server's multiplier. Null for a VIP, a kid path, a loss, no multiplier
+ * or an empty win, so the caller never has to re-check. Tapping it asks a grown-up before VIP opens
+ * (`gate: 'money'`, the same door as Supplies' GO VIP). Never "you would have had".
+ */
+export type VipWinOffer = {
+  readonly where: 'win_vip';
+  readonly title: string;
+  readonly line: string;
+  readonly extraCoins: number;
+  readonly extraXp: number;
+  readonly gate: 'money';
+};
+export function vipWinOffer(input: {
+  coins: number; xp: number; multiplier: number | null; isVip: boolean; kid?: boolean; loss?: boolean;
+}): VipWinOffer | null {
+  const { coins, xp, multiplier, isVip, kid = false, loss = false } = input;
+  if (isVip || kid || loss || !multiplier || multiplier < 2) return null;
+  const m = Math.floor(multiplier);
+  const extraCoins = Math.max(0, Math.floor(coins) * (m - 1));
+  const extraXp = Math.max(0, Math.floor(xp) * (m - 1));
+  if (extraCoins <= 0 && extraXp <= 0) return null;
+  const parts = [extraCoins > 0 ? `+${countText(extraCoins)} Shark Coins` : null, extraXp > 0 ? `+${countText(extraXp)} XP` : null].filter(Boolean);
+  return { where: 'win_vip', title: `VIP ${timesWord(m)} this`, line: `VIP ${timesWord(m)} this: ${parts.join(', ')}`, extraCoins, extraXp, gate: 'money' };
+}
+
+/**
+ * VIP's three hero perks in concrete words (T156 VIP page, T230 framed for regulars and passholders):
+ * double ride coin wins counted from the player's own week, a free Ticket every day, and this month's
+ * gift with its real pin. From the server's perk lines (key or title) and the player's own numbers;
+ * a perk the server does not send is left out. The rest fold under "More VIP perks". Pure, tested.
+ */
+export type VipHeroPerk = { readonly key: 'ride' | 'daily_ticket' | 'monthly_gift'; readonly icon: string; readonly title: string; readonly body: string };
+export function vipHeroPerks(perks: readonly { key?: string; icon: string; title: string; body: string }[],
+  own: { lastWeekWins?: number | null; thisWeekWins?: number | null; giftCoins?: number | null; giftPin?: string | null; giftOn?: boolean }): { hero: VipHeroPerk[]; rest: { key?: string; icon: string; title: string; body: string }[] } {
+  const find = (key: string, re: RegExp) => perks.find(p => p.key === key) ?? perks.find(p => !p.key && re.test(p.title));
+  const ride = find('ride', /\bXP\b.*coin|coin.*\bXP\b/i);
+  const ticket = find('daily_ticket', /ticket every day/i);
+  const gift = find('monthly_gift', /gift every month/i);
+  const m = vipRideMultiplier(ride ? [ride] : null) ?? 2;
+  const wins = (n: number | null | undefined) => (typeof n === 'number' && n > 0 ? Math.floor(n) : 0);
+  const last = wins(own.lastWeekWins);
+  const now = wins(own.thisWeekWins);
+  const hero: VipHeroPerk[] = [];
+  if (ride) {
+    const body = last ? `Last week you won ${last} ride ${last === 1 ? 'coin' : 'coins'}. VIP ${timesWord(m)} every one.`
+      : now ? `This week you won ${now} ride ${now === 1 ? 'coin' : 'coins'}. VIP ${timesWord(m)} every one.`
+        : `Every ride coin you win at the park pays ${m === 2 ? 'double' : `${m}x`}.`;
+    hero.push({ key: 'ride', icon: ride.icon, title: ride.title, body });
+  }
+  if (ticket) hero.push({ key: 'daily_ticket', icon: ticket.icon, title: ticket.title, body: 'That is 7 more Tickets every week. Claim it in Supplies.' });
+  const giftCoins = typeof own.giftCoins === 'number' && own.giftCoins > 0 ? `${countText(own.giftCoins)} Shark Coins` : null;
+  if (gift) {
+    const body = giftCoins && own.giftPin ? `This month: ${giftCoins} and the ${own.giftPin}.` : gift.body;
+    hero.push({ key: 'monthly_gift', icon: gift.icon, title: gift.title, body });
+  } else if (own.giftOn && giftCoins && own.giftPin) {
+    // The perk list did not load (slow park Wi-Fi), but the gift's own server answer says it is on: say it from that.
+    hero.push({ key: 'monthly_gift', icon: 'gift', title: 'A gift every month', body: `This month: ${giftCoins} and the ${own.giftPin}.` });
+  }
+  const used = new Set([ride, ticket, gift].filter(Boolean));
+  return { hero, rest: perks.filter(p => !used.has(p)) };
+}
+
 /** "4h 12m" until the shop day rolls over (the real midnight in the parks' time zone). */
 export function untilText(endsAtIso: string | null | undefined, now: number = Date.now()): string | null {
   const end = endsAtIso ? Date.parse(endsAtIso) : NaN;

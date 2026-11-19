@@ -135,7 +135,17 @@ export function passQuestLabel(label: string): string {
 export function lanePassFixture<T>(state: T, env: Readonly<Record<string, string | undefined>> = {
   mute: process.env.EXPO_PUBLIC_STUDIO_MUTE, fixture: process.env.EXPO_PUBLIC_CL_PASS_FIXTURE,
 }): T {
-  if (env.mute !== '1' || env.fixture !== 'empty-daily') return state;
+  if (env.mute !== '1') return state;
+  // 'not-on-sale' / 'not-on-sale-dated': the season runs but the row is not for sale (T091), with no
+  // day or with a day two days out, so the "opens soon" card can be seen on a server that sells it.
+  if (env.fixture === 'not-on-sale' || env.fixture === 'not-on-sale-dated') {
+    const s = state as unknown as { enabled?: boolean; season?: Record<string, unknown> | null };
+    if (!s || !s.enabled || !s.season) return state;
+    const day = new Date(Date.now() + 2 * 86_400_000);
+    const ymd = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`;
+    return { ...s, season: { ...s.season, on_sale: false, sale_opens_on: env.fixture === 'not-on-sale-dated' ? ymd : null } } as unknown as T;
+  }
+  if (env.fixture !== 'empty-daily') return state;
   const s = state as unknown as { enabled?: boolean; quests?: { daily: readonly unknown[] } | null };
   if (!s || !s.enabled || !s.quests) return state;
   return { ...s, quests: { ...s.quests, daily: [] } } as unknown as T;
@@ -194,10 +204,88 @@ export function winsAwayText(pointsAway: number, today: readonly { event: string
   return `about ${n} ride coin ${n === 1 ? 'win' : 'wins'} away`;
 }
 
-/** "4 free, 13 on the Shark Pass, 1 with Plus": the set's count, free first. */
+/** What is still open today for one event: its points times the wins left under today's cap (null cap: none left to count). */
+function leftToday(today: readonly { event: string; points: number; count_today?: number; cap?: number | null }[], event: string): number {
+  const e = today.find(x => x.event === event);
+  if (!e || e.points <= 0 || e.cap == null) return 0;
+  return Math.max(0, e.cap - Math.max(0, e.count_today ?? 0)) * e.points;
+}
+
+/**
+ * The next prize's "how far" line, counted from what the player can still do today, home first
+ * (T117): steps to go, then how much of that treats at home (and Daily 3, once it is there) can
+ * climb today. Never a long count of ride coin wins a kid at home cannot do. Pure, exported for tests.
+ */
+export function nextPrizeTodayText(input: {
+  stepsAway: number; pointsAway: number; perStep: number; daily3Ready: boolean;
+  today: readonly { event: string; points: number; count_today?: number; cap?: number | null }[];
+}): string | null {
+  const { stepsAway, pointsAway, perStep, daily3Ready, today } = input;
+  if (stepsAway <= 0 || pointsAway <= 0) return null;
+  const head = `${stepsAway} ${stepsAway === 1 ? 'step' : 'steps'} to go.`;
+  const treats = leftToday(today, 'home_find');
+  const daily = daily3Ready ? leftToday(today, 'daily3_complete') : 0;
+  const home = treats + daily;
+  const what = daily > 0 && treats > 0 ? 'Treats at home and your Daily 3' : daily > 0 ? 'Your Daily 3' : 'Treats at home';
+  if (home <= 0) {
+    return leftToday(today, 'ride_coin_win') > 0 ? `${head} Home treats are done for today. Ride coin wins at a park still climb.` : `${head} New treats tomorrow.`;
+  }
+  if (home >= pointsAway) return `${head} ${what} can get you there today!`;
+  const steps = Math.floor(home / Math.max(1, perStep));
+  if (steps >= 1) return `${head} ${what} can climb up to ${steps} of them today.`;
+  return `${head} Every treat at home climbs a little.`;
+}
+
+/**
+ * Where the Shark Pass row stands for this player (T091). 'soon': the season runs but the row is not
+ * for sale yet (its items are still being made), so the page shows no locked row, no price and no
+ * "one buy" words, only when it opens. Pure, exported for tests.
+ */
+export type PassSale = 'owned' | 'on_sale' | 'soon' | 'ended';
+export function passSale(season: { readonly ended?: boolean; readonly on_sale?: boolean } | null | undefined, premium: boolean): PassSale {
+  if (premium) return 'owned';
+  if (!season || season.ended) return 'ended';
+  return season.on_sale === false ? 'soon' : 'on_sale';
+}
+
+/** The "opens soon" words: why it is not for sale yet, and the day it opens when the server knows it. */
+export function passSoonLines(season: { readonly sale_opens_on?: string | null } | null | undefined): { title: string; body: string } {
+  const day = season?.sale_opens_on && /^\d{4}-\d{2}-\d{2}/.test(season.sale_opens_on) ? lastDayText(season.sale_opens_on.slice(0, 10)) : null;
+  return {
+    title: day ? `THE SHARK PASS OPENS ${day.toUpperCase()}` : 'THE SHARK PASS OPENS SOON',
+    body: `${day ? '' : 'Its winter pins are almost ready. '}Keep climbing: every step you reach now counts, so its rewards are waiting when it opens.`,
+  };
+}
+
+/**
+ * Shark Pass Plus in plain words (T116): what it adds, never just "Plus". Null without extras.
+ */
+export function plusWords(plusRewards: readonly SharkPassReward[] | null | undefined, named = true): string | null {
+  // The thing to wear first, then the rest.
+  const extras = [...(plusRewards ?? [])].sort((a, b) => Number(isWearable(b)) - Number(isWearable(a))).map(rewardWords);
+  if (!extras.length) return null;
+  const list = extras.length > 1 ? `${extras.slice(0, -1).join(', ')} and ${extras[extras.length - 1]}` : extras[0];
+  // Under its own SHARK PASS PLUS title the line starts plainly (no name said twice).
+  return `${named ? 'Shark Pass Plus is the' : 'The'} Shark Pass row plus ${list} right away.`;
+}
+
+/**
+ * The one count line under the track (T105): how many season pins each row holds, so the top of the
+ * page stays the prize and the climb. The Shark Pass row is named only while it shows. Pure, tested.
+ */
+export function trackCountLine(tiers: readonly SharkPassTier[], paidShown: boolean): string | null {
+  const free = tiers.filter(t => isWearable(t.free)).length;
+  const pass = tiers.filter(t => isWearable(t.paid)).length;
+  if (!free && !(paidShown && pass)) return null;
+  // Pins, scenes and frames: "things to wear" covers them all in a kid's words.
+  const freePart = `${free} ${free === 1 ? 'thing' : 'things'} to wear on the free row`;
+  return paidShown && pass ? `${freePart}, ${pass} on the Shark Pass row.` : `${freePart}.`;
+}
+
+/** "4 free, 13 on the Shark Pass, 1 with Shark Pass Plus": the set's count, free first. */
 export function setMixText(pieces: readonly { row: 'free' | 'pass' | 'plus' }[]): string {
   const c = (r: string) => pieces.filter(p => p.row === r).length;
-  return [`${c('free')} free`, `${c('pass')} on the Shark Pass`, ...(c('plus') ? [`${c('plus')} with Plus`] : [])].join(', ');
+  return [`${c('free')} free`, `${c('pass')} on the Shark Pass`, ...(c('plus') ? [`${c('plus')} with Shark Pass Plus`] : [])].join(', ');
 }
 
 export type SetPiece = {
@@ -226,7 +314,7 @@ export function seasonSet(tiers: readonly SharkPassTier[], plusRewards: readonly
 
 /** Where a piece comes from, in plain words: "Free at step 10", "Shark Pass, step 20", "Shark Pass Plus". */
 export function pieceSource(piece: SetPiece): string {
-  if (piece.row === 'plus') return 'Shark Pass Plus';
+  if (piece.row === 'plus') return 'Comes with Shark Pass Plus, the bigger Shark Pass';
   return piece.row === 'free' ? `Free at step ${piece.step}` : `Shark Pass, step ${piece.step}`;
 }
 

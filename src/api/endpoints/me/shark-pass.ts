@@ -50,6 +50,8 @@ export type SharkPassSeasonInfo = {
   readonly claim_last_day?: string;
   /** For sale: running, and every season item exists on the server. */
   readonly on_sale?: boolean;
+  /** While on_sale is false: the day ('YYYY-MM-DD') the Shark Pass row goes on sale, when the server knows it. */
+  readonly sale_opens_on?: string | null;
 };
 
 export type SharkPassEvent = { readonly event: string; readonly points: number; readonly count_today: number; readonly points_today: number; readonly cap: number | null };

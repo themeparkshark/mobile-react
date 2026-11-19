@@ -644,12 +644,12 @@ function SharkPassDoor({ switchOn, playerId }: { readonly switchOn: boolean; rea
 function VipGiftDoor() {
   return (
     <Pressable onPress={() => { void openMembership(); }} accessibilityRole="button"
-      accessibilityLabel="VIP and VIP gift plans. Opens VIP."
+      accessibilityLabel="Your VIP, and VIP for this account that never renews. Opens VIP."
       style={({ pressed }) => [st.door, pressed && { transform: [{ translateY: 2 }] }]}>
       <GameIcon name="member" size={34} />
       <View style={{ flex: 1 }}>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={st.doorTitle}>VIP GIFT PLANS</Text>
-        <Text maxFontSizeMultiplier={MAX_FONT} style={st.doorBody}>Your VIP, and VIP as a gift</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={st.doorTitle}>VIP, NO RENEWING</Text>
+        <Text maxFontSizeMultiplier={MAX_FONT} style={st.doorBody}>VIP for this account, no renewing</Text>
       </View>
       <GameIcon name="arrow" size={24} />
     </Pressable>

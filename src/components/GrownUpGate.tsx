@@ -186,6 +186,23 @@ export function gateDetails(reason: GateReason | null | undefined): { head: stri
   }
 }
 
+/**
+ * The details card's yes button (T161): a free trial starts its free time ("Start the free week"),
+ * never "Continue to buy". Everything else that costs money stays "Continue to buy". Exported for tests.
+ */
+export function gateContinueLabel(reason: GateReason | null | undefined): string {
+  if (reason?.kind !== 'renews' || !reason.trial) return 'Continue to buy';
+  const m = reason.trial.toLowerCase().match(/^(\w+)\s+(day|week|month)s?\s+free$/);
+  const words = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen'];
+  const n = m ? (/^\d+$/.test(m[1]) ? Number(m[1]) : words.indexOf(m[1])) : -1;
+  if (!m || n <= 0) return 'Start the free time';
+  const unit = m[2];
+  if ((unit === 'day' && n === 7) || (unit === 'week' && n === 1)) return 'Start the free week';
+  if (unit === 'month' && n === 1) return 'Start the free month';
+  if (unit === 'day' && n === 1) return 'Start the free day';
+  return `Start the ${n} free ${unit}s`;
+}
+
 /** Opens the gate and resolves true only on the right answer. A second ask while it is open shares the first. */
 export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
   if (!showGate) return Promise.resolve(false);
@@ -468,8 +485,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
               </Pressable>
             )}
             <Pressable onPress={() => close(true)} style={({ pressed }) => [styles.key, styles.keyOk, styles.restOk, pressed && { opacity: 0.7 }]}
-              accessibilityRole="button" accessibilityLabel="Continue to buy in the App Store">
-              <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.keyText, styles.keyOkText]}>Continue to buy</Text>
+              accessibilityRole="button" accessibilityLabel={`${gateContinueLabel(req.reason)} in the App Store`}>
+              <Text maxFontSizeMultiplier={MAX_FONT} style={[styles.keyText, styles.keyOkText]}>{gateContinueLabel(req.reason)}</Text>
             </Pressable>
             <Pressable onPress={() => close(false)} style={styles.cancel} accessibilityRole="button" hitSlop={8}>
               <Text maxFontSizeMultiplier={MAX_FONT} style={styles.cancelText}>Not now</Text>
@@ -559,7 +576,8 @@ const styles = StyleSheet.create({
   pad: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 8, width: 3 * 72 + 2 * 8 },
   key: { width: 72, height: 52, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: GATE_COLORS.card,
     borderWidth: 2, borderColor: GATE_COLORS.border },
-  restOk: { width: 160, marginTop: 4 },
+  // Wide enough for the longest yes ("Start the free week") on one line; the plain "OK" rest button keeps its size.
+  restOk: { minWidth: 160, width: 'auto', paddingHorizontal: 18, marginTop: 4 },
   keyOk: { backgroundColor: GATE_COLORS.gold, borderColor: BRAND.goldLip },
   keyText: { fontFamily: FONT.display, fontSize: 24, color: '#ffffff' },
   keyOkText: { fontSize: 20, color: BRAND.navy },

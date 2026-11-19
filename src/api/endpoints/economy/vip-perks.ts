@@ -2,7 +2,8 @@ import { resolveIconName, type GameIconName } from '../../../ui/iconNames';
 import client from '../../client';
 import { AD_AUDIENCE_13_PLUS_KNOWN } from '../../../services/adConfig';
 
-export type VipPerk = { icon: GameIconName; title: string; body: string };
+/** `key` is the server's perk key (ride, home, daily_ticket, monthly_gift, pass_points, badge) when it sends one. */
+export type VipPerk = { icon: GameIconName; title: string; body: string; key?: string };
 
 /**
  * VIP perks as the server delivers them (GET /api/economy `vip_perks`, built
@@ -24,8 +25,9 @@ export function parseVipPerks(value: unknown): VipPerk[] | null {
   if (!Array.isArray(value)) return null;
   const perks = value.flatMap((perk): VipPerk[] => {
     const icon = resolveIconName((perk as { icon?: unknown })?.icon);
-    const { title, body } = (perk ?? {}) as { title?: unknown; body?: unknown };
-    return icon && typeof title === 'string' && title && typeof body === 'string' ? [{ icon, title: withoutAdTalk(title) || title, body: withoutAdTalk(body) }] : [];
+    const { title, body, key } = (perk ?? {}) as { title?: unknown; body?: unknown; key?: unknown };
+    return icon && typeof title === 'string' && title && typeof body === 'string'
+      ? [{ icon, title: withoutAdTalk(title) || title, body: withoutAdTalk(body), ...(typeof key === 'string' && key ? { key } : {}) }] : [];
   });
   return perks.length ? perks : null;
 }
