@@ -146,3 +146,19 @@ test('the root grown-up gate fades with the in-tree sheet, so its fade can never
   assert.match(gate, /if \(inTreeRef\.current\) \{ closeAfterFade\(ok\); return; \}/);
   assert.match(gate, /animationType=\{inTreeRef\.current && !reduced \? 'fade' : 'none'\}/);
 });
+
+test('N01: a tap on a card that its owner is already shrinking away is the screen\'s (kept, replayed once, never on the card too)', () => {
+  // Phase log, release-like JS (rel-loop-pre-release-fix): the map PLAY! press landed on the coin card 0.6 s after
+  // CalmModal began to shrink it; the door still had it wanted and no layer was listed as leaving, so it was lost.
+  const calm = src('src/components/retention/CalmModal.tsx');
+  assert.match(calm, /leaving=\{!visible\}/);
+  const dialog = src('src/ui/GameDialog.tsx');
+  assert.match(dialog, /leaving=\{fading\}/);
+  assert.match(dialog, /const fadeOut = \(token: number\) => \{\s*setFading\(true\);/);
+  const sheet = src('src/ui/OverlaySheet.tsx');
+  assert.match(sheet, /now\.current\.props\.leaving === true, !now\.current\.nested\);/);
+  assert.match(sheet, /const leaving = phase === 'closing' \|\| \(phase === 'up' && !wants\) \|\| props\.leaving === true;/);
+  const door = src('src/ui/DoorModal.tsx');
+  assert.match(door, /now\.current\.props\.leaving === true, !now\.current\.nested\);/);
+  assert.match(door, /pointerEvents=\{props\.leaving === true \? 'box-only' : undefined\}/);
+});

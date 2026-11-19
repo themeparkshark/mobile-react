@@ -216,7 +216,9 @@ export default function OverlaySheet(props: DoorModalProps) {
   // content ref in the same commit's callback, and with no ref its open animation never ends and it can never close.
   if (phase === 'off' && !wants) return null;
 
-  const leaving = phase === 'closing' || (phase === 'up' && !wants);
+  // Leaving: the door is taking it down, or its owner's own leave animation has started. Its buttons rest, so a tap
+  // then is only ever the screen's (kept and replayed there), never pressed on the sheet and again under it.
+  const leaving = phase === 'closing' || (phase === 'up' && !wants) || props.leaving === true;
   const background = props.transparent === true ? 'transparent' : 'white';
   const place = overlayNodeStyle(owner);
   const onTouchStart = (event: TouchEvent) => {
@@ -224,7 +226,8 @@ export default function OverlaySheet(props: DoorModalProps) {
     if (event.nativeEvent.tpsSheetNoted) return;
     event.nativeEvent.tpsSheetNoted = true;
     measureOwner();
-    leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants), !now.current.nested);
+    // Going: the door is taking it down, or its owner's own leave animation has started (props.leaving).
+    leavingSheetTap.note(event.nativeEvent.pageX, event.nativeEvent.pageY, Date.now(), now.current.phase === 'closing' || (now.current.phase === 'up' && !now.current.wants) || now.current.props.leaving === true, !now.current.nested);
   };
 
   return (

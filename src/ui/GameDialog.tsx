@@ -162,6 +162,8 @@ export function GameDialog({
   const shown = visible && layer.present;
   // The native dialog is still up (shown, or leaving): it stays rendered until UIKit says it is gone.
   const [nativeUp, setNativeUp] = useState(false);
+  // Its own fade out has started (DoorModal's leaving: a tap now is meant for the screen under the dialog).
+  const [fading, setFading] = useState(false);
   const gate = useRef(createDialogCloseGate()).current;
   const scrim = useSharedValue(0);
   const pop = useSharedValue(0);
@@ -178,6 +180,7 @@ export function GameDialog({
     if (shown) {
       // A (re)open: a close still finishing from before no longer counts (the late-fade race).
       gate.open();
+      setFading(false);
       setMounted(true);
       setNativeUp(true);
       if (hapticKind !== 'none') haptic(hapticKind);
@@ -229,6 +232,7 @@ export function GameDialog({
   }, [mounted]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fadeOut = (token: number) => {
+    setFading(true);
     scrim.value = withTiming(0, { duration: MOTION.dialogOutMs });
     pop.value = withTiming(0, { duration: MOTION.dialogOutMs, easing: Easing.in(Easing.quad) }, done => {
       if (done) runOnJS(fadeDone)(token);
@@ -277,6 +281,8 @@ export function GameDialog({
 
   return (
     <Modal transparent visible={mounted} animationType="none" statusBarTranslucent testID="dialog"
+      // @ts-expect-error DoorModal's own prop, not in React Native's Modal types.
+      leaving={fading}
       onDismiss={() => deliverRef.current()}
       onRequestClose={() => { if (dismiss !== null) close(dismiss); }}>
       <KeyboardAvoidingView testID={testID} enabled={avoidKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}
