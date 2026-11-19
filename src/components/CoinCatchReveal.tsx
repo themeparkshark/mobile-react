@@ -1,7 +1,7 @@
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   cancelAnimation,
@@ -326,7 +326,7 @@ export default function CoinCatchReveal({
         if (Number.isFinite(x) && Number.isFinite(y)) origin.current = { x, y };
       })}
       accessibilityRole="button"
-      accessibilityLabel={`${isNewCoin ? (sight ? 'New coin' : 'New ride coin') : (sight ? 'Coin' : 'Ride coin')} collected: ${rideName}. Tap to continue.`}
+      accessibilityLabel={`${isNewCoin ? (sight ? 'New coin' : 'New ride coin') : (sight ? 'Coin' : 'Ride coin')} collected: ${rideName}.`}
     >
       {/* A clean deep-water stage lit softly where the coin lands. Alex's water world still shows through,
           blurred and faint (its props turn to soft shapes), so the money shot stays in the TPS world. */}
@@ -367,7 +367,8 @@ export default function CoinCatchReveal({
       </Animated.View>
 
       <Confetti progress={confetti} originY={height * 0.42} width={width} />
-      {burst && <Text style={styles.skip}>Tap to continue</Text>}
+      {/* No "Tap to continue": the coin flies on into the win card by itself (fix w4 T037), so the reveal
+          never reads as a stop. A tap still skips ahead. */}
     </Pressable>
   );
 }
@@ -381,10 +382,6 @@ const styles = StyleSheet.create({
   },
   ride: {
     fontFamily: 'Shark', fontSize: 26, color: '#ffffff', textAlign: 'center', marginTop: 4,
-  },
-  skip: {
-    position: 'absolute', bottom: 60, alignSelf: 'center', fontFamily: 'Shark',
-    fontSize: 17, color: '#ffffff', textShadowColor: '#05346e', textShadowOffset: { width: 0, height: 2 }, textShadowRadius: 0.1,
   },
 });
 
