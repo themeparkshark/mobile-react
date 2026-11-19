@@ -25,9 +25,13 @@ export function visibleBroadcasts<T>(broadcasts: readonly T[], quietCoins: boole
 let holders = 0;
 let waiting: string[] = [];
 let showWaiting: ((messages: string[]) => void) | null = null;
+/** The win card on screen already shows this win's XP: its "You earned N XP!" never comes after it. */
+let xpOnCard = false;
+const XP_EARNED = /^You earned \d+ XP!$/i;
 
 export function holdBroadcasts(on: boolean): void {
   holders = Math.max(0, holders + (on ? 1 : -1));
+  if (holders === 0) xpOnCard = false;
   if (holders === 0 && waiting.length > 0 && showWaiting) {
     const messages = waiting;
     waiting = [];
@@ -35,14 +39,29 @@ export function holdBroadcasts(on: boolean): void {
   }
 }
 
+/**
+ * The held win card shows this win's XP on its reward row (+25 XP): the server's own XP line for it, which
+ * names only part of that total ("You earned 10 XP!" after a +25 XP card), is folded, like its coins and Parts.
+ * Only while the hold lasts; XP news from anything else still shows.
+ */
+export function foldHeldXp(): void {
+  if (holders === 0) return;
+  xpOnCard = true;
+  waiting = waiting.filter(m => !XP_EARNED.test(m.trim()));
+}
+
 /** The response interceptor sends every visible broadcast through here. */
 export function routeBroadcasts(messages: readonly string[], show: (messages: string[]) => void): void {
   if (messages.length === 0) return;
-  if (holders > 0) { waiting.push(...messages); showWaiting = show; return; }
+  if (holders > 0) {
+    waiting.push(...(xpOnCard ? messages.filter(m => !XP_EARNED.test(m.trim())) : messages));
+    showWaiting = show;
+    return;
+  }
   show([...messages]);
 }
 
 /** Tests only. */
 export function resetBroadcastHoldForTests(): void {
-  holders = 0; waiting = []; showWaiting = null;
+  holders = 0; waiting = []; showWaiting = null; xpOnCard = false;
 }

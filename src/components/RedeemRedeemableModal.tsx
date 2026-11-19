@@ -81,7 +81,7 @@ import { watchForReward } from '../services/ads';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { lossNext } from './rewards/lossNext';
-import { holdBroadcasts } from '../api/broadcastFilter';
+import { foldHeldXp, holdBroadcasts } from '../api/broadcastFilter';
 import { reconcileDelayMs } from '../services/task-attempt/reconcileDelay';
 import { markWinShown } from '../services/task-attempt/pendingWins';
 import { needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
@@ -443,6 +443,8 @@ export default function RedeemRedeemableModal({
       setProofRejected(false);
       setCoinsEarned(attempt.rewards.coins_earned);
       setXpEarned(attempt.rewards.xp_earned);
+      // The win card says this XP: the server's "You earned N XP!" never follows it onto the map.
+      foldHeldXp();
       setRidePartsEarned(attempt.rewards.ride_parts_earned);
       setEnergyEarned(attempt.rewards.energy_earned);
       setCoinTimesCollected(attempt.rewards.coin_times_collected ?? null);
