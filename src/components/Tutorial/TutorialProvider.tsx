@@ -9,7 +9,8 @@ import React, { createContext, useContext, useState, useCallback, useRef, useEff
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { TutorialContextType, TutorialSequence, TutorialStep, SpotlightTarget } from './types';
 import { getStepsForSequence, HOME_LOOKING_MS } from './steps';
-import { teacherBottomOffset } from './tutorialLayout';
+import { guideShowsOn, teacherBottomOffset } from './tutorialLayout';
+import { navigationRef } from '../../RootNavigation';
 import { Dimensions } from 'react-native';
 import SpotlightOverlay from './SpotlightOverlay';
 import TeacherShark from './TeacherShark';
@@ -287,6 +288,15 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     setSpotlightTarget(null);
   }, [firstPlayPreview, playerId]);
 
+  // Fix w4 N05: a map guide never draws over the Shark Shop, the Shark Pass or any screen above the map.
+  const [routeName, setRouteName] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const sync = () => { try { setRouteName(navigationRef.getCurrentRoute()?.name); } catch { setRouteName(undefined); } };
+    sync();
+    try { return navigationRef.addListener('state', sync); } catch { return undefined; }
+  }, []);
+  const guideOnScreen = guideShowsOn(MAP_SEQUENCES.has(currentSequence as TutorialSequence), routeName);
+
   const currentStep = isActive && currentSteps.length > 0 ? currentSteps[currentIndex] : null;
 
   // Step transitions and late measurements cannot revive a closed guide.
@@ -343,7 +353,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
       {children}
 
       {/* Tutorial Overlay: renders above everything */}
-      {isActive && currentStep && !firstPlayOpen && (
+      {isActive && currentStep && !firstPlayOpen && guideOnScreen && (
         <>
           <SpotlightOverlay
             target={spotlightTarget}

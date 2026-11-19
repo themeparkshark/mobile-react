@@ -44,3 +44,15 @@ export function canStartTutorial(state: {
 
 /** Settle time after content is ready, so the first frame of real content paints before Finn arrives. */
 export const TUTORIAL_SETTLE_MS = 250;
+
+/** The map's route: guides that run over the map show only there. */
+export const MAP_ROUTE = 'Explore';
+
+/**
+ * Whether the current guide may draw (fix w4 N05). A map guide (Finn's home hello, the first find,
+ * the park arrival) waits while another screen is on top, such as the Shark Shop or the Shark Pass,
+ * and comes back when the map is in front again. Other guides belong to the screen that started them.
+ */
+export function guideShowsOn(mapGuide: boolean, routeName: string | undefined): boolean {
+  return !mapGuide || routeName === undefined || routeName === MAP_ROUTE;
+}

@@ -41,3 +41,18 @@ export function visibleParts(parts: readonly string[], elapsed: number): number 
   while (count < times.length && times[count] <= elapsed) count++;
   return count;
 }
+
+/**
+ * A tick that lands this much after it was due means the JS thread was busy (a screen loading under
+ * Finn). Fix w4 N05: the rest of the line shows at once, so the bubble never sits with one word and
+ * a blank body while the screen catches up.
+ */
+export const REVEAL_LATE_MS = 160;
+
+/** One reveal tick: how many chunks show now, and when the next one is due (null when done). */
+export function revealTick(parts: readonly string[], elapsed: number, dueAt: number): { shown: number; nextAt: number | null } {
+  const times = revealSchedule(parts);
+  if (elapsed - dueAt > REVEAL_LATE_MS) return { shown: parts.length, nextAt: null };
+  const shown = Math.min(parts.length, Math.max(1, visibleParts(parts, elapsed)));
+  return { shown, nextAt: shown < times.length ? times[shown] : null };
+}

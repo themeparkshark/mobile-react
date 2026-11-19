@@ -35,7 +35,7 @@ import Animated, {
 import { SharkMood, SharkPosition } from './types';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { BRAND, GameButton } from '../../ui';
-import { REVEAL_START_MS, revealSchedule, splitWords, visibleParts } from './teacherReveal';
+import { REVEAL_LATE_MS, REVEAL_START_MS, revealTick, splitWords } from './teacherReveal';
 import TapHint from '../TapHint';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -150,7 +150,8 @@ export default function TeacherShark({
       withTiming(1.06, { duration: 240, easing: Easing.out(Easing.cubic) }),
       withSpring(1, { damping: 9, stiffness: 220, mass: 0.7 }),
     );
-    bubbleValue.value = withDelay(140, withSpring(1, { damping: 11, stiffness: 240, mass: 0.6 }));
+    // The bubble pops in the same JS tick as Finn's first word (reveal effect below), never on its own
+    // UI-thread timer: a busy JS thread would otherwise show an open bubble with a blank body (fix w4 N05).
     return () => { cancelAnimation(enterValue); cancelAnimation(bubbleValue); };
     // Mount only: steps after the first get the squash below instead.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -161,28 +162,40 @@ export default function TeacherShark({
   const [shown, setShown] = useState(reducedMotion ? parts.length : 0);
   const revealTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const firstLine = useRef(true);
+  const bubblePopped = useRef(reducedMotion);
   useEffect(() => {
     if (revealTimer.current) clearTimeout(revealTimer.current);
-    if (reducedMotion) { setShown(parts.length); return; }
+    if (reducedMotion) { bubblePopped.current = true; setShown(parts.length); return; }
     // A new step: squash the bubble so the change reads, then talk.
-    if (!firstLine.current) {
+    if (!firstLine.current && bubblePopped.current) {
       bubbleValue.value = withSequence(withTiming(0.94, { duration: 90 }), withSpring(1, { damping: 10, stiffness: 260 }));
     }
     const startDelay = firstLine.current ? REVEAL_START_MS : 120;
     firstLine.current = false;
-    const times = revealSchedule(parts);
     setShown(0);
-    // Each tick shows every word that is due by the clock, so a busy first frame (a fresh phone
-    // loading a list) catches up at once instead of sitting on the first word under the button.
+    // Each tick shows every word that is due by the clock. A tick that comes late (the JS thread was
+    // busy, for example a shop loading under Finn) shows the whole line at once (fix w4 N05).
     let startedAt = 0;
+    let dueAt = 0;
     const step = () => {
-      const index = Math.max(1, visibleParts(parts, Date.now() - startedAt));
-      setShown(index);
-      if (index < times.length) revealTimer.current = setTimeout(step, Math.max(16, times[index] - (Date.now() - startedAt)));
+      const elapsed = Date.now() - startedAt;
+      const tick = revealTick(parts, elapsed, dueAt);
+      setShown(tick.shown);
+      if (tick.nextAt !== null) {
+        dueAt = tick.nextAt;
+        revealTimer.current = setTimeout(step, Math.max(16, tick.nextAt - elapsed));
+      }
     };
+    const plannedStart = Date.now() + startDelay;
     revealTimer.current = setTimeout(() => {
+      // A line swapped before the first pop (the home hello when a find lands) still pops the bubble.
+      if (!bubblePopped.current) {
+        bubblePopped.current = true;
+        bubbleValue.value = withSpring(1, { damping: 11, stiffness: 240, mass: 0.6 });
+      }
       startedAt = Date.now();
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+      if (startedAt - plannedStart > REVEAL_LATE_MS) { setShown(parts.length); return; }
       step();
     }, startDelay);
     return () => { if (revealTimer.current) clearTimeout(revealTimer.current); };
