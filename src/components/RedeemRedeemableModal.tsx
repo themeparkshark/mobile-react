@@ -92,6 +92,7 @@ import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
 import TicketClaimFlight from './rewards/TicketClaimFlight';
 import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
 import { coinFaceNote } from '../services/collection/rideFacts';
+import { noteNewestCoin } from '../services/collection/newestCoin';
 
 
 // Ticket cost by ride importance tier
@@ -448,6 +449,9 @@ export default function RedeemRedeemableModal({
       setRidePartsEarned(attempt.rewards.ride_parts_earned);
       setEnergyEarned(attempt.rewards.energy_earned);
       setCoinTimesCollected(attempt.rewards.coin_times_collected ?? null);
+      // T128: a coin new to the shelf glows there (and the shelf opens on its tab) until its card is opened.
+      if (attempt.task_type === 'task' && attempt.rewards.coin_times_collected === 1 && player?.id)
+        void noteNewestCoin(player.id, park.id, attempt.task_id);
       setEarnedEdition(attempt.rewards.coin_edition ?? null);
       setRideControl(attempt.rewards.ride_control ?? null);
       setRush(attempt.rewards.rush ?? null);

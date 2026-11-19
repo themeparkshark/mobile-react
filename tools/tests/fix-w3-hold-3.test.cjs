@@ -147,6 +147,31 @@ test('regression: the Starter Pack shown as the first-win offer sends starter_se
   assert.doesNotMatch(seenEffect, /need_ticket[^\n]*starter_seen/);
 });
 
+test('T128: the shelf opens on the newest coin\'s tab and its slot glows until its card is opened', () => {
+  const { openingTab } = loadTs('src/services/collection/shelfModel.ts');
+  const split = { rides: [{ id: 1 }, { id: 2 }], sights: [{ id: 3 }] };
+  assert.equal(openingTab(split, [], new Set([1, 3]), ['rides', 'sights'], 3), 'sights', 'the newest coin is a sight: Sights, even with a ride owned');
+  assert.equal(openingTab(split, [{ id: 9 }], new Set([1, 9]), ['rides', 'sights', 'limited'], 9), 'limited');
+  assert.equal(openingTab(split, [], new Set([1, 3]), ['rides', 'sights'], 7), 'rides', 'a newest coin not on this shelf changes nothing');
+  const n = loadTs('src/services/collection/newestCoin.ts', noStore);
+  const now = 1_800_000_000_000;
+  const rec = { taskId: 3, at: now - 1000, seen: false };
+  assert.equal(n.glowTaskId(rec, new Set([3]), now), 3);
+  assert.equal(n.glowTaskId({ ...rec, seen: true }, new Set([3]), now), null, 'opened: no glow');
+  assert.equal(n.glowTaskId(rec, new Set([1]), now), null, 'not on the shelf: no glow');
+  assert.equal(n.glowTaskId({ ...rec, at: now - n.NEWEST_GLOW_MS - 1 }, new Set([3]), now), null, 'old: no glow');
+  assert.equal(n.parseNewest('{bad'), null);
+  const park = strip(read('src/screens/ParkScreen.tsx'));
+  assert.match(park, /\{glowId === task\.id && !arriving && section !== 'secret' && <NewCoinGlow size=\{coinSize\} reduced=\{reducedMotion\} \/>\}/);
+  assert.match(park, /onOpen=\{glowId === task\.id \? \(\) => seeNewest\(task\.id\) : undefined\}/);
+  assert.match(park, /openingTab\(split, limitedShelf, ownedNormal, tabs, glowTaskId\(newest, ownedNormal\)\)/);
+  const card = strip(read('src/components/RedeemRedeemableModal.tsx'));
+  assert.match(card, /if \(attempt\.task_type === 'task' && attempt\.rewards\.coin_times_collected === 1 && player\?\.id\)\s*void noteNewestCoin\(player\.id, park\.id, attempt\.task_id\);/);
+  const glow = read('src/components/collection/NewCoinGlow.tsx');
+  assert.doesNotMatch(glow, /Easing\.linear|withRepeat\([^)]*-1/, 'no linear motion, no endless loop');
+  assert.match(glow, /if \(reduced\) \{ glow\.value = GLOW_REST; return undefined; \}/);
+});
+
 test('T137: the O2H face is explained where it is first seen: the WIN card and the shelf slot sheet', () => {
   const facts = loadTs('src/services/collection/rideFacts.ts');
   assert.match(facts.coinFaceNote('Jungle Cruise', 8), /O2H/);
