@@ -1,3 +1,4 @@
+import type { GroupKind } from '../lineplay/lineGroup';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const PREFIX = 'task_attempt_checkpoint_v1_';
@@ -17,6 +18,8 @@ export interface TaskAttemptCheckpoint {
   retryOf?: number | null;
   /** "Picture games only" was on when this try started: never trivia. */
   pictureOnly?: boolean;
+  /** Who is playing (the LinePlay crew) when this try started, for the trivia deck (T199). */
+  crew?: GroupKind;
   /**
    * The coin this try is for, as its card shows it (fix W3 T033): if the win's answer is lost and the card closes,
    * the map can open this coin's win card again from the checkpoint alone, even after the coin has left the map.
@@ -91,12 +94,13 @@ export function parseTaskAttemptCheckpoint(
       !Number.isFinite(value.savedAt) || value.savedAt > nowMs + 60_000 ||
       nowMs - value.savedAt > MAX_AGE_MS) return null;
     // Optional extras: a broken one is dropped, never the paid request itself.
-    const { retryOf, pictureOnly, card, ...paid } = value;
+    const { retryOf, pictureOnly, crew, card, ...paid } = value;
     const coinCard = cleanCard(card);
     return {
       ...paid,
       ...(Number.isInteger(retryOf) && (retryOf as number) > 0 ? { retryOf } : {}),
       ...(pictureOnly === true ? { pictureOnly: true } : {}),
+      ...(crew === 'solo' || crew === 'couple' || crew === 'family' || crew === 'friends' ? { crew } : {}),
       ...(coinCard ? { card: coinCard } : {}),
     };
   } catch {

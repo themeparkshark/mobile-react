@@ -4,6 +4,9 @@ import { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Dimensions, Platform, Pressable, View, Text, StyleSheet } from 'react-native';
 import CalmModal from './retention/CalmModal';
 import { GrownUpGateSlot } from './GrownUpGate';
+import { loadLastCrew } from '../services/lineplay/lineGroupStore';
+import { hasKids } from '../services/lineplay/lineGroup';
+import { triviaCrewFor } from '../services/task-attempt/coinTrivia';
 import redeemCoin from '../api/endpoints/me/coins/redeem-coin';
 import redeemItem from '../api/endpoints/me/items/redeem-item';
 import { AuthContext } from '../context/AuthProvider';
@@ -583,6 +586,9 @@ export default function RedeemRedeemableModal({
     // Picture games only (a child who cannot read yet): the server deals Whack or Memory, never trivia.
     const pictureOnly = saved ? saved.pictureOnly === true : await pictureOnlyFor(player.id).catch(() => false);
     pictureOnlyRef.current = pictureOnly;
+    // Who is playing (T199): Family with kids gets the kids trivia deck from the server.
+    const crew = saved ? saved.crew ?? null : pictureOnly ? null
+      : await loadLastCrew(Number(player.id)).then(group => triviaCrewFor(group, hasKids(group))).catch(() => null);
     const requestId = saved?.requestId ?? requestIdRef.current ??
       `tps-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
     requestIdRef.current = requestId;
@@ -599,6 +605,7 @@ export default function RedeemRedeemableModal({
       // TRY AGAIN after a loss: the same game (the server honors it after be-core-loop deploys).
       ...((saved?.retryOf ?? retryOfRef.current) ? { retryOf: saved?.retryOf ?? retryOfRef.current } : {}),
       ...(pictureOnly ? { pictureOnly: true } : {}),
+      ...(crew ? { crew } : {}),
       // The coin's card rides along (T033): a win whose answer was lost can still show its card from the map.
       card: { name: taskName, coin_url: (redeemable?.model as TaskType | undefined)?.coin_url ?? null,
         coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience },
@@ -1433,6 +1440,7 @@ export default function RedeemRedeemableModal({
                 prewarm={flowState === 'spinning'}
                 kid={kidRulesFor(attemptRef.current, pictureOnlyRef.current)}
                 parkId={park.id}
+                triviaDeal={attemptRef.current?.trivia ?? null}
                 onClose={handleGameLose}
                 onComplete={(_mult, _rewards, proof) => handleGameWin(proof)}
               />

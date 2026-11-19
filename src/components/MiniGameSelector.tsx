@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { dealtTriviaRound, type AttemptTrivia } from '../services/task-attempt/coinTrivia';
 import { GameDialog } from '../ui/GameDialog';
 import { ModalLayerContext } from '../ui/modalLayers';
 import TapChallengeMiniGame from './TapChallengeMiniGame';
@@ -52,6 +53,8 @@ interface Props {
   rewardMode?: 'legacy' | 'task-attempt';
   isPractice?: boolean;
   parkId?: number;
+  /** A paid Beat the Buzzer's dealt round from the server bank (T196): played as dealt; bundled pool only without it. */
+  triviaDeal?: AttemptTrivia | null;
   excludeGames?: MiniGameType[];
   /** Kid rules for a paid ride try (picture-only players, fix round w3 T027): easier Whack and Memory. */
   kid?: boolean;
@@ -77,6 +80,7 @@ export default function MiniGameSelector({
   rewardMode = 'legacy',
   isPractice = false,
   parkId,
+  triviaDeal = null,
   excludeGames = [],
   kid = false,
   prewarm = false,
@@ -84,6 +88,8 @@ export default function MiniGameSelector({
   onComplete,
 }: Props) {
   const [selectedGame, setSelectedGame] = useState<MiniGameType | null>(null);
+  // The server's dealt Beat the Buzzer round (T196, T197, T199), or null on an older server.
+  const dealtRound = useMemo(() => (rewardMode === 'task-attempt' ? dealtTriviaRound(triviaDeal) : null), [rewardMode, triviaDeal]);
   const [bananaLabClosed, setBananaLabClosed] = useState(false);
   const gameMountedAt = useRef(0);
   const exitPromptOpen = useRef(false);
@@ -229,6 +235,8 @@ export default function MiniGameSelector({
           title="Beat the Buzzer"
           subtitle="2 right answers win the coin"
           parkId={parkId}
+          pool={dealtRound?.pool}
+          dealtIds={dealtRound?.ids}
           coinImage={coinImageUrl ?? null}
           chapterId={rideChapter?.id}
           onClose={onClose}

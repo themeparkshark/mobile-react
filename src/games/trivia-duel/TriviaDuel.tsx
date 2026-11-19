@@ -163,6 +163,11 @@ export interface TriviaDuelProps {
   /** Pre-loaded authored pool (tests / previews); loaded from LinePlay content otherwise. */
   pool?: PoolQuestion[];
   /**
+   * A paid ride round the server dealt (fix round w3 T196): these questions from `pool`, in this order.
+   * Without it (an older server) the round is planned from the pool as before.
+   */
+  dealtIds?: readonly string[];
+  /**
    * Capture screens only: 'win' plays every answer right and fast so the won
    * card can be checked on the real stage in release-like JS. Ignored unless
    * __DEV__ or a capture build (EXPO_PUBLIC_PERF_CAPTURE=1); store builds never set it.
@@ -745,7 +750,9 @@ export function TriviaDuel(props: TriviaDuelProps) {
     takeover.value = withTiming(0, { duration: 200 });
     fgHide.value = withTiming(0, { duration: 200 });
     const mem = await loadMemory();
-    if (!poolRef.current.length) poolRef.current = props.pool ?? await loadPool({ rideId, parkId, chapterId });
+    // A given pool (the server's dealt round) always wins over one loaded earlier.
+    if (props.pool) poolRef.current = props.pool;
+    else if (!poolRef.current.length) poolRef.current = await loadPool({ rideId, parkId, chapterId });
     // Queue and practice vary per play even from a fixed base seed; ride and daily keep the issued seed.
     const fresh = mode === 'queue' || mode === 'practice' ? mixSeed(baseSeed >>> 0, 0x51ed + mem.plays) : (baseSeed >>> 0);
     const seed = rematch ? mixSeed(seedRef.current, 0x9e37 + playsRef.current) : fresh;
@@ -756,6 +763,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const matchNo = mode === 'queue' || mode === 'practice' ? (mem.duels ?? 0) + 1 : 3;
     let p: MatchPlan | null = null;
     if (ghost) p = planFromIds(ghost.mode === 'ride' ? 'queue' : ghost.mode, ghost.seed, ghost.qids, poolRef.current, rank, !!mem.relaxed, ghost.keys);
+    // The server's dealt round plays exactly as dealt (this ride and park first, the right deck for the crew).
+    if (!p && mode === 'ride' && props.dealtIds?.length) p = planFromIds('ride', seed, props.dealtIds, poolRef.current, rank, !!mem.relaxed);
     if (!p) p = planMatch(mode === 'ghost' ? 'queue' : mode, seed, poolRef.current, { parkId, seen: mem.seen, rank, relaxed: !!mem.relaxed, matchNo, async: !!ghost });
     if (__DEV__) console.log('[trivia-duel] plan', { seed, matchNo, keys: p.keys, ids: p.rounds.map((r) => r.question.id), alt: p.finalAlt?.question.id ?? null });
     const carry = (mode === 'queue' || mode === 'practice') && p.features.shield ? activeCarry(mem, Date.now()) : { streak: 0, shield: false };
@@ -810,7 +819,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
       F.current.startRound(p, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [baseSeed, mode, rideId, parkId, chapterId, ghost, isRide, props.pool, W, H]);
+  }, [baseSeed, mode, rideId, parkId, chapterId, ghost, isRide, props.pool, props.dealtIds, W, H]);
 
   const onVsDone = useCallback(() => {
     setVs(null);

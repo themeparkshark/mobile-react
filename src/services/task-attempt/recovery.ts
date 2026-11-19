@@ -4,17 +4,19 @@ import {
   type TaskAttemptResponse,
 } from '../../api/endpoints/me/task-attempts';
 import { writeTaskAttemptCheckpoint, type TaskAttemptCheckpoint } from './checkpoint';
+import type { GroupKind } from '../lineplay/lineGroup';
 
 /**
  * The core-loop extras of a start (the same game on TRY AGAIN, picture games
  * only), or nothing at all, so a plain start sends exactly the old request.
  */
-export function startExtras(checkpoint: Pick<TaskAttemptCheckpoint, 'retryOf' | 'pictureOnly'>):
-  [] | [{ retry_of?: number; picture_only?: boolean }] {
+export function startExtras(checkpoint: Pick<TaskAttemptCheckpoint, 'retryOf' | 'pictureOnly' | 'crew'>):
+  [] | [{ retry_of?: number; picture_only?: boolean; crew?: GroupKind }] {
   const retryOf = Number.isInteger(checkpoint.retryOf) && (checkpoint.retryOf as number) > 0 ? checkpoint.retryOf as number : null;
   const pictureOnly = checkpoint.pictureOnly === true;
-  if (!retryOf && !pictureOnly) return [];
-  return [{ ...(retryOf ? { retry_of: retryOf } : {}), ...(pictureOnly ? { picture_only: true } : {}) }];
+  const crew = checkpoint.crew ?? null;
+  if (!retryOf && !pictureOnly && !crew) return [];
+  return [{ ...(retryOf ? { retry_of: retryOf } : {}), ...(pictureOnly ? { picture_only: true } : {}), ...(crew ? { crew } : {}) }];
 }
 
 /** Recover an existing paid challenge; never create a second request ID. */

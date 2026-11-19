@@ -126,3 +126,47 @@ test('T232: when TRY AGAIN deals the other game, the loss card names it instead 
   assert.match(modal, /const retryGameName = retryGameNameFor\(attemptRef\.current\);/);
   assert.match(modal, /message=\{retryingLine\(retryGameName\)\}/);
 });
+
+test('T196 T197 T199: Beat the Buzzer on a coin plays the server\'s dealt round as dealt, bundled only without one', () => {
+  const trivia = loadTs('src/services/task-attempt/coinTrivia.ts', {
+    '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => undefined } },
+    '../../api/endpoints/lineplay/trivia': { default: async () => null },
+  });
+  const row = (id, extra = {}) => ({ id, park_id: 8, ride_id: 65, question: `Question ${id}?`, choices: ['A', 'B', 'C', 'D'],
+    correct_index: 1, difficulty: 'easy', deck: 'classic', fact: null, source: 'Disneyland', park_name: 'Disneyland', ...extra });
+  const round = trivia.dealtTriviaRound({ source: 'bank', questions: [row('sw-3'), row('sw-1'), row('sw-2'), row('sw-9')] });
+  assert.deepEqual([...round.ids], ['sw-3', 'sw-1', 'sw-2'], 'the dealt order, first three');
+  assert.equal(round.pool[0].parkId, 8);
+  assert.equal(trivia.dealtTriviaRound(null), null, 'an older server: the bundled pool plays');
+  assert.equal(trivia.dealtTriviaRound({ questions: [row('a'), row('b')] }), null, 'too few to play a round');
+  assert.equal(trivia.dealtTriviaRound({ questions: [row('a'), row('b'), row('c', { choices: ['x'] })] }), null, 'a broken row never plays');
+  assert.equal(trivia.triviaCrewFor({ kind: 'family', players: [] }, true), 'family', 'Family with kids: the kids deck');
+  assert.equal(trivia.triviaCrewFor({ kind: 'family', players: [] }, false), null, 'a grown-up family: the grown-up deck');
+  assert.equal(trivia.triviaCrewFor({ kind: 'friends', players: [] }, false), 'friends');
+  assert.equal(trivia.triviaCrewFor(null, false), null);
+
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+    '../../api/endpoints/me/task-attempts': {}, './checkpoint': {},
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(recovery.startExtras({}))), [], 'a plain start sends the old request');
+  assert.deepEqual(JSON.parse(JSON.stringify(recovery.startExtras({ crew: 'family' }))), [{ crew: 'family' }]);
+  assert.match(strip(read('src/api/endpoints/me/task-attempts.ts')), /\.\.\.\(extras\?\.crew \? \{ crew: extras\.crew \} : \{\}\),/);
+
+  const duel = strip(read('src/games/trivia-duel/TriviaDuel.tsx'));
+  assert.match(duel, /if \(!p && mode === 'ride' && props\.dealtIds\?\.length\) p = planFromIds\('ride', seed, props\.dealtIds, poolRef\.current, rank, !!mem\.relaxed\);/);
+  assert.match(duel, /if \(props\.pool\) poolRef\.current = props\.pool;/, 'a new dealt round replaces a pool loaded earlier');
+  const selector = strip(read('src/components/MiniGameSelector.tsx'));
+  assert.match(selector, /pool=\{dealtRound\?\.pool\}\s*dealtIds=\{dealtRound\?\.ids\}/);
+  const modal = strip(read('src/components/RedeemRedeemableModal.tsx'));
+  assert.match(modal, /triviaDeal=\{attemptRef\.current\?\.trivia \?\? null\}/);
+  assert.match(modal, /\.\.\.\(crew \? \{ crew \} : \{\}\),/);
+});
+
+test('T196: the dealt questions really plan as the ride round, in order', () => {
+  const engine = loadTs('src/games/trivia-duel/engine/match.ts');
+  const pool = ['sw-3', 'sw-1', 'sw-2'].map((id, i) => ({ id, parkId: 8, rideId: 65, question: `Which year is question ${i}?`,
+    choices: ['1955', '1966', '1971', '1983'], correctIndex: 1, difficulty: 'easy' }));
+  const plan = engine.planFromIds('ride', 1234, ['sw-3', 'sw-1', 'sw-2'], pool, 'firstmate', false);
+  assert.ok(plan, 'planned');
+  assert.deepEqual([...plan.rounds.map(r => r.question.id)], ['sw-3', 'sw-1', 'sw-2']);
+});

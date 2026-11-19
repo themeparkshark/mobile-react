@@ -1,3 +1,5 @@
+import type { AttemptTrivia } from '../../../services/task-attempt/coinTrivia';
+import type { GroupKind } from '../../../services/lineplay/lineGroup';
 import { markStandingsStale, parkWinNote } from '../../../screens/LeaderboardsScreen/standingsCache';
 import { winNote } from '../../../screens/LeaderboardsScreen/standingsV2Model';
 import { showToast } from '../../../utils/toast';
@@ -91,6 +93,8 @@ export interface TaskAttempt {
   rules?: TaskAttemptRules;
   /** What TRY AGAIN deals after this loss: the other picture game after two misses on one (T232). */
   retry_game?: TaskAttemptGame | null;
+  /** Beat the Buzzer's dealt round from the fact-checked bank (core-loop builds, T196): played as dealt. */
+  trivia?: AttemptTrivia | null;
 }
 
 export interface TaskAttemptRules {
@@ -138,6 +142,8 @@ export function ticketSourceCopy(sources: TicketSources | null | undefined): str
 export interface StartAttemptExtras {
   readonly retry_of?: number | null;
   readonly picture_only?: boolean;
+  /** Who is playing (the LinePlay crew): "family" (with kids) deals the kids trivia deck (T199). */
+  readonly crew?: GroupKind | null;
 }
 
 export async function startTaskAttempt(
@@ -156,6 +162,7 @@ export async function startTaskAttempt(
     longitude,
     ...(extras?.retry_of ? { retry_of: extras.retry_of } : {}),
     ...(extras?.picture_only ? { picture_only: 1 } : {}),
+    ...(extras?.crew ? { crew: extras.crew } : {}),
   });
   // A coin game is open at this coin: ride detection never counts the time spent playing it as its line.
   if (type === 'task') noteCoinGame(taskId);
