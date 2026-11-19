@@ -25,7 +25,7 @@ test('T083: the first LinePlay shows one PLAY on the story page; the rail waits 
   assert.equal(L.firstLinePlayCalm({ ...base, railMode: 'back' }), false, 'Details open on a small phone keeps Show games');
 
   const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(screen, /\{firstCalm \? <View style=\{styles\.railCalm\}/, 'the calm page keeps the rail footprint, empty');
+  assert.match(screen, /\{firstCalm \|\| holdPages \? <View style=\{styles\.railCalm\}/, 'the calm page keeps the rail footprint, empty');
   assert.match(screen, /notePlayedGames\(player\.id, \[FIRST_LINEPLAY_ROUND\]\)/, 'the first round is remembered');
   // The 1 2 3 bubbles are progress, never a second button beside PLAY.
   const card = read('src/screens/LinePlay/components/ChapterCard.tsx');

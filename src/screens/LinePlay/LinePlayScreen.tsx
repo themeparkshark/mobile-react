@@ -1464,6 +1464,8 @@ export default function LinePlayScreen() {
   // light-blue frame), then the two crossfade (UI thread).
   const [pagesReady, setPagesReady] = useState(false);
   const holdPages = groupPlay.asking || !pagesReady;
+  const heldShown = useRef(false);
+  if (holdPages) heldShown.current = true;
   const pagesHoldFade = useSharedValue(holdPages ? 0 : 1);
   useEffect(() => {
     pagesHoldFade.value = reducedFx ? (holdPages ? 0 : 1) : withTiming(holdPages ? 0 : 1, { duration: 240 });
@@ -1927,8 +1929,9 @@ export default function LinePlayScreen() {
             {/* The rail stays at its usual bottom spot in every state, so a thumb finds it in the same place. */}
             <Reanimated.View layout={reducedFx ? undefined : LinearTransition.duration(180)}
               onLayout={event => setRailBlock(Math.round(event.nativeEvent.layout.height))}>
-            {firstCalm ? <View style={styles.railCalm} accessible={false} /> : <Reanimated.View
-              entering={reducedFx || !calmShown.current ? undefined : FadeIn.duration(260)}>
+            {/* The rail waits with the pages (T087: never Story, Games and Next beside the loading card). */}
+            {firstCalm || holdPages ? <View style={styles.railCalm} accessible={false} /> : <Reanimated.View
+              entering={reducedFx || !(calmShown.current || heldShown.current) ? undefined : FadeIn.duration(260)}>
             <ActivityPageRail index={visiblePageIndex} count={activityPages.length}
               mode={railMode} onShowPages={onRailBack} backAction={railBack} quiet={railQuiet}
               tabs={{
