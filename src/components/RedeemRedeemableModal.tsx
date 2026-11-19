@@ -692,6 +692,11 @@ export default function RedeemRedeemableModal({
     try {
       await writeTaskAttemptCheckpoint(checkpoint);
       pressTrace('card.saved');
+      // w5 N04: TRY AGAIN on the kept board: it resets in place and shows (held) while the request travels.
+      if (replayRef.current && flowStateRef.current === 'lost') {
+        setRetryRound((r) => r + 1);
+        setFlowState('replay');
+      }
     } catch (error) {
       console.warn('Could not save ride challenge before Ticket spend:', error);
       setFlowState('save-error');
@@ -923,10 +928,10 @@ export default function RedeemRedeemableModal({
     outcomeRef.current = null;
     proofRef.current = null;
     if (inPlace) {
+      // The board resets and shows once the spend request is on its way (handleStartWheel), so its reset never
+      // slows the checkpoint work in front of the request (0.4 s on device when it ran at the press).
       replayRef.current = selectedGame;
       repeatPunchRef.current = false;
-      setRetryRound((r) => r + 1);
-      setFlowState('replay');
     } else {
       replayRef.current = null;
       setSelectedGame(null);

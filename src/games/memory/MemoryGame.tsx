@@ -476,6 +476,10 @@ export default function MemoryGame({
   const stageHeld = useStageHold();
   // Fix pass w5 (N04): TRY AGAIN on the kept board builds a fresh run in place (the open / rematch effect below).
   const retryRound = useRetryRound();
+  /** From a TRY AGAIN on the kept board until its GO: every deal lands in place (no second fly-in). */
+  const retryDealRef = useRef(false);
+  const retryRoundSeen = useRef(retryRound);
+  if (retryRoundSeen.current !== retryRound) { retryRoundSeen.current = retryRound; retryDealRef.current = true; }
   const stageHeldRef = useRef(stageHeld);
   stageHeldRef.current = stageHeld;
   const rideChallengeRef = useRef(rideChallenge);
@@ -867,8 +871,10 @@ export default function MemoryGame({
     const t = setTimeout(() => {
       if (dealtKey.current === key) return;
       dealtKey.current = key;
-      // Off stage the cards land in place at once (nobody can see a deal under the punch, N04).
-      const offStage = stageHeldRef.current;
+      // Off stage the cards land in place at once (nobody can see a deal under the punch, N04). So does the
+      // re-deal of a TRY AGAIN on the kept board before its GO (w5): the newly dealt seed lays the same face-down
+      // board again, so it snaps instead of flying in a second time under the count.
+      const offStage = stageHeldRef.current || retryDealRef.current;
       dealCards(offStage);
       const n = geo.cols * geo.rows;
       later(reducedMotion || offStage ? 60 : n * 38 + 240, () => setStageDealt(true));
@@ -1017,6 +1023,7 @@ export default function MemoryGame({
   }, [gameNow, later, send]);
 
   const onStart = useCallback(() => {
+    retryDealRef.current = false;
     const r = runRef.current;
     if (!r) return;
     if (r.mode === 'timeAttack' || r.mode === 'race') {

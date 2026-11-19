@@ -54,7 +54,12 @@ test('N04: the ride card keeps the board mounted, held and full-window under the
   // The card's 5% margin is reached past, so the board is never laid out at a new size on TRY AGAIN.
   assert.match(modal, /const boardOutset = fullBleed \? null : \{ top: -sheetMargin, left: -sheetMargin, right: -sheetMargin, bottom: -sheetMargin \};/);
   // The press resets in place (no punch, no new mount); the fresh spend never clears the kept game.
-  assert.match(modal, /if \(inPlace\) \{\n\s+replayRef\.current = selectedGame;\n\s+repeatPunchRef\.current = false;\n\s+setRetryRound\(\(r\) => r \+ 1\);\n\s+setFlowState\('replay'\);/);
+  assert.match(modal, /if \(inPlace\) \{\n(\s+\/\/.*\n)+\s+replayRef\.current = selectedGame;\n\s+repeatPunchRef\.current = false;\n\s+\} else \{/);
+  // The reset and the board come once the spend request is on its way (never slowing the checkpoint work).
+  assert.match(modal, /pressTrace\('card\.saved'\);\n(\s+\/\/.*\n)+\s+if \(replayRef\.current && flowStateRef\.current === 'lost'\) \{\n\s+setRetryRound\(\(r\) => r \+ 1\);\n\s+setFlowState\('replay'\);/);
+  // Memory's re-deal for the newly dealt seed snaps in place before GO (no second fly-in under the count).
+  assert.match(memory, /const offStage = stageHeldRef\.current \|\| retryDealRef\.current;/);
+  assert.match(memory, /const onStart = useCallback\(\(\) => \{\n\s+retryDealRef\.current = false;/);
   assert.match(modal, /if \(optimistic && !replayRef\.current\) \{/);
   assert.match(modal, /setFlowState\(dealtFlow\(\)\);/);
   // Stable game callbacks, so the memoized game is not re-rendered by the card.
