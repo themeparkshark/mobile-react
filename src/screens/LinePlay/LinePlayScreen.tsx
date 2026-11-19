@@ -1405,6 +1405,20 @@ export default function LinePlayScreen() {
   }, [snapshot.playlist.length]);
 
 
+  // T087: the loading card stays until the first question is answered and the queue card has laid out (no blank
+  // light-blue frame), then the two crossfade (UI thread).
+  const [pagesReady, setPagesReady] = useState(false);
+  const holdPages = groupPlay.asking || !pagesReady;
+  const heldShown = useRef(false);
+  if (holdPages) heldShown.current = true;
+  const pagesHoldFade = useSharedValue(holdPages ? 0 : 1);
+  useEffect(() => {
+    pagesHoldFade.value = reducedFx ? (holdPages ? 0 : 1) : withTiming(holdPages ? 0 : 1, { duration: 240 });
+  }, [holdPages, reducedFx]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pagesHoldStyle = useAnimatedStyle(() => ({ opacity: pagesHoldFade.value }));
+  // The rail fades in only when it arrives after the calm first page (never on an ordinary open).
+  const calmShown = useRef(false);
+
   if (!ride) {
     return (
       // No ride: Alex's look (bright blue, a cream card, Finn, one gold button), never plain text on a dark page.
@@ -1466,17 +1480,6 @@ export default function LinePlayScreen() {
   // One gold button per screen: every page carries its own gold action (PLAY NOW, PLAY, PLAY AGAIN, the
   // board's PLAY strip), so while a page is on screen the rail's Next (and More games) is a quiet white button.
   const railQuiet = visibleItem != null;
-  // T087: the loading card stays until the first question is answered and the queue card has laid out (no blank
-  // light-blue frame), then the two crossfade (UI thread).
-  const [pagesReady, setPagesReady] = useState(false);
-  const holdPages = groupPlay.asking || !pagesReady;
-  const heldShown = useRef(false);
-  if (holdPages) heldShown.current = true;
-  const pagesHoldFade = useSharedValue(holdPages ? 0 : 1);
-  useEffect(() => {
-    pagesHoldFade.value = reducedFx ? (holdPages ? 0 : 1) : withTiming(holdPages ? 0 : 1, { duration: 240 });
-  }, [holdPages, reducedFx]); // eslint-disable-line react-hooks/exhaustive-deps
-  const pagesHoldStyle = useAnimatedStyle(() => ({ opacity: pagesHoldFade.value }));
   // Both game sheets (the plain Games sheet and the bonus picker) choose through here, Parade Beat included.
   const chooseArcade = (index: number) => {
     if (index === ADD_PARADE_BEAT) {
@@ -1495,8 +1498,6 @@ export default function LinePlayScreen() {
   };
   const firstCalm = firstLinePlayCalm({ played: playedEver, roundsDone: snapshot.completedActivityIds.length,
     pageKind: activityPages[visiblePageIndex]?.kind, railMode });
-  // The rail fades in only when it arrives after the calm first page (never on an ordinary open).
-  const calmShown = useRef(false);
   if (firstCalm) calmShown.current = true;
   const jumpToPage = (index: number, animated = Math.abs(index - visiblePageIndex) <= 1) => {
     if (index < 0 || index >= activityPages.length) return;
