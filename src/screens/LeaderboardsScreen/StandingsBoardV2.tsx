@@ -1072,7 +1072,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           onEndReachedThreshold={2}
           refreshControl={refreshControl}
           // Room for the docked row only while it shows (r2: no cream void under Your spot).
-          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34 }} />}
+          // A short board's cream runs down to the nav under its inline card, so no background shows below it.
+          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: Math.max(hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34,
+            inlineAt != null ? listBox.height - rowsEnd : 0) }} />}
           onLoad={() => setListDrawn(true)}
         />
         {!revealed && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}

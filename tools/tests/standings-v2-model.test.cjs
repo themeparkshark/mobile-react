@@ -282,6 +282,7 @@ test('critic M4 (Nov 19): a short board puts your card under its last row; a row
   const src = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
   assert.match(src, /const inlineAt = youInlineTop\(rowsEnd, listBox\.height, YOU_CARD_HEIGHT \+ YOU_CARD_BOTTOM \+ 34\);/);
   assert.match(src, /<YouRow inlineTop=\{inlineTop\}/);
+  assert.match(src, /inlineAt != null \? listBox\.height - rowsEnd : 0\) \}\} \/>\}/, 'cream runs to the nav under an inline card');
   assert.match(src, /&& myRowClearRef\.current\(\);/);
   assert.doesNotMatch(src, /rowOnScreen\(/, 'every visibility check uses the clear test');
 });
