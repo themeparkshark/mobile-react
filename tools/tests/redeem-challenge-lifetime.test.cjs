@@ -38,6 +38,7 @@ function mapChallenge(initial = task) {
       if (name === '../ui/modalLayers') return { leavingSheetTap: { listen: () => () => undefined, note() {} },
         modalLayers: { leavingCount: () => 0, subscribe: () => () => undefined } };
       if (name === './guide/playPressQueue') return require('./helpers/ts-module.cjs').loadTs('src/components/guide/playPressQueue.ts');
+      if (name === './guide/playCaption') return require('./helpers/ts-module.cjs').loadTs('src/components/guide/playCaption.ts');
       if (name.endsWith('mapOpportunityTiming')) return timing.exports;
       if (name === '../context/SoundEffectProvider') return { SoundEffectContext: {} };
       if (name === '../gamekit/audio/playMoment') return { studioMoment: () => false };

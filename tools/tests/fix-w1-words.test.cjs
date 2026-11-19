@@ -140,7 +140,7 @@ test('item 17: at home the guide says which coin can level up now, and LEVEL UP 
   assert.equal(ready.button.label, 'LEVEL UP');
   assert.match(ready.line, /2 more treats = 1 Ticket/, 'the ticket meter stays');
   assert.ok(ready.line.length <= 56, `two lines on the card: ${ready.line}`);
-  assert.match(read('src/screens/ExploreScreen.tsx'), /planCoinUrl: \(homeLevelUp \? homeLevelUp\.coin_url : homePlan\?\.coin_url\) \|\| null,/, 'the card wears that coin');
+  assert.match(read('src/screens/ExploreScreen.tsx'), /levelUp: homeLevelUp \? ref\(homeLevelUp\.ride_name, homeLevelUp\.coin_url, homeLevelUp\.id, homeLevelUp\.park_id\) : null,/, 'the card wears that coin');
   assert.equal(guideCopy.guideCardCopy('home', null, ctx).button.action, 'plan', 'nothing ready: the plan card as before');
   const coins = loadTs('src/context/CoinCollection.tsx', {
     react: { useCallback: f => f, useEffect() {}, useState: v => [v, () => {}] },
@@ -153,8 +153,10 @@ test('item 17: at home the guide says which coin can level up now, and LEVEL UP 
   assert.equal(coins.homeLevelUpCoin([coin(1, 2, 2, 50)], 20), null, 'not enough Energy: nothing to say');
   assert.equal(coins.homeLevelUpCoin([coin(1, 2, 2, 10, { park_id: null })], 20), null, 'no park to open it on');
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /useCoinCollection\(!park && coinLevelsRung\.open \? player\?\.id : null\)/, 'only at home, only after coin levels unlock');
-  assert.match(explore, /if \(action === 'level_up' && homeLevelUp\?\.park_id\) \{\n\s+RootNavigation\.navigate\('Park', \{ park: homeLevelUp\.park_id, player: player\.id, focusCoin: \{ assetId: homeLevelUp\.id \} \}\);/);
+  // Fix pass w4 T007: the owned coins load at home for every player (Ride Parts and limited steps); LEVEL UP still waits for coin levels.
+  assert.match(explore, /useCoinCollection\(!park \? player\?\.id : null\)/, 'only at home');
+  assert.match(explore, /const homeLevelUp = !park && coinLevelsRung\.open \? homeLevelUpCoin\(/, 'level up only after coin levels unlock');
+  assert.match(explore, /case 'level_up': case 'coin':\n\s+if \(coin\?\.parkId != null\) \{\n\s+RootNavigation\.navigate\('Park', \{ park: coin\.parkId, player: player\.id, \.\.\.\(coin\.assetId != null \? \{ focusCoin: \{ assetId: coin\.assetId \} \} : \{\}\) \}\);/);
 });
 
 test('item 18: Whack and Memory on a ride coin have no counting-down number, no OVERTIME ribbon and no orange rope', () => {

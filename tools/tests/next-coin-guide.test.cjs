@@ -648,7 +648,7 @@ test('home: two doors to the shelf (Shelf button and PLAN), Practice games from 
   }
   const explore = mapSource();
   assert.match(explore, /homeGuide=\{homeGuide\}/);
-  assert.match(explore, /const homeGuide = useMemo<HomeGuide \| null>\(\(\) => player && !park \?/, 'home only: never a park goal or the Adventure');
+  assert.match(explore, /const homeGuide = useMemo<HomeGuide \| null>\(\(\) => \{\n    if \(!player \|\| park\) return null;/, 'home only: never a park goal or the Adventure');
 });
 
 test('welcome back after 14 days: whole days away, per player', () => {

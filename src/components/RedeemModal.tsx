@@ -31,6 +31,7 @@ import { TaskType } from '../models/task-type';
 import { BRAND, GameIcon } from '../ui';
 import { useCoverArt } from './map/mapCover';
 import HomeArcade from './HomeArcade';
+import { playCaptionName } from './guide/playCaption';
 import { coinCardSeenNow, warmCoinCardsSeen } from './rewards/coinCardSeen';
 import { playPillState } from './rewards/playPill';
 import { findPendingWin, pendingWinRedeemable } from '../services/task-attempt/pendingWins';
@@ -322,8 +323,8 @@ export default function RedeemModal({
               : badge === 'extra_try' ? `${coin.name}. Uses an extra try.`
               : `${coin.name}. Costs ${coin.ticket_cost ?? 1} ${(coin.ticket_cost ?? 1) === 1 ? 'Ticket' : 'Tickets'}.`}>
             {!!coin.coin_url && <Image source={{ uri: coin.coin_url }} style={styles.captionCoin} contentFit="contain" />}
-            {/* The coin's full display name, on two lines when it is long (Finding Nemo Submarine Voyage), never cut. */}
-            <Text style={styles.captionText} numberOfLines={2}>{coin.name}</Text>
+            {/* One line on every phone (N11): the name shrinks to fit, and a very long one keeps its main words. */}
+            <Text style={styles.captionText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{playCaptionName(coin.name)}</Text>
             {!badge && <View style={styles.cost}>
               <GameIcon name="ticket" size={16} />
               <Text style={styles.captionText}>{coin.ticket_cost ?? 1}</Text>

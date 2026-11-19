@@ -12,10 +12,12 @@
 import { Image } from 'expo-image';
 import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSpring, withTiming } from 'react-native-reanimated';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
+import { AMBIENT, BEZIER } from '../../ui/motion';
+import { usePowerBudget } from '../../power';
 import type { GuideAction, GuideButton, GuideCardCopy } from '../../services/guide/guideCopy';
 import type { GuideState } from '../../services/guide/nextCoin';
 import CoinTipPicture from '../help/CoinTipPicture';
@@ -102,7 +104,7 @@ function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean,
 }
 
 export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, onDotsPress, teachPlay = false,
-  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null }: {
+  slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null, art: artOverride = null, loading = false }: {
   readonly copy: GuideCardCopy;
   /** Standing in an open ride line (T074): "In line? LINEPLAY" as its own picture button under the card's words. */
   readonly lineOffer?: { readonly title: string; readonly label: string; readonly action?: GuideAction } | null;
@@ -125,6 +127,10 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
   /** Today's Adventure is active here but the card points elsewhere: its ticket tab opens the Adventure sheet. */
   readonly adventureTab?: { readonly stamps: readonly [boolean, boolean, boolean]; readonly onPress: () => void } | null;
   readonly testID?: string;
+  /** Home: the picture of the step the card is about (a chest, a treat, the Daily 3 flame), when it is not a coin. */
+  readonly art?: number | null;
+  /** The coin is still being picked (arrive with no target yet): the words and coin breathe softly until it lands (T023). */
+  readonly loading?: boolean;
 }) {
   const reduced = useReducedGameMotion();
   const enter = useSharedValue(reduced ? 1 : 0);
@@ -133,10 +139,21 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
     opacity: enter.value,
     transform: [{ translateX: (1 - enter.value) * -24 }, { scale: 0.94 + enter.value * 0.06 }],
   }));
+  // T023: a soft breath (opacity only, on the UI thread) while the first coin is picked; still under Reduce Motion
+  // and when the power budget rests ambient motion (Battery Saver, idle, pocket).
+  const ambient = usePowerBudget().ambient;
+  const breath = useSharedValue(1);
+  const breathing = loading && !reduced && ambient;
+  useEffect(() => {
+    if (!breathing) { cancelAnimation(breath); breath.value = withTiming(1, { duration: 160 }); return undefined; }
+    breath.value = withRepeat(withTiming(0.55, { duration: AMBIENT.breathMs / 2, easing: Easing.bezier(...BEZIER.inOut) }), -1, true);
+    return () => cancelAnimation(breath);
+  }, [breathing, breath]);
+  const breathStyle = useAnimatedStyle(() => ({ opacity: breath.value }));
   const wallet = state === 'claim' || state === 'free_try' || state === 'extra_try' || state === 'need_ticket';
   // The goodbye is about the park day, not a coin to win next: the house gold coin, never the next park's coin art.
   // At home with no coin planned yet, the card pictures the Tickets waiting for the next park day (T016).
-  const art = state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet || state === 'home' ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
+  const art = artOverride != null ? artOverride : state === 'goodbye' ? COIN_FALLBACK : wallet || !coinUrl ? (wallet || state === 'home' ? TICKET : COIN_FALLBACK) : { uri: coinUrl };
   return <Animated.View testID={testID} style={[styles.slot, { top }, animated]}>
     {/* The park name chip and today's Adventure ticket tab sit on the card's top edge, so the kicker never shortens. */}
     {(adventureTab || (parkName && state !== 'arrive' && copy.kicker !== parkName.toUpperCase())) && <View pointerEvents="box-none" style={styles.edgeRow}>
@@ -149,7 +166,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
     <Pressable accessible={!lineOffer} accessibilityRole="button" accessibilityLabel={copy.a11y} onPress={onCardPress}
       disabled={!onCardPress} style={styles.card}>
       <View style={styles.artCol}>
-        <Image source={art} style={styles.coin} contentFit="contain" />
+        <Animated.View style={breathStyle}><Image source={art} style={styles.coin} contentFit="contain" /></Animated.View>
         {copy.pointsAtPlay && <View style={styles.pointer} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <GameIcon name={copy.badge === 'gift' ? 'gift' : 'ticket'} size={16} />
           <GameIcon name="arrow" size={14} />
@@ -157,7 +174,7 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
       </View>
       <View style={styles.copy}>
         <Text style={styles.kicker} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.75} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.kicker}</Text>
-        <Text style={styles.title} numberOfLines={3} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.title}</Text>
+        <Animated.Text style={[styles.title, breathStyle]} numberOfLines={3} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.title}</Animated.Text>
         {copy.dots && (onDotsPress
           ? <Pressable testID="adventure-dots" accessibilityRole="button" accessibilityLabel="Today's Adventure stamps. Open your ticket"
             hitSlop={{ top: 6, bottom: 6, left: 4, right: 12 }} onPress={() => { haptic('tapLight'); onDotsPress(); }} style={styles.dotsPress}>

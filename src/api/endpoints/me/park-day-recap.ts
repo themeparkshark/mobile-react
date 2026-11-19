@@ -15,6 +15,10 @@ export interface ParkDayRecap {
   readonly ride_parts_earned: number;
   readonly coin_upgrades: number;
   readonly park_project_points: number;
+  /** Core-loop servers (fix w3 T198): every won attempt today, every wait (a running one too), and every ride logged. */
+  readonly coins_won?: number;
+  readonly waits?: number;
+  readonly rides_ridden?: number;
   /** The day's coins with art, for the share card (newer servers). */
   readonly coins?: ReadonlyArray<{
     readonly asset_id: number;

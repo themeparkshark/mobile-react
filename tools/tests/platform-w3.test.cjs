@@ -96,7 +96,8 @@ test('T179: small header, profile, pin and wait-time targets reach 44 pt', () =>
 test('T183: the guide card grows with Larger Text up to 1.3x and wraps instead of clipping', () => {
   const src = read('src/components/guide/NextCoinCard.tsx');
   assert.match(src, /export const CARD_TEXT_MAX = 1\.3;/);
-  assert.match(src, /<Text style=\{styles\.title\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
+  // Fix pass w4 T023: the title breathes while the first coin is picked (an Animated.Text, same limits).
+  assert.match(src, /<Animated\.Text style=\{\[styles\.title, breathStyle\]\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
   assert.match(src, /<Text style=\{styles\.line\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
   assert.equal((src.match(/maxFontSizeMultiplier=\{CARD_TEXT_MAX\}/g) || []).length, 5, 'every word on the card');
 });

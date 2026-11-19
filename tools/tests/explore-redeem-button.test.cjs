@@ -14,6 +14,7 @@ const load = props => runtime('src/components/RedeemModal.tsx', {
   '../ui': { BRAND: new Proxy({}, { get: () => '#fff' }), GameIcon: 'GameIcon' },
   './map/mapCover': { useCoverArt: () => () => undefined },
   './guide/playPressQueue': loadTs('src/components/guide/playPressQueue.ts'),
+  './guide/playCaption': loadTs('src/components/guide/playCaption.ts'),
 }, { park: { id: 1 }, onPress: () => undefined, ...props });
 const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1 } };
 

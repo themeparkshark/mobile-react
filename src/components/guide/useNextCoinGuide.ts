@@ -19,6 +19,8 @@ import {
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
 import { guideCardCopy, lineOffer, oneGoldButton, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
 import { coinsToday, INSIDE_PARK_METERS, leavingPark, parkDayStore, welcomedToday } from '../../services/guide/parkDay';
+import { goodbyeCoins, serverCoinsWon } from '../../services/guide/parkDayCounts';
+import { getParkDayRecap } from '../../api/endpoints/me/park-day-recap';
 import { localDay } from '../../services/reveal/revealLadder';
 import { adventureAfterWin, guideCoinsFor, inLineTaskFor, ridesByTask, showLikeTaskIds, withAdventureCoin, withPlayRange } from './guideCoins';
 
@@ -184,6 +186,21 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   // Arrival: the first reading in this park, with its own coins and not on the way out of another, starts the 30 s
   // welcome (walking from the esplanade into the next park welcomes there, after the goodbye).
   const arrivalReading = parkId != null && !!input.location && parkCoinsKnown && !leaving;
+  // The goodbye's number comes from the server (fix pass w4, T198): it counts every win today, also ones this map
+  // never saw (LinePlay, a relaunch). One read per park day; until it answers (or on an older server) the phone's count.
+  const leavingId = leaving ? leavingFrom?.parkId ?? null : null;
+  const [serverDay, setServerDay] = useState<{ key: string; coinsWon: number | null } | null>(null);
+  const serverKey = leavingId != null ? `${leavingId}:${today}` : null;
+  useEffect(() => {
+    if (!serverKey || leavingId == null || serverDay?.key === serverKey) return undefined;
+    let live = true;
+    getParkDayRecap(leavingId).then(recap => {
+      if (live) setServerDay({ key: serverKey, coinsWon: serverCoinsWon(recap) });
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [serverKey, leavingId, serverDay?.key]);
+  const goodbyeWon = goodbyeCoins(coinsToday(dayRecord, leavingFrom?.parkId, today),
+    serverDay && serverDay.key === serverKey ? { coins_won: serverDay.coinsWon ?? undefined } : null);
   const arrived = useRef<{ parkId: number | null; at: number | null }>({ parkId: null, at: null });
   if (arrived.current.parkId !== parkId) arrived.current = { parkId, at: arrivalReading ? Date.now() : null };
   else if (arrived.current.at === null && arrivalReading) arrived.current = { parkId, at: Date.now() };
@@ -306,7 +323,7 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     queueTicketsOn: input.queueTicketsOn, adventureDots, lineStoryNear: input.lineStoryNear, adventureStep,
     welcomed, ownedHere: coins.filter(coin => coin.owned).length + (input.ownedTaskIds?.size ?? 0) > 0 ? 1 : 0, playUp,
     freeTryDaily: input.freeTryDaily, thenName, replacedName, leaving: leaving ? { parkName: leavingFrom?.parkName ?? null,
-      coins: coinsToday(dayRecord, leavingFrom?.parkId, today) } : null,
+      coins: goodbyeWon } : null,
   }), shown, ridesResting), playUp);
   const targetTask = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
   const targetCoin = shown ? coins.find(coin => coin.taskId === shown.taskId) ?? null : null;

@@ -10,6 +10,7 @@ import { shareFlex } from '../share';
 import { parkDayFlexPayload, parkDayCoinRow } from '../share/parkDay';
 import { shortParkName } from '../helpers/parkName';
 import { plainRideName } from '../helpers/plainRideName';
+import { recapLineCopy, recapRidesCopy, recapWins } from '../services/guide/parkDayCounts';
 import * as RootNavigation from '../RootNavigation';
 import CalmOffer from '../components/money/CalmOffer';
 
@@ -68,6 +69,8 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
   }
 
   const hasActivity = recap.moments.length > 0;
+  const lineCopy = recapLineCopy(recap);
+  const ridesCopy = recapRidesCopy(recap);
   const coinRow = parkDayCoinRow(recap);
   if (!hasActivity && !atPark && !recap.previous_active_day) return null;
 
@@ -87,7 +90,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
     </View>
     {hasActivity ? <>
       <View style={styles.statStrip}>
-        <View style={styles.stat}><Text style={styles.statValue}>{recap.distinct_rides_won}</Text><Text style={styles.statLabel}>WINS</Text></View>
+        <View style={styles.stat}><Text style={styles.statValue}>{recapWins(recap)}</Text><Text style={styles.statLabel}>WINS</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.new_coins}</Text><Text style={styles.statLabel}>NEW COINS</Text></View>
         <View style={styles.stat}><Text style={styles.statValue}>{recap.coin_upgrades}</Text><Text style={styles.statLabel}>LEVEL UPS</Text></View>
       </View>
@@ -103,9 +106,9 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
           <Text style={styles.coinName} numberOfLines={2}>{plainRideName(coin.name)}</Text>
         </View>)}
       </View>}
-      {recap.line_play_sessions > 0 && <GameRichText style={styles.copy}>
-        {`[icon:ride] ${recap.eligible_line_minutes} minutes in line · [icon:parts] ${recap.ride_parts_earned} Ride Part${recap.ride_parts_earned === 1 ? '' : 's'}`}
-      </GameRichText>}
+      {/* Counted by the server (fix pass w4, T198): every wait today, the minutes, the Parts, and the rides logged. */}
+      {!!lineCopy && <GameRichText style={styles.copy}>{`[icon:ride] ${lineCopy}`}</GameRichText>}
+      {!!ridesCopy && <GameRichText style={styles.copy}>{`[icon:star] ${ridesCopy}`}</GameRichText>}
       {recap.park_project_points > 0 && <Text style={styles.copy}>
         +{recap.park_project_points} points for the Park Project
       </Text>}
