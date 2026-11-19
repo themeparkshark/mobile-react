@@ -27,7 +27,9 @@ export interface RewardsRow {
 
 export interface RewardsInput {
   /** Today's daily chest (always on). */
-  readonly dailyChest: { readonly unclaimed: boolean; readonly day: number; readonly of: number } | null;
+  readonly dailyChest: { readonly unclaimed: boolean; readonly day: number; readonly of: number;
+    /** Today's chest started the ladder again after days away (T110). */
+    readonly restarted?: boolean } | null;
   /** Daily 3, after rung 4 and with its switch on. */
   readonly daily3: { readonly done: number; readonly total: number; readonly claimable: boolean; readonly claimed: boolean; readonly flame: number;
     /** Today's goals were shown to the player (T096). false: the row leads to the goals first, never "All 3 done!". */
@@ -61,7 +63,9 @@ const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one :
 export function rewardsRows(i: RewardsInput): RewardsRow[] {
   const rows: RewardsRow[] = [];
   if (i.dailyChest?.unclaimed) {
-    rows.push({ key: 'daily_chest', title: 'Daily Chest', line: `Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready`, ready: 1, action: 'open' });
+    // T110: a chest that started over says why (once, from the server's streak_reset), never a bare "Day 1".
+    rows.push({ key: 'daily_chest', title: 'Daily Chest', line: i.dailyChest.restarted
+      ? `Welcome back! Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready` : `Day ${i.dailyChest.day} of ${i.dailyChest.of} is ready`, ready: 1, action: 'open' });
   }
   if (i.daily3) {
     const d = i.daily3;
@@ -273,3 +277,4 @@ export function settleBadge(shown: number, next: number, stillForMs: number): nu
   if (next <= shown) return next;
   return stillForMs >= BADGE_SETTLE_MS ? next : shown;
 }
+

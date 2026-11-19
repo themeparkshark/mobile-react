@@ -53,8 +53,6 @@ export interface DailyThreeState {
   readonly seen_at?: string | null;
   /** Today's goals finished before the player first saw them (B07): they tick one by one on first sight. */
   readonly done_before_seen?: readonly string[] | null;
-  /** The flame started over after days away (B06): sent until the player has seen it once. */
-  readonly streak_reset?: { readonly days_away: number } | null;
   readonly streak: {
     readonly days: number; readonly best: number; readonly freezes: number; readonly freeze_cap: number;
     readonly freeze_price: number; readonly at_risk: boolean; readonly counted_today: boolean;
@@ -119,6 +117,12 @@ export async function claimDailyThree(): Promise<{ rewards: PaidRewards; state: 
 
 export async function claimWeeklyBox(): Promise<{ rewards: PaidRewards; state: DailyThreeState }> {
   const { data } = await client.post<{ data: { rewards: PaidRewards; state: DailyThreeState } }>('/me/daily-three/weekly/claim', tz(), { timeout: CLAIM_TIMEOUT_MS, params: modeParams() });
+  return data.data;
+}
+
+/** Fix pass w4 (B07): today's goals were shown. Sets seen_at once on the server (later calls change nothing). */
+export async function markDailyThreeSeen(): Promise<{ state: DailyThreeState }> {
+  const { data } = await client.post<{ data: { state: DailyThreeState } }>('/me/daily-three/seen', tz(), { timeout: CLAIM_TIMEOUT_MS, params: modeParams() });
   return data.data;
 }
 

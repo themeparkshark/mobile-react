@@ -15,6 +15,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const storage = { '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => undefined } } };
 const seen = loadTs('src/services/retention/daily3Seen.ts', storage);
 const model = loadTs('src/services/retention/rewardsModel.ts');
+const chestDay = loadTs('src/services/retention/chestDay.ts');
 
 const goals = [{ key: 'chest', done: true }, { key: 'catch', done: false }, { key: 'play', done: true }];
 
@@ -54,4 +55,28 @@ test('T096: before the goals were shown, the Rewards row names the goals, never 
   assert.match(hook, /const first = ticksOnFirstSight\(/, 'opening the sheet plays the first-sight ticks');
   assert.match(hook, /if \(first\.length\) setCelebrate\(first\);/);
   assert.match(hook, /ticksHeld=\{coach\}/, 'the ticks wait for the how-it-works card');
+});
+
+test('T096 (B07): the first look is told to the server once, only by a server that keeps seen_at', () => {
+  const api = read('src/api/endpoints/retention/index.ts');
+  assert.match(api, /client\.post<[^>]+>\('\/me\/daily-three\/seen'/);
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /if \(daily\.seen_at === null\) void markDailyThreeSeen\(\)/, 'absent field: nothing is sent (today\'s behavior)');
+});
+
+test('T110 (B06): a chest that started over says why, once, kindly; absent field means today\'s card', () => {
+  assert.equal(chestDay.chestRestartLine({ days_away: 3 }), 'Welcome back! Away 3 days, so your chest starts at Day 1 again.');
+  assert.equal(chestDay.chestRestartLine({ days_away: 1 }), 'Welcome back! Away 1 day, so your chest starts at Day 1 again.');
+  assert.equal(chestDay.chestRestartLine(null), null);
+  assert.equal(chestDay.chestRestartLine(undefined), null);
+  assert.equal(chestDay.chestRestartLine({ days_away: 0 }), null);
+  const base = { daily3: null, weekly: null, levelChest: null, trail: null, stamps: null, events: null };
+  const row = r => model.rewardsRows({ ...base, dailyChest: { unclaimed: true, day: 1, of: 7, restarted: r } })[0].line;
+  assert.equal(row(true), 'Welcome back! Day 1 of 7 is ready');
+  assert.equal(row(false), 'Day 1 of 7 is ready');
+  const gift = read('src/components/DailyGiftModal.tsx');
+  assert.match(gift, /const restartLine = chestRestartLine\(displayedGift\.streak_reset \?\? dailyGift\.streak_reset\);/);
+  assert.match(gift, /!simple && !!restartLine && phase !== 'open' && <Text style=\{styles\.restart\}/);
+  // The flame says the same kind thing in Rewards (fix round w3).
+  assert.equal(model.flameNote({ flame: 0, best: 4, done: 0, total: 3, claimable: false, claimed: false }), 'Welcome back! Finish Daily 3 to light a new flame');
 });

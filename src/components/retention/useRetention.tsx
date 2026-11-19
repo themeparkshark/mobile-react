@@ -5,7 +5,7 @@ import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } 
 import { AppState, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import {
-  buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markFreezeSeen, openLevelChest, setReminders,
+  buyStreakFreeze, claimDailyThree, claimWeeklyBox, getDailyThree, getLevelChests, markDailyThreeSeen, markFreezeSeen, openLevelChest, setReminders,
   setRetentionMode, type DailyThreeState, type LevelChest, type PaidRewards,
 } from '../../api/endpoints/retention';
 import { claimStampReward, getStamps } from '../../api/endpoints/me/stamps';
@@ -33,6 +33,7 @@ import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
 import { daily3SeenDate, noteDaily3Seen, seenToday, tickToast, ticksOnFirstSight } from '../../services/retention/daily3Seen';
+import { chestRestartLine } from '../../services/retention/chestDay';
 import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
 import { emptyLine, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
@@ -391,6 +392,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         seenToday(daily, seenDate));
       if (first.length) setCelebrate(first);
       noteDaily3Seen(playerIdRef.current, daily.date); setSeenDate(daily.date);
+      // B07: a server that keeps seen_at hears of the first look once (a lost write is simply sent on the next open).
+      if (daily.seen_at === null) void markDailyThreeSeen().then(r => { if (mounted.current && r?.state?.goals) applyDaily(r.state); }).catch(() => undefined);
     }
     setSheetFromRewards(fromRewards);
     setView({ k: 'sheet' });
@@ -542,7 +545,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const nearest = trailState ? headlineBox({ ready: [], walking: trailState.walking }) : null;
   const rewardsInput: RewardsInput = {
     dailyChest: dailyGift && player?.username
-      ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder } : null,
+      ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder,
+        restarted: !!chestRestartLine(dailyGift.streak_reset) } : null,
     daily3: wantDaily && daily ? {
       done: doneCount(withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date))), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
       claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenToday(daily, seenDate),
