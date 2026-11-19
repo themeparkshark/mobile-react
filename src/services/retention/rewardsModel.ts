@@ -237,6 +237,20 @@ export function stampClaimNote(paid: { readonly coins: number; readonly tickets:
   return got || 'Claimed!';
 }
 
+/** Fix w4 T100: the stamp claim's line under the face-up stamps. Names them, then says to tap. */
+export function stampRevealSubtitle(names: readonly string[]): string {
+  const clean = names.map(n => String(n ?? '').trim()).filter(Boolean);
+  if (clean.length === 0) return 'Tap your stamp!';
+  if (clean.length === 1) return `${clean[0]} stamp. Tap it!`;
+  const shown = clean.length > 3 ? `${clean.slice(0, 3).join(', ')} and ${clean.length - 3} more` : clean.join(', ');
+  return `${shown}. Tap to claim!`;
+}
+
+/** Fix w4 T224 and T242: a stamp's title, and that it is on when the server put it on. */
+export function stampTitleLine(title: string, worn: boolean): string {
+  return worn ? `New title: ${title}. You're wearing it!` : `New title: ${title}`;
+}
+
 /**
  * Today's chest is already open on this phone (T092): its Daily 3 goal reads Done, even before the server's next
  * Daily 3 read says so (a chest whose answer came back slowly, or a read that raced the open). GO never sends the

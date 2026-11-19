@@ -149,3 +149,27 @@ test('T102 level lines become one moment (in their turn), and a stamp claim\'s l
   assert.match(read('src/components/retention/useRetention.tsx'), /if \(\(answer\.levels_gained \?\? 0\) > 0\) noteLevelUp\(answer\.level \?\? null\);/);
   assert.match(read('src/Root.tsx'), /\{!!player && <LevelUpMoment \/>\}/);
 });
+
+/* T100, T224, T242: a stamp claim shows the stamps, every prize, and a title. */
+test('T100 CLAIM ALL opens the stamps face up; the tap claims, prizes land with pictures, fly home, one result line', () => {
+  const model = loadTs('src/services/retention/rewardsModel.ts', { '../words/playerWords': { kidWords: s => s, passGainWords: () => '' } });
+  assert.equal(model.stampRevealSubtitle(['Disneyland']), 'Disneyland stamp. Tap it!');
+  assert.equal(model.stampRevealSubtitle(['Disneyland', 'Night Show']), 'Disneyland, Night Show. Tap to claim!');
+  assert.equal(model.stampRevealSubtitle(['A', 'B', 'C', 'D', 'E']), 'A, B, C and 2 more. Tap to claim!');
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /case 'stamps': void openStampClaim\(\); return;/);
+  assert.match(hook, /closedArt=\{face\} openArt=\{face\}/, 'the stamp itself is what you tap');
+  assert.match(hook, /onOpen=\{\(\) => \{ void claimStamps\(\); \}\} onDone=\{\(\) => finishStamps\(v\)\}/);
+  assert.match(hook, /send\('xp', paid\.xp, 'xp', 240\);/, 'XP flies home too');
+  assert.match(hook, /setRewardsNote\(stampClaimNote\(sum, v\.waiting\)\);/);
+});
+
+test('T224 T242 a stamp title shows as New title, worn when the server says so', () => {
+  const model = loadTs('src/services/retention/rewardsModel.ts', { '../words/playerWords': { kidWords: s => s, passGainWords: () => '' } });
+  assert.equal(model.stampTitleLine('Explorer', false), 'New title: Explorer');
+  assert.equal(model.stampTitleLine('Explorer', true), "New title: Explorer. You're wearing it!");
+  const hook = read('src/components/retention/useRetention.tsx');
+  assert.match(hook, /answer\.title_worn === true \|\| nested === true/);
+  assert.match(hook, /\{!!v\.title && <View style=\{styles\.nextRow\}>/);
+  assert.match(read('src/api/endpoints/me/stamps.ts'), /title_worn\?: boolean/);
+});

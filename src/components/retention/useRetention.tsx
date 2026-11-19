@@ -36,7 +36,7 @@ import {
 import { daily3SeenDate, noteDaily3Seen, tickToast } from '../../services/retention/daily3Seen';
 import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
-import { emptyLine, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
+import { emptyLine, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, stampRevealSubtitle, stampTitleLine, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
 import { listenReturnToRewards, openRewardsDoor, rewardsDoorOpen } from '../../services/retention/rewardsSignals';
 import { calmForAutoOpen, takeAutoOpen } from '../../services/retention/mapAttention';
 import { boxFraction, headlineBox } from '../../services/trail/trailModel';
@@ -79,6 +79,8 @@ type View_ =
   | { k: 'rewards' }
   | { k: 'sheet' }
   | { k: 'reveal'; src: 'daily' | 'weekly' | 'level'; level?: number; claimDate?: string | null; rewards: PaidRewards | null; opening: boolean }
+  /** Fix w4 T100: the stamps being claimed, face up; a tap claims them all and the prizes land one by one. */
+  | { k: 'stamps'; faces: readonly StampFace[]; rewards: PaidRewards | null; opening: boolean; title: string | null; worn: boolean; waiting: number }
   | { k: 'freeze' }
   | { k: 'freezeSaved'; days: number; streak: number }
   | { k: 'push' }
@@ -397,12 +399,14 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   };
 
   const fly = (paid: PaidRewards) => {
-    const send = (kind: 'coins' | 'ticket' | 'energy', n: number | undefined, target: string, delay: number) => {
+    const send = (kind: 'coins' | 'ticket' | 'energy' | 'xp', n: number | undefined, target: string, delay: number) => {
       if (n && n > 0) setTimeout(() => triggerFly({ imageSource: ICON_SOURCES[kind], amount: Math.min(8, n), startX: width / 2, startY: height * 0.5, targetPosition: target }), delay);
     };
     send('coins', (paid.coins ?? 0) + (paid.bonus_coins ?? 0), 'coins', 0);
     send('ticket', paid.tickets, 'tickets', 80);
     send('energy', paid.energy, 'energy', 160);
+    // Fix w4 T100: XP flies to its home too (the Profile tab registers 'xp'), so no prize lands silently.
+    send('xp', paid.xp, 'xp', 240);
   };
 
   // WEAR IT: the piece goes on first, then the closet opens on its own tab with it worn (must-fix 5).
@@ -597,12 +601,34 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
     return () => { if (g.__tpsRewards) delete g.__tpsRewards; };
   });
 
-  const claimStamps = async () => {
+  /**
+   * Fix w4 T100: CLAIM ALL opens the stamps face up (their own art); the tap claims them, every prize lands with its
+   * picture, flies to its home, and the Rewards card comes back with one result line naming everything. A stamp's
+   * title shows as "New title: ..." (worn when the server put it on, T224 and T242).
+   */
+  const openStampClaim = async () => {
     if (rewardsBusy) return;
     setRewardsBusy('stamps');
+    let faces: StampFace[] = [];
+    try { faces = stampFaces(await getStamps()); } catch { faces = []; }
+    if (!mounted.current) return;
+    setRewardsBusy(null);
+    // Nothing was waiting after all (an old count): the row just updates quietly.
+    if (faces.length === 0) { setRewardsNote(null); void refreshStamps(true); return; }
+    backToRewards.current = true;
+    setView({ k: 'stamps', faces, rewards: null, opening: false, title: null, worn: false, waiting: 0 });
+  };
+
+  const claimStamps = async () => {
+    if (!view || view.k !== 'stamps' || view.rewards || opening.current) return;
+    opening.current = true;
+    const current = view;
+    setView({ ...current, opening: true });
+    const started = Date.now();
     const sum = { coins: 0, tickets: 0, energy: 0, xp: 0 };
     let failed = 0; let claimed = 0;
     let left: number | null = null;
+    let title: string | null = null; let worn = false;
     try {
       const r = await getStamps();
       for (const st of stampsToClaim(r)) {
@@ -613,6 +639,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
             const answer = await claimStampReward(st.id);
             // Fix w4 T102: the claim skips banners; a level it reached still gets its moment.
             if ((answer.levels_gained ?? 0) > 0) noteLevelUp(answer.level ?? null);
+            const got = claimTitle(answer);
+            if (got.title) { title = got.title; worn = worn || got.worn; }
             return answer.rewards ?? st.rewards;
           },
           async () => (stampClaimed(await getStamps(), st.id) ? st.rewards : null),
@@ -626,17 +654,34 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       // Read back what is still waiting (the server's own count), so the row is honest after every claim.
       left = claimed > 0 || failed > 0 ? stampClaimableCount(await getStamps()) : stampClaimableCount(r);
     } catch { failed += 1; }
+    opening.current = false;
     if (!mounted.current) return;
     const waiting = left ?? Math.max(failed, stamps);
     if (playerId != null) writeStampDotCache(playerId, waiting);
     setStamps(waiting);
     setStampRetry(failed > 0 && waiting > 0);
-    setRewardsBusy(null);
+    if (claimed === 0) {
+      // Nothing came through: back to the card, whose row says RETRY (or updates quietly if nothing waited).
+      backToRewards.current = false;
+      setView({ k: 'rewards' });
+      setRewardsNote(failed > 0 ? stampClaimNote(sum, waiting) : null);
+      return;
+    }
+    if (title && worn) void refreshPlayer?.();
+    // Let the stamp's shake build before the prizes come (the chests' own anticipation beat).
+    const wait = reducedMotion ? 0 : Math.max(0, 560 - (Date.now() - started));
     const paid = sum as PaidRewards;
-    if (sum.coins + sum.tickets + sum.energy + sum.xp > 0) { fly(paid); haptic('success'); playSfx('fx.reward'); void refreshPlayer?.(); }
-    // Nothing was waiting after all (an old count): the row just updates quietly, never a "Claimed!" for nothing.
-    if (claimed === 0 && failed === 0) { setRewardsNote(null); return; }
-    setRewardsNote(stampClaimNote(sum, failed > 0 && waiting > 0 ? waiting : 0));
+    setTimeout(() => { if (mounted.current) setView({ ...current, opening: false, rewards: paid, title, worn, waiting: failed > 0 ? waiting : 0 }); }, wait);
+  };
+
+  const finishStamps = (v: { rewards: PaidRewards | null; waiting: number }) => {
+    const paid = v.rewards ?? {};
+    if ((paid.coins ?? 0) + (paid.tickets ?? 0) + (paid.energy ?? 0) + (paid.xp ?? 0) > 0) { fly(paid); haptic('success'); playSfx('fx.reward'); void refreshPlayer?.(); }
+    backToRewards.current = false;
+    setView({ k: 'rewards' });
+    // The line names what the reveal showed (Energy only once coin levels are open, fix w4 T097).
+    const sum = { coins: paid.coins ?? 0, tickets: paid.tickets ?? 0, energy: coinLevelsOpen ? paid.energy ?? 0 : 0, xp: paid.xp ?? 0 };
+    setRewardsNote(stampClaimNote(sum, v.waiting));
   };
 
   const onRewardsRow = (key: RewardsRowKey) => {
@@ -665,7 +710,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       // The host opens once the sheet is really gone; if it went away meanwhile, the Rewards sheet comes back (never a dead tap).
       case 'trail': closeThen(() => { if (o.onOpenTrail) o.onOpenTrail(); else if (!openRewardsDoor('trail')) setView({ k: 'rewards' }); }); return;
       case 'events': closeThen(() => { if (o.onOpenEvents) o.onOpenEvents(); else if (!openRewardsDoor('events')) setView({ k: 'rewards' }); }); return;
-      case 'stamps': void claimStamps(); return;
+      case 'stamps': void openStampClaim(); return;
     }
   };
 
@@ -779,7 +824,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       reducedMotion={reducedMotion} enterRows={!(presentNow && shownRef.current && !!face.current && face.current.key !== 'rewards')}
       onRow={onRewardsRow} onClose={close} />
   );
-  const rewardsParked = (view?.k === 'chest' && view.back === 'rewards') || (view?.k === 'reveal' && backToRewards.current)
+  const rewardsParked = (view?.k === 'chest' && view.back === 'rewards') || ((view?.k === 'reveal' || view?.k === 'stamps') && backToRewards.current)
     || (view?.k === 'sheet' && sheetFromRewards);
   let title: string | null = 'Daily 3';
   let content: ReactNode = null;
@@ -838,6 +883,32 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         onWear={() => { void wearItem(r.rewards); }}
         onPins={flagOn(flags, 'pin_mystery_boxes') ? () => { void finishReveal(r.rewards).then(() => RootNavigation.navigate('PinCollections')); } : undefined}
         onOpen={() => { void openReveal(); }} onDone={() => { void finishReveal(r.rewards); }} />
+    );
+  } else if (view?.k === 'stamps') {
+    const v = view;
+    title = v.faces.length === 1 ? 'New stamp!' : `${v.faces.length} new stamps!`;
+    const first = v.faces[0];
+    const face = first?.art ? { uri: first.art } : ICON_SOURCES.gift;
+    // Before coin levels (rung 3) Energy lands on the Shelf button without a row (fix w4 T097: one idea at a time).
+    const shown = v.rewards && !coinLevelsOpen ? { ...v.rewards, energy: 0 } : v.rewards;
+    const footer = (
+      <View style={{ alignSelf: 'stretch', alignItems: 'center', gap: 8 }}>
+        {v.faces.length > 1 && <View style={styles.nextRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+          {v.faces.slice(0, 5).map(f => <Image key={f.id} source={f.art ? { uri: f.art } : ICON_SOURCES.gift}
+            style={{ width: 44, height: 44 }} contentFit="contain" />)}
+        </View>}
+        {!!v.title && <View style={styles.nextRow}>
+          <GameIcon name="crown" size={24} />
+          <Text style={styles.nextText}>{stampTitleLine(v.title, v.worn)}</Text>
+        </View>}
+      </View>
+    );
+    content = (
+      <RewardReveal reducedMotion={reducedMotion} rewards={shown} opening={v.opening} footer={footer}
+        energySaved={!coinLevelsOpen} pinBoxes={false}
+        subtitle={stampRevealSubtitle(v.faces.map(f => f.name))}
+        closedArt={face} openArt={face}
+        onOpen={() => { void claimStamps(); }} onDone={() => finishStamps(v)} />
     );
   } else if (view?.k === 'freeze' && daily) {
     title = 'Streak Freeze';
@@ -943,6 +1014,28 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   );
 
   return { button, overlay, occluding: visible, openRewards, rewards: settledSummary };
+}
+
+/** A stamp shown face up in the claim (fix w4 T100). */
+export interface StampFace { readonly id: number; readonly name: string; readonly art: string | null }
+
+/** The stamps with a prize waiting, face up, in Stamp Book order (their own art, thumb first for a fast first frame). */
+function stampFaces(r: { stamps: Record<string, readonly { id: number; name: string; short_name?: string; is_earned: boolean; reward_claimed: boolean;
+  icon_url?: string | null; icon_thumb_url?: string | null;
+  rewards: { energy: number; tickets: number; xp: number; coins: number; title: string | null } }[]> }): StampFace[] {
+  const claimable = new Set(stampsToClaim(r as Parameters<typeof stampsToClaim>[0]).map(st => st.id));
+  const out: StampFace[] = [];
+  for (const list of Object.values(r.stamps ?? {})) for (const st of list ?? []) {
+    if (claimable.has(st.id)) out.push({ id: st.id, name: st.short_name || st.name, art: st.icon_url || st.icon_thumb_url || null });
+  }
+  return out;
+}
+
+/** The title a stamp claim gave, and whether the server put it on (T224, T242; absent fields mean none, not worn). */
+function claimTitle(answer: { rewards?: { title?: string | null } | null; title_worn?: boolean } & Record<string, unknown>): { title: string | null; worn: boolean } {
+  const title = typeof answer.rewards?.title === 'string' && answer.rewards.title.trim() ? answer.rewards.title.trim() : null;
+  const nested = (answer.rewards as { title_worn?: unknown } | null | undefined)?.title_worn;
+  return { title, worn: !!title && (answer.title_worn === true || nested === true) };
 }
 
 /** Earned stamps whose prizes are still to claim (the Stamp Book's own rule). */

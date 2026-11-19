@@ -69,7 +69,9 @@ export async function getStamps(): Promise<StampsResponse> {
   return data;
 }
 
-export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards; levels_gained?: number; level?: number | null }> {
+export async function claimStampReward(stampId: number): Promise<{ success: boolean; rewards: StampRewards; levels_gained?: number; level?: number | null;
+  /** T224, T242: the server put the stamp's title on (absent on older servers: not worn). */
+  title_worn?: boolean }> {
   // The card shows the rewards and any level-up itself: skip the global broadcast banners for this call.
   const { data } = await client.post(`/me/stamps/${stampId}/claim`, undefined, { skipBroadcasts: true } as object);
   return data;

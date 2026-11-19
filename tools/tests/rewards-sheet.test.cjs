@@ -486,7 +486,9 @@ test('stamps row is honest: a fresh read on open, the server count, and no "Clai
   assert.match(hook, /const n = stampClaimableCount\(r\);/, 'the row and the Profile dot read the same count (summary.claimable first)');
   assert.match(hook, /if \(!o\.enabled \|\| o\.refreshKey === firstKey\.current\) return;\n    void refreshStamps\(true\);/, 'a win that earns a stamp raises the number at once');
   assert.match(read('src/screens/TrailPreviewScreen.tsx'), /mode: 'fixed', first_box: 'second_park_day'/, 'the known-contents preview scene');
-  assert.match(hook, /if \(claimed === 0 && failed === 0\) \{ setRewardsNote\(null\); return; \}/);
+  // Fix w4 T100: nothing waiting after all: the row updates quietly (no stamps card, no "Claimed!").
+  assert.match(hook, /if \(faces\.length === 0\) \{ setRewardsNote\(null\); void refreshStamps\(true\); return; \}/);
+  assert.match(hook, /setRewardsNote\(failed > 0 \? stampClaimNote\(sum, waiting\) : null\);/);
   // Fix round w3 (T094, T100): the note names every prize that landed, XP too (rewardsModel.stampClaimNote).
   assert.match(hook, /setRewardsNote\(stampClaimNote\(sum, /);
   const dot = loadTs('src/components/profile/stampDot.ts', {});
