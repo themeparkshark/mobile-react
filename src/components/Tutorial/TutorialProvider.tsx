@@ -300,7 +300,12 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
   // Fix w4 N05: a map guide never draws over the Shark Shop, the Shark Pass or any screen above the map.
   const [routeName, setRouteName] = useState<string | undefined>(undefined);
   useEffect(() => {
-    const sync = () => { try { setRouteName(navigationRef.getCurrentRoute()?.name); } catch { setRouteName(undefined); } };
+    // Before the navigator is ready, getCurrentRoute logs a console.error (a red screen in a debug binary with
+    // release-like JS): wait for the navigator's first 'state' event instead.
+    const sync = () => {
+      if (!navigationRef.isReady()) return;
+      try { setRouteName(navigationRef.getCurrentRoute()?.name); } catch { setRouteName(undefined); }
+    };
     sync();
     try { return navigationRef.addListener('state', sync); } catch { return undefined; }
   }, []);

@@ -187,3 +187,11 @@ test('Supplies on iPhone SE: the Starter Frame line is short enough for two line
   assert.match(card, /\{`Plus the \$\{product\.frame\.name\}`\}/);
   assert.doesNotMatch(card, /for your shark`\}<\/Text>/);
 });
+
+test('N05 merge smoke: the tip route watch never reads the navigator before it is ready (no launch console.error)', () => {
+  const src = fs.readFileSync(path.join(root, 'src/components/Tutorial/TutorialProvider.tsx'), 'utf8');
+  const sync = src.slice(src.indexOf('const sync = () => {'), src.indexOf("navigationRef.addListener('state', sync)"));
+  assert.ok(sync.length > 0, 'the route watch is there');
+  assert.ok(sync.indexOf('if (!navigationRef.isReady()) return;') >= 0, 'guarded by isReady');
+  assert.ok(sync.indexOf('if (!navigationRef.isReady()) return;') < sync.indexOf('navigationRef.getCurrentRoute()'), 'guard before the read');
+});
