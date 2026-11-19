@@ -65,6 +65,11 @@ const DISNEYLAND_LANDS: Readonly<Record<string, string>> = {
   'ogas cantina at the disneyland resort': "Galaxy's Edge",
   'great moments with mr lincoln': 'Main Street, U.S.A.',
   'main street cinema': 'Main Street, U.S.A.',
+  'main street vehicles': 'Main Street, U.S.A.',
+  'goofys how to play yard': "Mickey's Toontown",
+  'donalds duck pond': "Mickey's Toontown",
+  'mickeys house and meet mickey mouse': "Mickey's Toontown",
+  'minnies house': "Mickey's Toontown",
 };
 
 const MAGIC_KINGDOM_LANDS: Readonly<Record<string, string>> = {

@@ -63,6 +63,12 @@ test('T077: the story tells this ride’s own checked fact, and a ride with no f
   // Authored chapters keep their own story untouched.
   const pirates = chapters.getLinePlayChapter(8, 'pirates-of-the-caribbean-8', 'Pirates of the Caribbean');
   assert.equal(chapters.chapterStoryText(pirates, [AUTOPIA_FACT]), pirates.story);
+  // A Main Street ride with no fact: on the street, its true street line, no fan fact, no other ride's name.
+  const vehicles = chapters.getLinePlayChapter(8, 'main-street-vehicles-8', 'Main Street Vehicles', 0, 597);
+  const street = chapters.chapterStoryText(vehicles, []);
+  assert.match(street, /^Main Street Vehicles, on Main Street, U\.S\.A\./);
+  assert.match(street, /small American town from around 1900/);
+  assert.doesNotMatch(street, /Fan fact|Autopia/);
 });
 
 test('T077: returning players meet a new fact each story, and only facts passed for this ride ever show', () => {
@@ -88,6 +94,9 @@ test('T077: lands are per park (Haunted Mansion is Liberty Square at Magic Kingd
   assert.equal(rideLands.rideLand(2, 'Tiana\'s Bayou Adventure'), 'Frontierland');
   assert.equal(rideLands.rideLand(8, 'Tiana\'s Bayou Adventure'), 'Bayou Country');
   assert.equal(rideLands.rideLand(1, 'Jurassic World The Ride'), null);
+  // A Disneyland ride with no checked fact still names its land (Main Street Vehicles, Toontown play spots).
+  assert.equal(rideLands.rideLand(8, 'Main Street Vehicles'), 'Main Street, U.S.A.');
+  assert.equal(rideLands.rideLand(8, "Goofy's How-to-Play Yard"), "Mickey's Toontown");
   assert.equal(rideLands.rideLand(2, 'Walt Disney World Railroad - Fantasyland'), 'Fantasyland');
   const mine = chapters.getLinePlayChapter(2, 'seven-dwarfs-mine-train-2', 'Seven Dwarfs Mine Train', 1, 292);
   assert.equal(mine.parkLabel, 'FANTASYLAND');
