@@ -5,7 +5,7 @@
  * text scales to 1.15x at most and a one-line label shrinks to fit rather than clip.
  */
 import { memo } from 'react';
-import { View } from 'react-native';
+import { Image, View, type ImageSourcePropType } from 'react-native';
 import Shell from './Shell';
 import { useStickerPlace } from './StickerContext';
 import StickerText from './StickerText';
@@ -21,8 +21,11 @@ const FACES = {
   blue: { colors: [SHADE.blueFaceTop, INK.blueBright] as const },
 };
 
-function TitleLabelImpl({ children, tone = 'white', large = false, padLeft }: {
+function TitleLabelImpl({ children, tone = 'white', large = false, icon, iconRatio = 1, padLeft }: {
   readonly children: string;
+  /** Alex's small art before the words (FREE TICKETS: his ticket). */
+  readonly icon?: ImageSourcePropType;
+  readonly iconRatio?: number;
   readonly tone?: TitleLabelTone;
   readonly large?: boolean;
   /** Internal (Page): room on the left for art that hangs off the label's end (the lock). */
@@ -36,9 +39,12 @@ function TitleLabelImpl({ children, tone = 'white', large = false, padLeft }: {
   return (
     <Shell radius={RADIUS.label} line={LINE.card} face={FACES[tone]} edge={edge}
       drop={DROP.label} dropColor={edge ? DROP.color : DROP.inPage}
-      style={{ height, paddingHorizontal: LABEL.padX, paddingLeft: padLeft ?? LABEL.padX, justifyContent: 'center', alignSelf: 'flex-start', maxWidth: '100%' }}>
-      <View style={{ paddingTop: 2 }}>
-        <StickerText spec={spec} tone={tone === 'blue' ? 'white' : 'navy'} lineHeight={size + 4} role="header" fit>{children}</StickerText>
+      style={{ height, paddingHorizontal: LABEL.padX, paddingLeft: padLeft ?? (icon ? LABEL.padX - 4 : LABEL.padX), justifyContent: 'center', alignSelf: 'flex-start', maxWidth: '100%' }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        {icon ? <Image source={icon} resizeMode="contain" fadeDuration={0} style={{ height: height - 12, width: (height - 12) * iconRatio }} /> : null}
+        <View style={{ paddingTop: 2, flexShrink: 1 }}>
+          <StickerText spec={spec} tone={tone === 'blue' ? 'white' : 'navy'} lineHeight={size + 4} role="header" fit>{children}</StickerText>
+        </View>
       </View>
     </Shell>
   );

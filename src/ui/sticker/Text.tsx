@@ -67,6 +67,9 @@ export const Body = memo(function Body({ size = 'body', soft = false, align = 'c
   return <StickerText spec={spec} tone={soft ? 'soft' : 'auto'} align={align} lines={lines} label={label} role={role} style={style}>{children}</StickerText>;
 });
 
-export const Caps = memo(function Caps({ align = 'left', label, role = 'text', style, children }: Omit<Common, 'lines' | 'fit'>) {
-  return <StickerText spec={TEXT.caps} align={align} label={label ?? children} role={role} style={style}>{children.toUpperCase()}</StickerText>;
+export const Caps = memo(function Caps({ align = 'left', gold = false, label, role = 'text', style, children }: Omit<Common, 'lines' | 'fit'> & {
+  /** Gold on colour (the guide card's NEXT COIN); on paper caps are always gold ink. */
+  readonly gold?: boolean;
+}) {
+  return <StickerText spec={TEXT.caps} tone={gold ? 'gold' : 'auto'} align={align} label={label ?? children} role={role} style={style}>{children.toUpperCase()}</StickerText>;
 });

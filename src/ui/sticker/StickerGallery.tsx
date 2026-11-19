@@ -7,7 +7,8 @@
  * section 'titles30' also takes { variant?: TitleVariant, t0?: number } and records the time
  * from t0 (performance.now() when the navigation was sent) until the 30 titles have laid out
  * and two frames have passed, into globalThis.__stickerBench.
- * Proof sections: gate, rewards, shelf, win, map (map also takes { toast: true }).
+ * Proof sections: gate, rewards, shelf, win, map, shop (map also takes { toast: true } and { bare: true };
+ * win and map take { run: n } to play their arrival again).
  */
 import { memo, useCallback, useRef, useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
@@ -44,14 +45,15 @@ import { ART, ART_RATIO } from './art';
 import { layerWidth } from './layout';
 import SvgTitle from './spike/SvgTitle';
 import ProofGate from './proof/ProofGate';
-import ProofMap, { DevMap } from './proof/ProofMap';
+import ProofMap, { ParkMap } from './proof/ProofMap';
 import ProofRewards from './proof/ProofRewards';
 import ProofShelf from './proof/ProofShelf';
+import ProofShop from './proof/ProofShop';
 import ProofWin from './proof/ProofWin';
 import { FONT, GALLERY, INK, SHADE, SPACE, STROKE } from './tokens';
 
 /** Full-screen compositions with sample data. */
-export type ProofSection = 'gate' | 'rewards' | 'shelf' | 'win' | 'map';
+export type ProofSection = 'gate' | 'rewards' | 'shelf' | 'win' | 'map' | 'shop';
 export type GallerySection = ProofSection | 'level' | 'type' | 'text' | 'textcand' | 'titles30' | 'page' | 'card' | 'button' | 'spot' | 'chips' | 'round' | 'wave'
   | 'progress' | 'header' | 'footer' | 'stage' | 'sheet' | 'dialog' | 'tabs' | 'listrow' | 'switch' | 'toast' | 'state';
 export type TitleVariant = 'shadow16' | 'shadow12' | 'shadow8' | 'copies16' | 'copies12' | 'svg' | 'plain';
@@ -517,7 +519,7 @@ function FooterSection() {
       <World label="Map picked, on the world" pad={false}><Footer items={FOOTER_ITEMS} picked={picked} onPick={setPicked} /></World>
       <MapGround pad={false}><Footer items={FOOTER_ITEMS} picked="news" onPick={noop} /></MapGround>
       <View style={[styles.ground, { padding: 0, height: 150 }]}>
-        <DevMap />
+        <ParkMap />
         <View style={{ flex: 1 }} />
         <WorldPlace><Footer items={FOOTER_ITEMS} picked="profile" onPick={noop} /></WorldPlace>
       </View>
@@ -657,7 +659,7 @@ function StateSection() {
   );
 }
 
-type Params = { section?: GallerySection; variant?: TitleVariant; t0?: number; toast?: boolean };
+type Params = { section?: GallerySection; variant?: TitleVariant; t0?: number; toast?: boolean; bare?: boolean; run?: number };
 
 export default function StickerGallery({ route }: { route?: { params?: Params } }) {
   const insets = useSafeAreaInsets();
@@ -670,8 +672,10 @@ export default function StickerGallery({ route }: { route?: { params?: Params } 
   if (only === 'gate') return <ProofGate />;
   if (only === 'rewards') return <ProofRewards />;
   if (only === 'shelf') return <ProofShelf />;
-  if (only === 'win') return <ProofWin />;
-  if (only === 'map') return <ProofMap toastOnOpen={!!params.toast} />;
+  // `run` remounts a proof so its arrival plays again (clips).
+  if (only === 'win') return <ProofWin key={params.run ?? 0} />;
+  if (only === 'map') return <ProofMap key={params.run ?? 0} toastOnOpen={!!params.toast} bare={!!params.bare} />;
+  if (only === 'shop') return <ProofShop />;
   return (
     <View style={{ flex: 1, backgroundColor: INK.blue }}>
       <ScrollView contentContainerStyle={{ paddingTop: insets.top + 12, paddingBottom: insets.bottom + 40, paddingHorizontal: 16 }}>

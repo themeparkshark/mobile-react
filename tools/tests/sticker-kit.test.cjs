@@ -254,7 +254,7 @@ test('a one-line title is sized once for every copy: never bigger, never under 6
 });
 
 test('screens use the text roles: no StickerText, no raw text props in proofs', () => {
-  for (const name of ['ProofGate.tsx', 'ProofRewards.tsx', 'ProofShelf.tsx', 'ProofWin.tsx', 'ProofMap.tsx']) {
+  for (const name of ['ProofGate.tsx', 'ProofRewards.tsx', 'ProofShelf.tsx', 'ProofWin.tsx', 'ProofMap.tsx', 'ProofShop.tsx']) {
     const text = source(path.join(dir, 'proof', name));
     assert.doesNotMatch(text, /StickerText|stroke=\{|spacing=\{|fontSize|faceHeight|<Pressable|<Modal|<TouchableOpacity|shadowRadius|fontFamily|fontWeight/, `${name} styles text or controls by hand`);
     assert.doesNotMatch(text, /headerHeight\(|headerContentTop\(|insets\.top/, `${name} places content from the bar by hand`);
@@ -635,4 +635,56 @@ test('the shelf grid never renders React while scrolling: memoised cells, no onS
   assert.match(text, /const CoinCell = memo\(/);
   assert.match(text, /const ShelfRow = memo\(/);
   assert.doesNotMatch(text, /onScroll|useAnimatedScrollHandler/);
+});
+
+// ---------- the three proofs of builder 2: map, win, shop ----------
+
+test('the map keeps the toast lane clear: the first piece starts under the toast and its drop', () => {
+  assert.ok(layout.toastLane() >= tokens.TOAST.height + tokens.DROP.cardOnWorld, 'a toast would cover the guide card');
+  const map = source(path.join(dir, 'proof', 'ProofMap.tsx'));
+  assert.match(map, /marginTop: toastLane\(\)/, 'the guide card row starts below the toast lane');
+  assert.match(map, /require\('\.\/img\/map-park\.jpg'\)/, 'the map is the real capture');
+  assert.doesNotMatch(map, /GALLERY\./, 'no drawn stand-in map');
+});
+
+test('pieces on a page\'s top edge are reserved: half their height rises, the page takes the most', () => {
+  assert.equal(layout.edgeRise(27), 13.5);
+  const plainRise = layout.pageRise({ edge: 4 }, 370, 402);
+  assert.equal(plainRise, 4);
+  assert.equal(layout.pageRise({ edge: 3, onEdge: [27] }, 370, 402), 14);
+  assert.equal(layout.pageRise({ edge: 4, onEdge: [40, 27] }, 370, 402), 20);
+  // A gold label still wins when it rises more than the pieces beside it.
+  assert.equal(layout.pageRise({ edge: 4, label: { large: true }, onEdge: [27] }, 370, 402), 22);
+  assert.equal(layout.sideArtRoom({ width: 58, over: 16 }), 50);
+  assert.ok(layout.cardLabelRise(3) >= 17 + tokens.EDGE.label);
+});
+
+test('the win sequence runs in order and each count ends on its prize', () => {
+  const B = proof.WIN_BEATS;
+  assert.ok(B.land < B.sticker && B.sticker < B.walk && B.walk < B.prizes, 'card, coin, NEW!, dot, prizes');
+  const lastPrize = B.prizes + 4 * B.prizeGap + B.countLead + 4 * B.countStep;
+  assert.ok(B.fly > lastPrize, 'prizes fly only after the last one has counted');
+  for (const v of [1, 10, 25, 1500]) {
+    const steps = plain(proof.countSteps(v));
+    assert.equal(steps[steps.length - 1], v);
+    assert.ok(steps.length <= 4);
+    assert.deepEqual([...steps].sort((a, b) => a - b), steps, 'counts only go up');
+  }
+  assert.deepEqual(plain(proof.countSteps(1)), [1]);
+});
+
+test('a prize flies on an eased arc, never linear, and skips flying under Reduce Motion', () => {
+  const flight = part('Flight.tsx');
+  assert.equal(flight.flightArc(0, 30), 30);
+  assert.equal(flight.flightArc(300, -400), 90);
+  const text = source(path.join(dir, 'Flight.tsx'));
+  assert.match(text, /Easing\.inOut/);
+  const win = source(path.join(dir, 'proof', 'ProofWin.tsx'));
+  assert.match(win, /if \(reduced\) \{[^]*?land\(p\.chip\)/, 'under Reduce Motion the chips just take their counts');
+  assert.match(win, /fx=\{/, 'flights ride the Screen fx layer, above the bars');
+});
+
+test('Screen\'s fx layer is above every bar and never takes a touch', () => {
+  const text = source(path.join(dir, 'Screen.tsx'));
+  assert.match(text, /\{fx \? <View style=\{StyleSheet\.absoluteFill\} pointerEvents="none"/);
 });

@@ -37,6 +37,29 @@ export function useStickOn(delay: number = 0) {
 }
 
 /**
+ * The hero landing on its stage (the won coin): it falls from above the window, big, and lands
+ * with a spring (SPRING.land), squashing a touch as it hits. Reduce Motion: a 150 ms fade.
+ */
+export function useLandOn(delay: number, fall: number) {
+  const reduced = useUiReducedMotion();
+  const t = useSharedValue(0);
+  const seen = useSharedValue(0);
+  useEffect(() => {
+    if (reduced) {
+      t.value = 1;
+      seen.value = withDelay(delay, withTiming(1, { duration: STICK.reducedFadeMs, easing: Easing.out(Easing.quad) }));
+    } else {
+      seen.value = withDelay(delay, withTiming(1, { duration: STICK.fadeInMs, easing: Easing.out(Easing.quad) }));
+      t.value = withDelay(delay, withSpring(1, SPRING.land));
+    }
+  }, [delay, reduced, seen, t]);
+  return useAnimatedStyle(() => ({
+    opacity: seen.value,
+    transform: [{ translateY: -fall * (1 - t.value) }, { scale: 1 + 0.3 * (1 - t.value) }],
+  }));
+}
+
+/**
  * Peeled off: `out` goes 0 to 1 when the part leaves. It lifts a little, turns at its corner and
  * fades (Reduce Motion: a 150 ms fade only). The caller starts it with `peelOut`.
  */

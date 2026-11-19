@@ -16,7 +16,7 @@ import { ART, ART_RATIO } from './art';
 import { TEXT } from './textRoles';
 import { CHIP, INK, LINE, SHADE, STICK } from './tokens';
 
-export type CurrencyKind = 'coins' | 'energy' | 'tickets' | 'keys' | 'parkCoin';
+export type CurrencyKind = 'coins' | 'energy' | 'tickets' | 'keys' | 'parkCoin' | 'tries';
 
 /** Art geometry per kind (the board's header chips) and the noun VoiceOver says by default. */
 export const CURRENCY: Record<CurrencyKind, { readonly art: ImageSourcePropType | null; readonly ratio: number; readonly height: number; readonly over: number; readonly noun: string }> = {
@@ -26,6 +26,7 @@ export const CURRENCY: Record<CurrencyKind, { readonly art: ImageSourcePropType 
   // Keys and park coins are server art: the caller passes `art`.
   keys: { art: null, ratio: 1.3, height: 36, over: 14, noun: 'keys' },
   parkCoin: { art: null, ratio: 1, height: 38, over: 14, noun: 'park coins' },
+  tries: { art: ART.retry, ratio: ART_RATIO.retry, height: 34, over: 14, noun: 'extra tries' },
 };
 
 /** The chip's width for a count: the board's padding plus one fixed digit width per digit, never under 84. */
@@ -39,6 +40,8 @@ export type CurrencyChipProps = {
   readonly value: number;
   /** Server art for keys and park coins (and an override for the others). */
   readonly art?: ImageSourcePropType;
+  /** A word after the count, drawn in the chip ("0 extra tries"); the chip then hugs its words. */
+  readonly unit?: string;
   /** What VoiceOver says (default "4075 coins"). */
   readonly label?: string;
   readonly style?: StyleProp<ViewStyle>;
@@ -46,7 +49,7 @@ export type CurrencyChipProps = {
 
 const SPEC = { ...TEXT.count, maxScale: 1 };
 
-function CurrencyChipImpl({ kind, value, art: artProp, label, style }: CurrencyChipProps) {
+function CurrencyChipImpl({ kind, value, art: artProp, unit, label, style }: CurrencyChipProps) {
   const reduced = useUiReducedMotion();
   const k = CURRENCY[kind];
   const art = artProp ?? k.art;
@@ -65,13 +68,13 @@ function CurrencyChipImpl({ kind, value, art: artProp, label, style }: CurrencyC
   const chipStyle = useAnimatedStyle(() => ({ transform: [{ scale: bounce.value }] }));
   const numStyle = useAnimatedStyle(() => ({ opacity: shown.value }));
   return (
-    <Animated.View accessible accessibilityRole="text" accessibilityLabel={label ?? `${value} ${k.noun}`}
+    <Animated.View accessible accessibilityRole="text" accessibilityLabel={label ?? `${value} ${unit ?? k.noun}`}
       style={[{ alignSelf: 'flex-start', marginLeft: k.over }, chipStyle, style]}>
-      <View style={{ height: CHIP.height, width: chipWidth(value), borderRadius: CHIP.height / 2, borderWidth: LINE.chip, borderColor: INK.navy, backgroundColor: INK.blueLip,
+      <View style={{ height: CHIP.height, width: unit ? undefined : chipWidth(value), minWidth: chipWidth(value), borderRadius: CHIP.height / 2, borderWidth: LINE.chip, borderColor: INK.navy, backgroundColor: INK.blueLip,
         paddingLeft: CHIP.padLeft, paddingRight: CHIP.padRight, alignItems: 'center', justifyContent: 'center' }}>
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: CHIP.height / 2, borderTopWidth: 3, borderColor: SHADE.grooveInset }} />
         <Animated.View style={[{ paddingTop: 3 }, numStyle]}>
-          <StickerText spec={SPEC} lineHeight={22} role="none" tabular>{String(value)}</StickerText>
+          <StickerText spec={SPEC} lineHeight={22} role="none" tabular={!unit}>{unit ? `${value} ${unit}` : String(value)}</StickerText>
         </Animated.View>
       </View>
       {/* The pale line under the groove (kit.css: 1.5 pt of white at 28 percent). */}

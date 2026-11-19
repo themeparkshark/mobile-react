@@ -12,11 +12,13 @@ import { haptic } from '../../gamekit/Haptics';
 import Badge from './Badge';
 import Busy from './Busy';
 import Lift from './Lift';
+import { useStickerPlace } from './StickerContext';
 import { ART, ART_RATIO } from './art';
 import { usePress } from './motion';
 import { DROP, INK, OFF } from './tokens';
 
-export type RoundKind = 'back' | 'help' | 'close' | 'base';
+/** `disc`: one of Alex's own whole-disc files passed as `art` (his wait-times watch, his heart). */
+export type RoundKind = 'back' | 'help' | 'close' | 'base' | 'disc';
 
 export type RoundButtonProps = {
   readonly kind: RoundKind;
@@ -26,6 +28,8 @@ export type RoundButtonProps = {
   /** Art on the blank base. */
   readonly art?: ImageSourcePropType;
   readonly artMirror?: boolean;
+  /** width / height of a `disc` file. */
+  readonly artRatio?: number;
   readonly badge?: number;
   readonly disabled?: boolean;
   readonly busy?: boolean;
@@ -37,8 +41,10 @@ export type RoundButtonProps = {
 /** Every disc reaches 48 pt of touch. */
 export const ROUND_HIT = 48;
 
-function RoundButtonImpl({ kind, accessibilityLabel, size = 50, art, artMirror = false, badge, disabled = false, busy = false, testID, onPress, style }: RoundButtonProps) {
+function RoundButtonImpl({ kind, accessibilityLabel, size = 50, art, artMirror = false, artRatio = 1, badge, disabled = false, busy = false, testID, onPress, style }: RoundButtonProps) {
   const { p, pressIn, pressOut, reduced } = usePress();
+  // On the map every disc stands on the map's 50 percent hard drop so it reads on tan streets (DIRECTION fix 2).
+  const flat = useStickerPlace().level !== 'map';
   const squish = useAnimatedStyle(() => ({ transform: [{ scale: 1 - 0.08 * p.value }] }));
   const pad = Math.max(0, (ROUND_HIT - size) / 2);
   const inert = disabled || busy;
@@ -53,18 +59,20 @@ function RoundButtonImpl({ kind, accessibilityLabel, size = 50, art, artMirror =
         </View>
       </View>
     );
+  } else if (kind === 'disc' && art) {
+    body = <Lift source={art} width={size} height={Math.round(size / artRatio)} flat={flat} />;
   } else if (kind === 'base') {
     const h = Math.round(size / ART_RATIO.base);
     body = (
       <View style={{ width: size, height: h }}>
-        <Lift source={ART.base} width={size} height={h} flat />
+        <Lift source={ART.base} width={size} height={h} flat={flat} />
         {art ? <View style={{ position: 'absolute', left: size * 0.155, top: size * 0.155 }}><Lift source={art} width={size * 0.69} height={size * 0.69} mirror={artMirror} flat /></View> : null}
       </View>
     );
   } else {
     const source = kind === 'back' ? ART.arrow : ART.faq;
     const ratio = kind === 'back' ? ART_RATIO.arrow : ART_RATIO.faq;
-    body = <Lift source={source} width={size} height={Math.round(size / ratio)} mirror={kind === 'back'} flat={kind === 'help'} />;
+    body = <Lift source={source} width={size} height={Math.round(size / ratio)} mirror={kind === 'back'} flat={kind === 'help' && flat} />;
   }
   return (
     <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={accessibilityLabel} accessibilityState={{ disabled, busy }} disabled={inert}

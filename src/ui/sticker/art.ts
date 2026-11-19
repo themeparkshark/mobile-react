@@ -42,6 +42,16 @@ export const ART = {
   sharkSoClose: require('../../../assets/images/screens/redeem/so-close-shark.png'),
   rideParts: require('../../../assets/images/ride-parts.png'),
   xp: require('../../../assets/images/screens/explore/xp.png'),
+  /** The map: his follow shark (on the blank base), his wait-times disc and his toolbar arrow. */
+  followShark: require('../../../assets/images/map/follow-shark-classic.png'),
+  queueTimes: require('../../../assets/images/screens/explore/queuetimes.png'),
+  /** The shop: extra tries, the free ways, the wishlist heart disc, the pack chest and the Starter Frame. */
+  retry: require('../../../assets/icons/game/retry.png'),
+  search: require('../../../assets/icons/game/search.png'),
+  gift: require('../../../assets/icons/game/gift.png'),
+  heart: require('../../../assets/images/screens/player/compliment.png'),
+  packChest: require('../../../assets/images/screens/redeem/chest_closed.png'),
+  starterFrame: require('../../../assets/images/sharkpass/starter-frame.webp'),
 } as const;
 
 /** width / height of each file. */
@@ -79,6 +89,14 @@ export const ART_RATIO = {
   shark: 348 / 384,
   rideParts: 1,
   xp: 299 / 324,
+  followShark: 1,
+  queueTimes: 377 / 387,
+  retry: 376 / 384,
+  search: 354 / 384,
+  gift: 378 / 384,
+  heart: 363 / 386,
+  packChest: 374 / 305,
+  starterFrame: 1,
 } as const;
 
 export type ArtName = keyof typeof ART;

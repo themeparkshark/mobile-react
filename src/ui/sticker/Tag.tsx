@@ -4,7 +4,7 @@
  * Also the what-you-get tag (an icon and a count, cream, `large`). Text scales to 1.15x at most and
  * shrinks to fit a fixed width rather than clip.
  */
-import { memo } from 'react';
+import { memo, type ReactNode } from 'react';
 import { Image, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useStickerPlace } from './StickerContext';
@@ -19,6 +19,10 @@ export type TagProps = {
   readonly plain?: boolean;
   readonly icon?: ImageSourcePropType;
   readonly iconRatio?: number;
+  /** A kit mark before the words instead of an icon (the real-money Glyph). */
+  readonly leading?: ReactNode;
+  /** Art and words after the words (PLAY!'s tag: the coin's name, then his ticket and the cost). */
+  readonly after?: { readonly icon: ImageSourcePropType; readonly iconRatio?: number; readonly text: string };
   /** A what-you-get tag: 32 tall, 18 pt count. */
   readonly large?: boolean;
   readonly tilt?: boolean;
@@ -33,7 +37,7 @@ const FACES = {
   gold: [INK.goldLight, INK.gold] as const,
 };
 
-function TagImpl({ children, paper = 'white', plain = false, icon, iconRatio = 1.46, large = false, tilt = false, label, style }: TagProps) {
+function TagImpl({ children, paper = 'white', plain = false, icon, iconRatio = 1.46, leading, after, large = false, tilt = false, label, style }: TagProps) {
   const { level } = useStickerPlace();
   const onMap = level === 'map';
   const height = large ? TAG.heightLarge : TAG.height;
@@ -48,10 +52,12 @@ function TagImpl({ children, paper = 'white', plain = false, icon, iconRatio = 1
       <View style={{ height, borderRadius: height / 2, borderWidth: LINE.tag, borderColor: INK.navy, overflow: 'hidden',
         flexDirection: 'row', alignItems: 'center', paddingLeft: large ? 6 : TAG.padX, paddingRight: large ? 8 : TAG.padX, gap: large ? 6 : 5 }}>
         <LinearGradient colors={FACES[paper]} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
-        {icon ? <Image source={icon} style={{ height: iconH, width: iconH * iconRatio, marginTop: -2 }} resizeMode="contain" fadeDuration={0} /> : null}
+        {leading ?? (icon ? <Image source={icon} style={{ height: iconH, width: iconH * iconRatio, marginTop: -2 }} resizeMode="contain" fadeDuration={0} /> : null)}
         <View style={{ paddingTop: plain ? 0 : 2, flexShrink: 1 }}>
           <StickerText spec={spec} tone="navy" lineHeight={size + 3} role="none" fit>{children}</StickerText>
         </View>
+        {after ? <Image source={after.icon} style={{ height: iconH, width: iconH * (after.iconRatio ?? 1.46), marginLeft: 3, marginTop: -2 }} resizeMode="contain" fadeDuration={0} /> : null}
+        {after ? <View style={{ paddingTop: plain ? 0 : 2 }}><StickerText spec={spec} tone="navy" lineHeight={size + 3} role="none">{after.text}</StickerText></View> : null}
       </View>
     </View>
   );

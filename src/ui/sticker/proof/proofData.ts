@@ -64,3 +64,30 @@ export function rowsOf<T>(items: readonly T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) rows.push(items.slice(i, i + size));
   return rows;
 }
+
+/**
+ * The win card's beats, in ms from the card mounting (DIRECTION motion: stuck on, the coin lands,
+ * the dot walks, the prizes count, then fly to the chips). Reduce Motion keeps the order with fades.
+ */
+export const WIN_BEATS = {
+  land: 240,
+  sticker: 700,
+  walk: 900,
+  prizes: 1050,
+  prizeGap: 110,
+  /** A prize starts counting this long after it is stuck on. */
+  countLead: 120,
+  countStep: 70,
+  fly: 1950,
+  flyGap: 170,
+} as const;
+
+/** The values "+N" shows while it counts up: four steps ending on N, never repeating a value. */
+export function countSteps(value: number): number[] {
+  const out: number[] = [];
+  for (const f of [0.25, 0.5, 0.75, 1]) {
+    const v = Math.max(1, Math.round(value * f));
+    if (!out.includes(v)) out.push(v);
+  }
+  return out;
+}

@@ -8,12 +8,14 @@
  * place, so on the map its drop is the map's.
  */
 import { memo, type ReactNode } from 'react';
-import { View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
+import { StyleSheet, View, type ImageSourcePropType, type StyleProp, type ViewStyle } from 'react-native';
 import type { AnimatedStyle } from 'react-native-reanimated';
 import Arrive from './Arrive';
 import Lift from './Lift';
 import Shell from './Shell';
+import TitleLabel, { type TitleLabelTone } from './TitleLabel';
 import { PlaceProvider, useStickerPlace } from './StickerContext';
+import { cardLabelRise, labelReach } from './layout';
 import { edgeFor, insideCard } from './level';
 import { DROP, INK, LINE, RADIUS, SHADE } from './tokens';
 
@@ -29,8 +31,12 @@ export type CardArt = {
   readonly along?: number;
 };
 
+/** A title label on the card's top edge (FREE TICKETS). The card reserves its rise and starts its body under it. */
+export type CardLabel = { readonly text: string; readonly tone?: TitleLabelTone; readonly icon?: ImageSourcePropType; readonly iconRatio?: number };
+
 export type CardProps = {
   readonly paper?: 'cream' | 'white';
+  readonly label?: CardLabel;
   readonly art?: CardArt;
   /** Stuck on when it mounts, after `delay` ms. */
   readonly arrive?: boolean;
@@ -48,8 +54,12 @@ const FILL = { flexGrow: 1 } as const;
 const TOP_LINE = { width: 2, color: INK.white };
 const LIP_CREAM = { width: 4, color: INK.creamDeep };
 const LIP_WHITE = { width: 4, color: SHADE.skyPale };
+/** The label straddles the top edge 17 pt up (as a page's), 16 in from the side. */
+const LABEL_TOP = 17;
+const LABEL_INSET = 16;
+const SPACE_UNDER_LABEL = 8;
 
-function CardImpl({ paper = 'cream', art, arrive = false, delay = 0, padding, style, children }: CardProps) {
+function CardImpl({ paper = 'cream', label, art, arrive = false, delay = 0, padding, style, children }: CardProps) {
   const place = useStickerPlace();
   const onMap = place.level === 'map';
   const edge = edgeFor('card', place);
@@ -62,7 +72,12 @@ function CardImpl({ paper = 'cream', art, arrive = false, delay = 0, padding, st
       edge={edge} drop={drop} dropColor={dropColor} dropStyle={dropStyle}
       insetTop={white ? undefined : TOP_LINE} insetBottom={white ? LIP_WHITE : LIP_CREAM}
       style={padding === undefined ? FILL : [FILL, { padding }]}>
-      <PlaceProvider value={insideCard()}>{children}</PlaceProvider>
+      <PlaceProvider value={insideCard()}>{label ? <View style={{ paddingTop: labelReach(false) + SPACE_UNDER_LABEL }}>{children}</View> : children}</PlaceProvider>
+      {label ? (
+        <View pointerEvents="none" style={{ position: 'absolute', left: LABEL_INSET, right: LABEL_INSET, top: -LABEL_TOP }}>
+          <TitleLabel tone={label.tone} icon={label.icon} iconRatio={label.iconRatio}>{label.text}</TitleLabel>
+        </View>
+      ) : null}
       {art ? (
         <View pointerEvents="none" style={side === 'left'
           ? { position: 'absolute', left: -(art.over ?? 14), top: art.along ?? 0 }
@@ -72,8 +87,11 @@ function CardImpl({ paper = 'cream', art, arrive = false, delay = 0, padding, st
       ) : null}
     </Shell>
   );
-  if (arrive) return <Arrive delay={delay} style={style}>{body}</Arrive>;
-  return <View style={style}>{body()}</View>;
+  // A label's rise is added to any top margin the caller gives, so what sits above is never covered.
+  const given = StyleSheet.flatten(style) ?? {};
+  const outer: StyleProp<ViewStyle> = label ? [style, { marginTop: cardLabelRise(edge) + (typeof given.marginTop === 'number' ? given.marginTop : 0) }] : style;
+  if (arrive) return <Arrive delay={delay} style={outer}>{body}</Arrive>;
+  return <View style={outer}>{body()}</View>;
 }
 
 const Card = memo(CardImpl);

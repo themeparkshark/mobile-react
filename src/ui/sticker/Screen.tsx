@@ -37,6 +37,11 @@ export type ScreenProps = {
   readonly mapLayer?: ReactNode;
   /** The body scrolls (default). Map screens place their pieces in a fixed body instead. */
   readonly scroll?: boolean;
+  /**
+   * Things in flight over every bar (a prize flying from the card to its header chip), drawn above
+   * the header, the body and the footer and never taking a touch. Nothing rests here.
+   */
+  readonly fx?: ReactNode;
   readonly testID?: string;
   readonly children?: ReactNode;
 };
@@ -49,7 +54,7 @@ export function screenBodyPadding(hasHeader: boolean, hasBottom: boolean, insetT
   };
 }
 
-function ScreenImpl({ header, footer, foot, ground = 'world', mapLayer, scroll = true, testID, children }: ScreenProps) {
+function ScreenImpl({ header, footer, foot, ground = 'world', mapLayer, scroll = true, fx, testID, children }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const layerUp = useSyncExternalStore(stickerLayers.subscribe, () => stickerLayers.count() > 0);
@@ -80,6 +85,7 @@ function ScreenImpl({ header, footer, foot, ground = 'world', mapLayer, scroll =
             </View>
             {footer ? <Footer {...footer} inert={layerUp || footer.inert} /> : null}
             {foot ? <WaveFoot width={width} height={foot.height + insets.bottom} padBottom={Math.max(insets.bottom, SPACE.base * 2)}>{foot.children}</WaveFoot> : null}
+            {fx ? <View style={StyleSheet.absoluteFill} pointerEvents="none" accessible={false} importantForAccessibility="no-hide-descendants">{fx}</View> : null}
             {/* With a chips bar the scrim starts under the bar (prizes fly to the chips); with a title bar it covers the bar too. */}
             <View style={[StyleSheet.absoluteFill, { top: keepBar ? barH : 0 }]} pointerEvents="box-none">
               <LayerHost top={keepBar ? HEADER.gap : barH + HEADER.gap} />

@@ -7,7 +7,7 @@
  * card adds its rise to the room it takes. Screen lays the Header and the Footer out in flow, and
  * every Page reserves its own rise as top margin, so a screen never adds an overhang by hand.
  */
-import { BUTTON, EDGE, FOOTER, HEADER, LABEL, LAYER, LINE, RIBBON, SPACE } from './tokens';
+import { BUTTON, DROP, EDGE, FOOTER, HEADER, LABEL, LAYER, LINE, RIBBON, SPACE, TOAST } from './tokens';
 
 /** Today's top bar (src/components/Topbar.tsx): 70 pt of art under the status bar. The Header is never taller. */
 export const TOPBAR_TODAY = 70;
@@ -29,6 +29,15 @@ export function headerHeight(insetTop: number): number {
  */
 export function headerContentTop(insetTop: number): number {
   return headerHeight(insetTop) + HEADER.gap;
+}
+
+/**
+ * Map screens keep the toast's lane clear: the toast slaps on `HEADER.gap` under the bar (the same
+ * gap the body starts at), so the first map piece starts this far down the body and a toast never
+ * covers the guide card while it is up (KIT.md, what is still off: the toast hid "Tap PLAY!").
+ */
+export function toastLane(): number {
+  return TOAST.height + DROP.cardOnWorld + SPACE.base;
 }
 
 /** The band of the footer, rim to bottom: never taller than today's footer art (window width / 5.3). */
@@ -89,6 +98,8 @@ export type PageRiseSpec = {
   readonly ribbon?: { readonly kind?: RibbonKind } | null;
   readonly label?: { readonly large?: boolean; readonly art?: 'lock' } | null;
   readonly topArt?: { readonly rise: number } | null;
+  /** Pieces that straddle the top edge (a tag, a disc): half of each one's height rises above it. */
+  readonly onEdge?: readonly number[] | null;
   /** The page's own white edge (4 on the world, 3 on the map, 0 inside a page). */
   readonly edge: number;
 };
@@ -99,7 +110,23 @@ export function pageRise(spec: PageRiseSpec, pageWidth: number, windowWidth: num
   if (spec.ribbon) rise = Math.max(rise, ribbonGeometry(ribbonWidth(spec.ribbon.kind ?? 'page', pageWidth, windowWidth)).rise);
   if (spec.label) rise = Math.max(rise, labelRise(!!spec.label.large, spec.label.art === 'lock'));
   if (spec.topArt) rise = Math.max(rise, spec.topArt.rise);
+  for (const h of spec.onEdge ?? []) rise = Math.max(rise, edgeRise(h));
   return Math.ceil(rise);
+}
+
+/** How far a piece straddling a page's top edge rises above it: half its height. */
+export function edgeRise(height: number): number {
+  return height / 2;
+}
+
+/** Room a page's body leaves on the left for art hanging off its left edge: the art's width inside the line, plus a gap. */
+export function sideArtRoom(art: { readonly width: number; readonly over: number }): number {
+  return Math.max(0, art.width - art.over) + SPACE.base * 2;
+}
+
+/** How far a card's title label rises above the card (it straddles the edge like a page's). */
+export function cardLabelRise(edge: number): number {
+  return Math.max(labelRise(false, false), edge);
 }
 
 /** Space between two stacked pages: the loose card gap; each page adds its own rise on top. */

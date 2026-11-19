@@ -33,8 +33,9 @@ export { default as ProgressBar } from './ProgressBar';
 export { default as WaveFoot } from './WaveFoot';
 export { default as Lift } from './Lift';
 export { default as Glyph } from './Glyph';
+export { default as Flight, type FlightPoint } from './Flight';
 export { Title, Heading, Name, Count, Body, Caps } from './Text';
-export { headerHeight, headerContentTop, footerHeight, footerContentBottom, PAGE_GAP } from './layout';
+export { headerHeight, headerContentTop, footerHeight, footerContentBottom, toastLane, PAGE_GAP } from './layout';
 export { ART, ART_RATIO } from './art';
 /** The small public token set: the palette and the spacing a screen lays pages out with. */
 export { INK, SPACE, RADIUS } from './tokens';

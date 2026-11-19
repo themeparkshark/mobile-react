@@ -27,7 +27,7 @@ import TitleLabel, { type TitleLabelTone } from './TitleLabel';
 import WaveFoot from './WaveFoot';
 import { ART, ART_RATIO } from './art';
 import { PlaceProvider, useFrameWidth, useStickerPlace } from './StickerContext';
-import { LOCK_ART, labelReach, pageRise, ribbonGeometry, ribbonWidth, type RibbonKind } from './layout';
+import { LOCK_ART, edgeRise, labelReach, pageRise, ribbonGeometry, ribbonWidth, sideArtRoom, type RibbonKind } from './layout';
 import { edgeFor, insidePage } from './level';
 import { TEXT } from './textRoles';
 import { DROP, FLOAT_SHADOW, INK, LINE, RADIUS, RIBBON, SHADE, SPACE, TYPE, WAVE } from './tokens';
@@ -36,6 +36,10 @@ export type PageLabel = { readonly text: string; readonly tone?: TitleLabelTone;
 export type PageRibbon = { readonly text: string; readonly kind?: RibbonKind; readonly size?: 'title' | 'small' };
 export type PageTopArt = { readonly source: ImageSourcePropType; readonly width: number; readonly height: number; readonly rise: number };
 export type PageFoot = { readonly height?: number; readonly children: ReactNode };
+/** A piece that straddles the page's top edge: a Tag, or a disc. `height` is its laid-out height (a Tag: TAG.height plus its drop). */
+export type PageEdgePiece = { readonly node: ReactNode; readonly height: number; readonly width?: number };
+/** Art hanging off the page's left edge (the guide card's coin). The body leaves room for it. */
+export type PageSideArt = { readonly source: ImageSourcePropType; readonly width: number; readonly height: number; readonly over?: number; readonly along?: number };
 
 export type PageProps = {
   /** Floating sheet or dialog: the one soft shadow under it. */
@@ -44,6 +48,9 @@ export type PageProps = {
   readonly label?: PageLabel;
   readonly ribbon?: PageRibbon;
   readonly topArt?: PageTopArt;
+  /** Pieces on the top edge: `end` (the guide card's park tag, ONE PER PLAYER), `start` (a disc; the label moves past it). */
+  readonly onEdge?: { readonly start?: PageEdgePiece; readonly end?: PageEdgePiece };
+  readonly sideArt?: PageSideArt;
   readonly foot?: PageFoot;
   /** The body scrolls inside the room the page gets (sheets and dialogs). */
   readonly scroll?: boolean;
@@ -60,6 +67,8 @@ export type PageProps = {
 const FACE = { colors: [INK.blueBright, INK.blue] as const };
 const INSET = { width: 2.5, color: SHADE.shine30 };
 const PADS = { page: SPACE.pagePad, snug: SPACE.pageSnug, flush: SPACE.pageFlush } as const;
+/** Where labels and edge pieces start in from the page's side. */
+const EDGE_INSET = 18;
 
 /** The printed dots: a 9 pt grid of soft white dots (kit.css radial-gradient). Fixed tile, no measuring. */
 const Dots = memo(function Dots() {
@@ -76,7 +85,7 @@ const Dots = memo(function Dots() {
 });
 const DOTS = <Dots />;
 
-function PageImpl({ floating = false, small = false, label, ribbon, topArt, foot, scroll = false, arrive = false, padding = 'page', width: widthProp, style, children }: PageProps) {
+function PageImpl({ floating = false, small = false, label, ribbon, topArt, onEdge, sideArt, foot, scroll = false, arrive = false, padding = 'page', width: widthProp, style, children }: PageProps) {
   const place = useStickerPlace();
   const frame = useFrameWidth();
   const { width: windowWidth } = useWindowDimensions();
@@ -85,12 +94,14 @@ function PageImpl({ floating = false, small = false, label, ribbon, topArt, foot
   const edge = edgeFor('page', place);
   const radius = small ? RADIUS.pageSmall : RADIUS.page;
   const pad = PADS[padding];
-  const rise = pageRise({ ribbon, label, topArt, edge }, width, windowWidth);
+  const edgeHeights = [onEdge?.start?.height, onEdge?.end?.height].filter((h): h is number => typeof h === 'number');
+  const rise = pageRise({ ribbon, label, topArt, edge, onEdge: edgeHeights }, width, windowWidth);
+  const sideOver = sideArt ? sideArt.over ?? SPACE.artClear * 2 : 0;
   const ribbonW = ribbon ? ribbonWidth(ribbon.kind ?? 'page', width, windowWidth) : 0;
   const ribbonG = ribbon ? ribbonGeometry(ribbonW) : null;
   const padTop = ribbonG ? ribbonG.overlap + 8 : label ? labelReach(!!label.large) + 12 : pad;
   const footH = foot ? foot.height ?? WAVE.height : 0;
-  const bodyStyle = { paddingHorizontal: pad, paddingTop: padTop, paddingBottom: foot ? SPACE.base * 2 : pad };
+  const bodyStyle = { paddingHorizontal: pad, paddingLeft: sideArt ? sideArtRoom({ width: sideArt.width, over: sideOver }) : pad, paddingTop: padTop, paddingBottom: foot ? SPACE.base * 2 : pad };
   // The rise is added to any top margin the caller gives (the gap between stacked pages), never replaced by it.
   const given = StyleSheet.flatten(style) ?? {};
   const outer: StyleProp<ViewStyle> = [style, { marginTop: rise + (typeof given.marginTop === 'number' ? given.marginTop : 0), width: widthProp ?? given.width }, scroll ? { flexShrink: 1 } : null];
@@ -112,7 +123,10 @@ function PageImpl({ floating = false, small = false, label, ribbon, topArt, foot
           </View>
         ) : null}
       </PlaceProvider>
-      {label ? <Label label={label} /> : null}
+      {label ? <Label label={label} leftRoom={onEdge?.start?.width} /> : null}
+      {onEdge?.start ? <View pointerEvents="box-none" style={{ position: 'absolute', left: EDGE_INSET - SPACE.base * 3, top: -edgeRise(onEdge.start.height) }}>{onEdge.start.node}</View> : null}
+      {onEdge?.end ? <View pointerEvents="box-none" style={{ position: 'absolute', right: EDGE_INSET, top: -edgeRise(onEdge.end.height) }}>{onEdge.end.node}</View> : null}
+      {sideArt ? <Lift source={sideArt.source} width={sideArt.width} height={sideArt.height} style={{ position: 'absolute', left: -sideOver, top: sideArt.along ?? 0 }} /> : null}
       {ribbon && ribbonG ? <RibbonTitle text={ribbon.text} width={ribbonW} height={ribbonG.height} overlap={ribbonG.overlap} small={ribbon.size === 'small'} /> : null}
       {topArt ? <Lift source={topArt.source} width={topArt.width} height={topArt.height} style={{ position: 'absolute', right: SPACE.artClear, top: -topArt.rise }} /> : null}
     </Shell>
@@ -124,11 +138,12 @@ function PageImpl({ floating = false, small = false, label, ribbon, topArt, foot
 const LOCK = { height: LOCK_ART.height, width: Math.round(LOCK_ART.height * ART_RATIO.locked) };
 
 /** The title label on the page's top edge (and Alex's lock hanging off its left end), in the page's own place. */
-function Label({ label }: { readonly label: PageLabel }) {
+function Label({ label, leftRoom }: { readonly label: PageLabel; readonly leftRoom?: number }) {
   const lock = label.art === 'lock';
   const top = label.large ? 19 : 17;
+  const left = (lock ? EDGE_INSET - LOCK_ART.left : EDGE_INSET) + (leftRoom ? leftRoom - SPACE.base * 2 : 0);
   return (
-    <View style={{ position: 'absolute', top: -top, left: lock ? 18 - LOCK_ART.left : 18, right: 18 }} pointerEvents="box-none">
+    <View style={{ position: 'absolute', top: -top, left, right: EDGE_INSET }} pointerEvents="box-none">
       <TitleLabel tone={label.tone} large={label.large} padLeft={lock ? LOCK.width + LOCK_ART.left + 8 : undefined}>{label.text}</TitleLabel>
       {lock ? <CutEdge source={ART.locked} width={LOCK.width} height={LOCK.height} style={{ position: 'absolute', left: LOCK_ART.left, top: LOCK_ART.top }} /> : null}
     </View>

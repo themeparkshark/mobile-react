@@ -10,6 +10,7 @@ import { memo, useEffect, type ReactNode } from 'react';
 import { Image, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import useUiReducedMotion from '../useUiReducedMotion';
+import { useLandOn } from './motion';
 import { ART, ART_RATIO } from './art';
 import { DROP, INK, SHADE, STAGE } from './tokens';
 
@@ -20,10 +21,18 @@ export type StageProps = {
   readonly children?: ReactNode;
   /** What VoiceOver says about the hero ("Walt Statue coin"). */
   readonly label?: string;
+  /** The hero lands on the stage after this many ms (falls from above, springs down). Absent: it is just there. */
+  readonly landDelay?: number;
   readonly style?: StyleProp<ViewStyle>;
 };
 
-function StageImpl({ width, height, children, label, style }: StageProps) {
+/** The hero's landing, mounted only when asked (a static stage carries no animated wrapper). */
+function Landing({ delay, fall, children }: { readonly delay: number; readonly fall: number; readonly children?: ReactNode }) {
+  const style = useLandOn(delay, fall);
+  return <Animated.View style={style}>{children}</Animated.View>;
+}
+
+function StageImpl({ width, height, children, label, landDelay, style }: StageProps) {
   const reduced = useUiReducedMotion();
   const sway = useSharedValue(0);
   useEffect(() => {
@@ -45,7 +54,9 @@ function StageImpl({ width, height, children, label, style }: StageProps) {
         </Animated.View>
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: STAGE.radius - STAGE.line, borderTopWidth: 3, borderColor: SHADE.shine35 }} />
       </View>
-      <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, top: 0, width, height, alignItems: 'center', justifyContent: 'center' }}>{children}</View>
+      <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, top: 0, width, height, alignItems: 'center', justifyContent: 'center' }}>
+        {landDelay === undefined ? children : <Landing delay={landDelay} fall={height * 0.8}>{children}</Landing>}
+      </View>
     </View>
   );
 }
