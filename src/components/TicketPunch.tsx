@@ -34,6 +34,7 @@ export default function TicketPunch({
   note,
   kicker = 'YOUR GAME',
   winLine,
+  onCardShown,
   onDone,
 }: {
   /**
@@ -49,6 +50,11 @@ export default function TicketPunch({
   readonly winLine?: string;
   /** Small line under the card, e.g. "Rescue Pass used". */
   readonly note?: string;
+  /**
+   * The tear has started and the game's card is popping (fix round w4, T036): the ride mounts the dealt game
+   * under the punch now, so its mount never holds the tear back and its board is drawn before the hand-over.
+   */
+  readonly onCardShown?: () => void;
   readonly onDone: () => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -105,6 +111,7 @@ export default function TicketPunch({
     if (!torn || !gameName || cardShown.current || reduced == null) return;
     cardShown.current = true;
     if (reduced) {
+      onCardShown?.();
       tear.value = 1;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       card.value = withTiming(1, { duration: 200 });
@@ -129,6 +136,8 @@ export default function TicketPunch({
       playSfx('go', 0.9);
     });
     at(PUNCH_T.done - PUNCH_T.punch + 400, finish); // safety net
+    // The tear and the card run on the UI thread; the game mounts behind them from here (T036).
+    onCardShown?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [torn, gameName, reduced]);
 

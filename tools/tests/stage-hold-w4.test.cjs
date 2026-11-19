@@ -64,3 +64,14 @@ test('N04/T036: Memory shows its felt during the deal, deals in place off stage,
   assert.match(memory, /enabled: visible && !stageHeld && !result && !tryScreen/);
   assert.match(whack, /const bed = !visible \|\| stageHeld \|\| result \? null/);
 });
+
+test('T036: the game mounts under the punch once the tear starts, so its mount never holds the tear back', () => {
+  const modal = fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
+  const punch = fs.readFileSync('src/components/TicketPunch.tsx', 'utf8');
+  assert.match(modal, /onCardShown=\{\(\) => setPunchCard\(true\)\}/);
+  assert.match(modal, /useEffect\(\(\) => \{ if \(flowState !== 'spinning'\) setPunchCard\(false\); \}, \[flowState\]\);/);
+  // Called after the UI-thread tear and card springs are set, in both the full and the Reduce Motion punch.
+  assert.match(punch, /cardShown\.current = true;\n\s+if \(reduced\) \{\n\s+onCardShown\?\.\(\);/);
+  assert.match(punch, /at\(PUNCH_T\.done - PUNCH_T\.punch \+ 400, finish\); \/\/ safety net\n[^\n]*\n\s+onCardShown\?\.\(\);/);
+});
+

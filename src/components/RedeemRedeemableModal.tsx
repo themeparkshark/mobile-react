@@ -311,6 +311,13 @@ export default function RedeemRedeemableModal({
   const pictureOnlyRef = useRef(false);
   /** T038: this try's trivia round was switched to a picture game from its card (no new Ticket). */
   const [redealt, setRedealt] = useState(false);
+  /**
+   * T036: the punch has torn and shows the dealt game's card. The game mounts under the punch only from here:
+   * mounting it in the same frame as the deal held the tear back by the whole mount (3 s of bobbing ticket
+   * on device), and the card's second on screen is time enough to draw its board.
+   */
+  const [punchCard, setPunchCard] = useState(false);
+  useEffect(() => { if (flowState !== 'spinning') setPunchCard(false); }, [flowState]);
   /** The deal step, readable from the spend callback declared above it (T036, T044). */
   const selectAssignedGameRef = useRef<() => boolean>(() => false);
   const savedAttemptIdRef = useRef<number | null>(null);
@@ -1414,6 +1421,7 @@ export default function RedeemRedeemableModal({
               winLine={punchLines(taskName).win}
               note={proofRejected ? 'Same game. No new Ticket.' : redealt ? 'Picture game. No new Ticket.'
                 : attemptRef.current?.rescue_pass ? (redeemable?.rescue_pass_source === 'daily' ? 'Today’s free try' : 'An extra try') : undefined}
+              onCardShown={() => setPunchCard(true)}
               onDone={() => { setRedealt(false); setFlowState('minigame'); }}
             />
           )}
@@ -1472,7 +1480,7 @@ export default function RedeemRedeemableModal({
           {/* The game stays under the win card until the card covers it, so a win never shows a dim map. */}
           {/* T036: the game mounts under the punch (hidden, not started) so its board art is drawn by the time
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
-          {selectedGame && (flowState === 'spinning' || flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
+          {selectedGame && ((flowState === 'spinning' && punchCard) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered)) && (
             <View style={[styles.minigameContainer, flowState === 'spinning' && styles.prewarm]}
               pointerEvents={flowState === 'spinning' ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>

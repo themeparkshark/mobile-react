@@ -120,7 +120,7 @@ test('a press on a sheet on its way out, right over PLAY!, is PLAY!\'s press: he
 test('a ride win never shows a dim map: the game stays under the win card until the card covers it, in one sheet', () => {
   const flow = read('src/components/RedeemRedeemableModal.tsx');
   // Fix round w3 T036: it also mounts (hidden, not started) under the ticket punch.
-  assert.match(flow, /selectedGame && \(flowState === 'spinning' \|\| flowState === 'minigame' \|\| \(flowState === 'postwin' && !winCovered\)\)/);
+  assert.match(flow, /selectedGame && \(\(flowState === 'spinning' && punchCard\) \|\| flowState === 'minigame' \|\| \(flowState === 'postwin' && !winCovered\)\)/);
   assert.match(flow, /<PostWinRewardsModal\n\s+embedded/);
   assert.match(flow, /const buttonLabel = !stepReady \|\| starting \? 'One moment'/, 'a slow server never looks like a dead button');
 });
