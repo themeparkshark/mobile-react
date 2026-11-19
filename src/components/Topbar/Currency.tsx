@@ -83,7 +83,18 @@ export default function Currency({ image, count, name, flyTarget, coverArt = fal
   // A spend just rolls down quietly. A coin flying in holds the roll until it lands (hudPulse).
   const reduced = useReducedGameMotion();
   const [shown, setShownState] = useState<{ value: number; prev: number; stream?: DigitStream | null; key: number }>({ value: count, prev: count, key: 0 });
-  const setShown = useCallback((next: { value: number; prev: number; stream?: DigitStream | null }) => setShownState(cur => ({ ...next, key: cur.key + 1 })), []);
+  // Fix pass w5 (W4-SMOKE-3b): this chip owns its target's number (hudShown). Each new number is published in the same
+  // tick it is set, so a mirror (the coin card's Ticket line) changes in the same React commit as the chip's roll.
+  const ownerRef = useRef<number | null>(null);
+  const keyRef = useRef(0);
+  const setShown = useCallback((next: { value: number; prev: number; stream?: DigitStream | null }) => {
+    keyRef.current += 1;
+    const state = { ...next, key: keyRef.current };
+    setShownState(state);
+    if (flyTarget && ownerRef.current != null) {
+      publishHudShown(flyTarget, ownerRef.current, { value: state.value, prev: state.prev, stream: state.stream ?? null, key: state.key });
+    }
+  }, [flyTarget]);
   const shownRef = useRef(shown.value);
   shownRef.current = shown.value;
   const holdUntil = useRef(0);
@@ -165,9 +176,7 @@ export default function Currency({ image, count, name, flyTarget, coverArt = fal
     });
     return () => { off(); if (release.current) clearTimeout(release.current); };
   }, [flyTarget, rollTo, reduced, bump]);
-  // Fix pass w5 (W4-SMOKE-3b): this chip owns its target's number; a mirror (the coin card's Ticket line) draws
-  // the same number with the same roll, so the two always move together.
-  const ownerRef = useRef<number | null>(null);
+  // The chip claims its target while mounted, and publishes what it shows on mount (later numbers go out in setShown).
   useEffect(() => {
     if (!flyTarget) return undefined;
     const owner = claimHudShown(flyTarget);

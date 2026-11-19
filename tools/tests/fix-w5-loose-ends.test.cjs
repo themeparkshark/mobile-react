@@ -52,6 +52,8 @@ test('W4-SMOKE-3b the coin card line mirrors the chip and never counts up on JS 
   assert.match(chip, /claimHudShown\(flyTarget\)/);
   assert.match(chip, /publishHudShown\(flyTarget, ownerRef\.current,/);
   assert.match(chip, /releaseHudShown\(flyTarget, owner\)/);
+  const set = chip.slice(chip.indexOf('const setShown = useCallback('), chip.indexOf('}, [flyTarget]);'));
+  assert.match(set, /setShownState\(state\);[\s\S]*publishHudShown\(flyTarget, ownerRef\.current,/, 'published in the same tick the chip sets it');
   const card = read('src/components/RedeemRedeemableModal.tsx');
   const claim = card.slice(card.indexOf('const handleClaimTickets'), card.indexOf('// T055'));
   assert.ok(claim.indexOf("holdHud('tickets', CLAIM_HOLD_MS)") > -1 && claim.indexOf("holdHud('tickets', CLAIM_HOLD_MS)") < claim.indexOf('claimStampReward('),
