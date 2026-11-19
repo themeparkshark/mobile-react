@@ -62,7 +62,12 @@ test('T118: after the Daily 3 chest opens, the level chest waits for the next op
   assert.ok(keys({ ...base, daily3: claimed }).includes('level_chest'));
   // The hook ends the visit when the overlay closes, and starts the hold when a chest has paid.
   const hook = strip(read('src/components/retention/useRetention.tsx'));
-  assert.match(hook, /if \(!view\) setChestThisVisit\(false\);\s*else if \(view\.k === 'reveal' && view\.rewards\) setChestThisVisit\(true\);/);
+  assert.match(hook, /if \(view\?\.k === 'reveal' && view\.rewards\) setChestThisVisit\(true\);/);
+  assert.match(hook, /const openRewards = useCallback\(\(\) => \{\s*playSfx\('ui\.tap'\);\s*setChestThisVisit\(false\);/, 'a visit starts at the Rewards button');
+  assert.match(hook, /const chestDone = \(back: 'rewards' \| 'sheet', mapFly: boolean\) => \{\s*setChestThisVisit\(true\);/, "today's chest counts as this visit's chest");
+  // Today's chest ready: the level chest never sits beside it.
+  const side = keys({ ...base, dailyChest: { unclaimed: true, day: 1, of: 7 }, daily3: { ...claimed, claimed: false, done: 2 } });
+  assert.ok(side.includes('daily_chest') && !side.includes('level_chest'), side.join(','));
   assert.match(hook, /chestOpenedThisVisit: chestThisVisit,/);
 });
 

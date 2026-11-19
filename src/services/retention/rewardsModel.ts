@@ -70,11 +70,11 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
     else if (d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: 'Done for today. New goals tomorrow', ready: 0, action: 'go' });
     else rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.done} of ${d.total} done`, ready: 0, action: 'go' });
   }
-  // T118: one chest moment per visit. While the Daily 3 chest is ready the level chest waits, and once a chest was
-  // opened in this visit the level chest and the Weekly Box wait for the next open (the button's number says they
-  // are there the moment the sheet closes), so two chests never come back to back in one open.
-  const waitTurn = !!i.chestOpenedThisVisit;
-  if (i.levelChest && i.levelChest.waiting > 0 && !i.daily3?.claimable && !waitTurn) {
+  // T118: one chest moment per visit. While today's chest or the Daily 3 chest is ready, and once any chest was
+  // opened in this visit, the level chest and the Weekly Box wait for the next open of Rewards, so two chests never
+  // sit side by side or come back to back in one open.
+  const waitTurn = !!i.chestOpenedThisVisit || !!i.dailyChest?.unclaimed || !!i.daily3?.claimable;
+  if (i.levelChest && i.levelChest.waiting > 0 && !waitTurn) {
     rows.push({ key: 'level_chest', title: `Level ${i.levelChest.level} Chest`, line: 'New gear inside', ready: i.levelChest.waiting, action: 'open' });
   }
   if (i.weekly?.claimable && !waitTurn) {
