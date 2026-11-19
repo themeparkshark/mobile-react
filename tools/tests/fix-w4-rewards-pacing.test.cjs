@@ -224,3 +224,14 @@ test('T114 a Trail Box that finishes walking pulses Rewards once with a Box read
   assert.match(src, /if \(!reduced\) pulse\.value =/, 'Reduce Motion keeps only the label');
   assert.match(read('src/screens/ExploreScreen.tsx'), /pulseKey=\{trailPulse\}/);
 });
+
+/* T120: no blocking card after a catch. */
+test('T120 the first catch shows a 2 s toast (no card, no button); later catches show nothing', () => {
+  const map = read('src/screens/ExploreScreen.tsx');
+  assert.match(map, /const FIRST_CATCH_TOAST_MS = 2000;/);
+  assert.match(map, /completeSequence\('home_first_find'\);\n\s+showMapToast\(\{ type: 'reward', icon: 'sparkle', duration: FIRST_CATCH_TOAST_MS,/);
+  assert.match(map, /if \(collectedOnce\.current && hasCompleted\('onboarding'\) && !hasCompleted\('home_first_find'\)\)/, 'once per player');
+  const provider = read('src/components/Tutorial/TutorialProvider.tsx');
+  assert.match(provider, /const completeSequence = useCallback\(\(sequence: TutorialSequence\) => \{/);
+  assert.match(provider, /persistCompleted\(newCompleted\);\n  \}, \[completedSequences, persistCompleted\]\);/, 'saved like a finished card');
+});

@@ -113,6 +113,8 @@ export interface TutorialContextType {
   skipTutorial: () => void;
   /** Check if a tutorial sequence has been completed */
   hasCompleted: (sequence: TutorialSequence) => boolean;
+  /** Mark a one-line sequence done without drawing its card (fix w4 T120: the first catch's line is a short toast). */
+  completeSequence?: (sequence: TutorialSequence) => void;
   /** Register a ref for spotlight targeting */
   registerRef: (key: string, ref: any) => void;
   /** Reset all tutorial progress (for testing) */

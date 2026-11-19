@@ -262,6 +262,15 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     setSpotlightTarget(null);
   }, [currentSequence, completedSequences, persistCompleted]);
 
+  // Fix w4 T120: a sequence shown some other way (a short toast) is marked done, saved like any other.
+  const completeSequence = useCallback((sequence: TutorialSequence) => {
+    if (firstPlayRef.current || completedSequences.has(sequence)) return;
+    const newCompleted = new Set(completedSequences);
+    newCompleted.add(sequence);
+    setCompletedSequences(newCompleted);
+    persistCompleted(newCompleted);
+  }, [completedSequences, persistCompleted]);
+
   // Check if a sequence has been completed
   const hasCompleted = useCallback((sequence: TutorialSequence): boolean => {
     return completedSequences.has(sequence);
@@ -334,6 +343,7 @@ export default function TutorialProvider({ children }: TutorialProviderProps) {
     nextStep,
     skipTutorial,
     hasCompleted,
+    completeSequence,
     registerRef,
     resetAll,
   };

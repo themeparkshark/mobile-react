@@ -119,6 +119,8 @@ import { GymMarker, SwordMarker } from '../components/GymBattle';
 import { useMapFlags } from '../services/mapFlags';
 import { getGym, getSwords, getMyTeam, claimSword, getMySwords, GymData, SwordSpawn, TeamInfo } from '../api/endpoints/gym-battle';
 import { useTutorial } from '../components/Tutorial';
+import { HOME_FIRST_FIND_COPY } from '../components/Tutorial/steps';
+import { useToast } from '../components/Toast';
 import SignInButtons from '../components/SignInButtons';
 import { GameIcon, GameRichText, gameAlert } from '../ui';
 import type { FrightShopStall } from '../api/endpoints/fright/types';
@@ -168,6 +170,8 @@ import { refreshFeatureFlags } from '../api/endpoints/platform/feature-flags';
  * buttons leave only once that row is in the integrated build (core loop 5.1, integration check 1).
  */
 const SHOPS_ROW_SHIPPED = false;
+/** Fix w4 T120: the first catch's line shows this long, then hunting goes on (no card, no button). */
+const FIRST_CATCH_TOAST_MS = 2000;
 /** Fix w4 T098: no Rush before the day's first coin (one stable empty list, so memo inputs hold still). */
 const NO_RUSHES: RushPick[] = [];
 /** Dev-only live feed stub for lane walks (state D: feed off; or a daytime park at night). Never in a store or OTA bundle. */
@@ -425,7 +429,8 @@ export function ExploreScreenBody() {
   }, [homeLocationConfirmed]);
   const { theme } = useContext(ThemeContext);
   const { currencies } = useContext(CurrencyContext);
-  const { startTutorial, hasCompleted, isReady, isActive, findLanded } = useTutorial();
+  const { startTutorial, hasCompleted, isReady, isActive, findLanded, completeSequence } = useTutorial();
+  const { showToast: showMapToast } = useToast();
   const { explain, openHelpSheet, activeTip } = useHelp();
   const { dailyGift } = useContext(DailyGiftContext);
   const [dailyGiftOccluded, setDailyGiftOccluded] = useState(false);
@@ -665,12 +670,20 @@ export function ExploreScreenBody() {
     setShowPrepItemModal(false);
     setActivePrepItem(null);
     setActivePrepItemPivotId(null);
-    // After the very first catch, Finn says why it matters (once).
+    // After the very first catch, one short line says what to do next (once). Fix w4 T120: a 2 s toast, never a
+    // blocking card between the kid and the next treat; later catches show nothing.
     if (collectedOnce.current && hasCompleted('onboarding') && !hasCompleted('home_first_find')) {
       setFirstLineGap(true);
-      setTimeout(() => { startTutorial('home_first_find'); setFirstLineGap(false); }, 500);
+      setTimeout(() => {
+        if (completeSequence) {
+          completeSequence('home_first_find');
+          showMapToast({ type: 'reward', icon: 'sparkle', duration: FIRST_CATCH_TOAST_MS,
+            message: `${HOME_FIRST_FIND_COPY.title} ${HOME_FIRST_FIND_COPY.text}` });
+        } else startTutorial('home_first_find');
+        setFirstLineGap(false);
+      }, 500);
     }
-  }, [hasCompleted, startTutorial]);
+  }, [hasCompleted, startTutorial, completeSequence, showMapToast]);
 
   // Handler for Community Center tap - check if in range
   const handleCommunityCenterPress = useCallback(() => {
