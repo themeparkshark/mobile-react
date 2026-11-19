@@ -61,10 +61,18 @@ export function createModalDoor(timers: { setTimeout: (run: () => void, ms: numb
   return door;
 }
 
-/** How long UIKit gets to say a presented sheet is on screen before it is presented again. */
-export const DOOR_PRESENT_MS = 1500;
-/** Fresh presentations at most; after that the sheet is let go and the door moves on. */
-export const DOOR_PRESENT_TRIES = 2;
+/**
+ * How long UIKit gets to say a presented sheet is on screen before the door lets it go and moves on.
+ * Fix pass w4 (lane press, N01 and N02), read off the phase log on the simulator: under load UIKit put the coin card
+ * up but its onShow reached JS 3 to 4.6 s later. The door took that for a refusal at 1.5 s and presented the sheet
+ * again: it hid the sheet while UIKit was still presenting it (a dismiss mid-present, which UIKit ignores), so the card
+ * vanished and came back, the door's slot was freed under a sheet that was up, and the grown-up gate never drew and
+ * was closed as a no. A slow present is not a refused one, so a sheet is never presented again: it gets one long wait,
+ * stays asked for (it still shows if UIKit was only slow), and its owner hears onPresentLost.
+ */
+export const DOOR_PRESENT_MS = 4500;
+/** Fresh presentations after the first: none (see DOOR_PRESENT_MS). */
+export const DOOR_PRESENT_TRIES = 0;
 /** A sheet asked to go that never reports it: free the slot after this (UIKit sends no event for one it refused). */
 export const DOOR_DISMISS_MS = 500;
 export const DOOR_DISMISS_ANIMATED_MS = 900;

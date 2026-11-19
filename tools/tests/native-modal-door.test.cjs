@@ -54,9 +54,13 @@ test('a host torn out of the tree frees the slot only after UIKit has had time t
   assert.deepEqual(shown, [1, 2]);
 });
 
-test('a sheet UIKit never put up is presented again, a few times, then let go so the door moves on', () => {
+test('a sheet UIKit is slow to report is never presented again (a dismiss mid-present); it is let go so the door moves on', () => {
   const M = D();
-  assert.equal(M.doorPresentTimedOut(0, true), 'present_again');
+  // Fix pass w4 (N01, N02): onShow reached JS 3 to 4.6 s after UIKit put the card up; presenting again at 1.5 s hid
+  // a sheet mid-present, so it flickered, freed the door under itself, and the grown-up gate never drew.
+  assert.equal(M.doorPresentTimedOut(0, true), 'let_go');
+  assert.equal(M.DOOR_PRESENT_TRIES, 0);
+  assert.ok(M.DOOR_PRESENT_MS >= 4000, 'a slow, loaded phone gets its sheet');
   assert.equal(M.doorPresentTimedOut(M.DOOR_PRESENT_TRIES, true), 'let_go');
   assert.equal(M.doorPresentTimedOut(0, false), 'gone');
   assert.ok(M.DOOR_PRESENT_MS * (M.DOOR_PRESENT_TRIES + 1) <= 5000, 'a lost sheet never holds the door for long');

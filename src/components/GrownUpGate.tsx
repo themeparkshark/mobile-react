@@ -58,7 +58,11 @@ let pass: { flow: GateFlow; until: number } | null = null;
 let vipMember = false;
 const REST_KEY = 'grown-up-gate:rest-until';
 let gateRestUntil = 0;
-type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason };
+type GateRequest = { resolve: (ok: boolean) => void; seed: number; reason?: GateReason | null; devOffer?: GateReason;
+  /** The gate never drew for this ask (iOS did not put it up, or it was replaced or torn before it showed). */
+  unshown?: boolean };
+/** What one ask came to: a grown-up's yes, a grown-up's no, or a gate that could not be shown (never a no). */
+export type GateOutcome = 'yes' | 'no' | 'unshown';
 type ShowGate = (r: GateRequest) => void;
 type GateHost = { show: ShowGate; hint: (text: string) => void };
 /**
@@ -70,7 +74,7 @@ type GateHost = { show: ShowGate; hint: (text: string) => void };
 let hosts: GateHost[] = [];
 let showGate: ShowGate | null = null;
 function syncShowGate() { showGate = hosts.length ? hosts[hosts.length - 1].show : null; }
-let open: Promise<boolean> | null = null;
+let open: Promise<GateOutcome> | null = null;
 /** iOS shows nothing new while a modal is still sliding away: the answer waits for the gate to be gone. */
 export const GATE_DISMISS_FALLBACK_MS = 2000;
 /**
@@ -206,9 +210,23 @@ export function gateContinueLabel(reason: GateReason | null | undefined): string
 
 /** Opens the gate and resolves true only on the right answer. A second ask while it is open shares the first. */
 export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<boolean> {
-  if (!showGate) return Promise.resolve(false);
+  return askGrownUpOutcome(reason, seed, now).then(outcome => outcome === 'yes');
+}
+
+/**
+ * The same ask, saying whether a grown-up answered at all (fix pass w4, N02): a gate iOS never drew is 'unshown',
+ * so a money door never logs or treats it as a grown-up's no (the gate shows its "Tap it again" hint instead).
+ */
+export function askGrownUpOutcome(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<GateOutcome> {
+  if (!showGate) return Promise.resolve('unshown');
   open ??= loadRest()
-    .then(() => new Promise<boolean>(resolve => showGate ? showGate({ resolve, seed: now < gateRestUntil ? -1 : seed, reason }) : resolve(false)))
+    .then(() => new Promise<GateOutcome>(resolve => {
+      if (!showGate) { resolve('unshown'); return; }
+      const request: GateRequest = { seed: now < gateRestUntil ? -1 : seed, reason,
+        resolve: ok => resolve(request.unshown ? 'unshown' : ok ? 'yes' : 'no') };
+      pressTrace('gate.request', () => `reason=${reason?.kind ?? 'none'}`);
+      showGate(request);
+    }))
     .finally(() => { open = null; });
   return open;
 }
@@ -397,6 +415,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
       hint: text => setHint(text),
       show: (r: GateRequest) => {
         pressTrace('gate.ask', () => `nested=${nested} hosts=${hosts.length}`);
+        if (reqRef.current && !shownRef.current) reqRef.current.unshown = true;
         reqRef.current?.resolve(false);
         reqRef.current = r; answerRef.current = null; shownRef.current = false;
         setTyped(''); setDetails(r.devOffer ? gateDetails(r.devOffer) : null); setMore(false); setClosing(null); setReq(r);
@@ -411,6 +430,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
       // so no button waits forever and an answered yes is never lost.
       const left = reqRef.current;
       const ok = answerRef.current === true;
+      if (left && !shownRef.current) left.unshown = true;
       reqRef.current = null;
       answerRef.current = null;
       left?.resolve(ok);
@@ -429,6 +449,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
       // It never showed, so there is no fade to wait for: a no at once, so the next tap asks fresh.
       pressTrace('gate.watchdog', () => `nested=${nested}`);
       showRetryHint(gateRetryHint(reqRef.current.reason));
+      reqRef.current.unshown = true;
       answerRef.current = false;
       finish();
     }, gateWatchdogMs(req?.reason));
@@ -471,7 +492,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     <>
     <Modal visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
       testID={nested ? 'gate-slot' : 'gate'}
-      onShow={() => { pressTrace('gate.nativeShow', () => `nested=${nested}`); shownRef.current = true; }} onDismiss={finish}>
+      onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>

@@ -149,6 +149,8 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   const act = async () => {
     if (busy) return;
     haptic('tapLight');
+    // Busy from the tap itself (fix pass w4, N02): the row says it heard the press while the grown-up gate comes up.
+    if (placement !== 'win_vip' && placement !== 'high_point' && pack) setBusy(true);
     // Both doors open a pitch page (pitch first, Oct 8): its every real-money Buy asks a grown-up fresh there.
     // A host sheet closes first, so the page never opens under it.
     if (placement === 'win_vip') { beforeLeave?.(); void openMembership(); return; }
@@ -191,7 +193,8 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   if (compact) {
     return (
       <Animated.View entering={FadeInUp.delay(200).springify().damping(16)} style={[st.slim, style]}>
-        <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button" style={st.slimTap}
+        <Pressable onPress={() => void act()} disabled={busy} accessibilityRole="button" accessibilityState={{ busy }}
+          style={({ pressed }) => [st.slimTap, pressed && st.slimPressed, busy && st.slimBusy]}
           accessibilityLabel={`${copy.kicker}. ${copy.title}. ${copy.action}.`}>
           {placement === 'high_point' ? <GameIcon name="star" size={34} /> : <PackArt art={art} size={40} bob={false} />}
           <View style={{ flex: 1 }}>
@@ -199,7 +202,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
             <Text maxFontSizeMultiplier={MAX_FONT} style={st.slimTitle} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{copy.title}</Text>
           </View>
           {/* The kicker already says it is for grown-ups: the row's way on is one round arrow, so the name keeps the room. */}
-          <View style={[st.slimAsk, busy && { opacity: 0.6 }]}>
+          <View style={[st.slimAsk, busy && st.slimAskBusy]}>
             <GameIcon name="arrow" size={18} />
           </View>
         </Pressable>
@@ -249,6 +252,10 @@ const st = StyleSheet.create({
   slim: { flexDirection: 'row', alignItems: 'center', gap: 8, alignSelf: 'stretch', backgroundColor: '#123f80', borderRadius: 16,
     borderWidth: 2, borderColor: BRAND.gold, borderBottomWidth: 4, paddingLeft: 8, paddingRight: 10, paddingVertical: 5 },
   slimTap: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  // Pressed: the row dips under the finger. Busy (the gate is on its way): it rests a little dimmer, its arrow ringed in gold.
+  slimPressed: { transform: [{ translateY: 2 }], opacity: 0.85 },
+  slimBusy: { opacity: 0.8 },
+  slimAskBusy: { borderColor: BRAND.gold, backgroundColor: 'rgba(255,207,59,0.22)' },
   slimTitle: { fontFamily: FONT.display, fontSize: 17, color: '#ffffff' },
   slimAsk: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)', borderWidth: 2, borderColor: 'rgba(255,255,255,0.35)' },

@@ -8,7 +8,9 @@
  * 2. Never dismissed mid-present (UIKit ignores that and leaves an orphan on screen): a sheet asked to go while it is
  *    still coming up goes as soon as UIKit reports it up.
  * 3. A refused host can never take a touch. The host is pointerEvents box-none (a real sheet's contents live in its
- *    own view controller, not under the host), and a sheet UIKit did not put up asks again, a few times.
+ *    own view controller, not under the host). A sheet UIKit is slow to report is never presented again (that hid it
+ *    mid-present, fix pass w4): after one long wait the door lets it go and its owner hears onPresentLost.
+ * 4. A tap on a sheet that is leaving reaches the button under it once the sheet is gone (ui/tapThrough.ts).
  */
 import React, { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { I18nManager, StyleSheet } from 'react-native';

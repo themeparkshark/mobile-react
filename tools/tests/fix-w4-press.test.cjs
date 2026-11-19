@@ -121,3 +121,48 @@ test('the door hides a sheet in the same commit it stops being wanted, and repla
   assert.match(door, /leavingSheetTap\.note\(.*!now\.current\.nested\)\}>/);
   assert.match(door, /tapThrough\.setScreenRoot\(internalHandle\(host\)\)/);
 });
+
+// N02: the grown-up gate was asked for while a sheet was up, never drew, and the money log said tap, gate_shown,
+// gate_declined. A gate that could not be shown is never a grown-up's no.
+function suppliesWith(outcome) {
+  const events = [];
+  const product = { product_id: 'park_day', grants: { tickets: 5 }, available: true };
+  const S = loadTs('src/services/money/supplies.ts', {
+    react: reactStub,
+    '../../components/GrownUpGate': { askGrownUpOutcome: async () => outcome },
+    '../../api/endpoints/me/shop': { getShop: async () => ({ enabled: true, products: [product] }) },
+    './track': { trackMoney: event => events.push(event) },
+    '../purchases': { storeAvailable: () => true, loadShopPrices: async () => ({ park_day: { price: '$4.99' } }),
+      buyShopProduct: async () => ({ status: 'cancelled' }) },
+    '../../helpers/countText': { __esModule: true, default: n => String(n) },
+    './offers': { baseRates: () => ({}), bundleWorth: () => null },
+  });
+  return { S, events, product };
+}
+
+test('a gate iOS never drew is not logged as shown or declined, and the buy says unshown (never a no)', async () => {
+  const { S, events, product } = suppliesWith('unshown');
+  await S.refreshSupplies(true);
+  const out = await S.buyPack(product, { placement: 'offer.need_ticket' });
+  assert.equal(out.status, 'unshown');
+  assert.deepEqual(events, ['tap'], 'no gate_shown, no gate_declined for a gate nobody saw');
+  assert.equal(S.outcomeMessage(out, null), null, 'no alert: the gate shows its own "Tap it again" hint');
+});
+
+test('a grown-up\'s real no is still logged as shown, then declined', async () => {
+  const { S, events, product } = suppliesWith('no');
+  await S.refreshSupplies(true);
+  const out = await S.buyPack(product, { placement: 'offer.need_ticket' });
+  assert.equal(out.status, 'declined');
+  assert.deepEqual(events, ['tap', 'gate_shown', 'gate_declined']);
+});
+
+test('the gate marks an ask it never drew as unshown, and the offer row is busy from the tap with a pressed look', () => {
+  const gate = src('src/components/GrownUpGate.tsx');
+  assert.match(gate, /pressTrace\('gate\.watchdog'[^\n]*\n\s*showRetryHint\(gateRetryHint\(reqRef\.current\.reason\)\);\n\s*reqRef\.current\.unshown = true;/);
+  assert.match(gate, /resolve: ok => resolve\(request\.unshown \? 'unshown' : ok \? 'yes' : 'no'\)/);
+  assert.match(gate, /if \(left && !shownRef\.current\) left\.unshown = true;/, 'a gate torn before it showed is not a no');
+  const offer = src('src/components/money/CalmOffer.tsx');
+  assert.match(offer, /haptic\('tapLight'\);\n[^\n]*\n\s*if \(placement !== 'win_vip' && placement !== 'high_point' && pack\) setBusy\(true\);/);
+  assert.match(offer, /style=\{\(\{ pressed \}\) => \[st\.slimTap, pressed && st\.slimPressed, busy && st\.slimBusy\]\}/);
+});
