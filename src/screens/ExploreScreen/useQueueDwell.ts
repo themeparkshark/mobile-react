@@ -55,9 +55,9 @@ export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, 
   /** Nearly still (no walk): a missed poll with no movement holds; walking off never does. */
   readonly still?: boolean;
   /**
-   * The last two fixes are both more than DWELL_STILL_METERS from where the offer last showed: the player walked
-   * off. It goes at once, even while the detector still names that line from the time gathered there (T074 hold:
-   * Matterhorn's offer walked along to Mad Tea Party, then dropped in front of a player standing in that line).
+   * Walking right now (walkingNow): the player walked off. It goes at once, even while the detector still names
+   * that line from the time gathered there (T074 hold: Matterhorn's offer walked along to Mad Tea Party, then
+   * dropped in front of a player standing in that line).
    */
   readonly walkedOff?: boolean;
 }): QueueDwell | null {
@@ -71,10 +71,19 @@ export function nextDwell(previous: QueueDwell | null, seen: QueueDwell | null, 
   return input.now - input.lastShownAt <= DWELL_HOLD_MS ? previous : null;
 }
 
-/** Pure: the last two fixes are both farther than DWELL_STILL_METERS from `anchor` (one GPS jump is not a walk). */
-export function walkedOffFrom(anchor: Sample | null, samples: readonly Sample[]): boolean {
-  if (!anchor || samples.length < 2) return false;
-  return samples.slice(-2).every(s => meters(anchor, s) > DWELL_STILL_METERS);
+/** Walking pace, not a line shuffle: more than this many meters inside WALK_WINDOW_MS. */
+export const WALK_METERS = 15;
+export const WALK_WINDOW_MS = 20_000;
+
+/**
+ * Pure: the player is walking right now. The last two fixes are both more than WALK_METERS from the oldest fix of
+ * the last WALK_WINDOW_MS (a line moves a few meters at a time; one GPS jump and back is not a walk).
+ */
+export function walkingNow(samples: readonly Sample[], now: number): boolean {
+  const recent = samples.filter(s => now - s.at <= WALK_WINDOW_MS);
+  if (recent.length < 3) return false;
+  const first = recent[0];
+  return recent.slice(-2).every(s => meters(first, s) > WALK_METERS);
 }
 
 let waitEnded: { rideId: number; at: number } | null = null;
@@ -94,8 +103,6 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
   const [dwell, setDwell] = useState<QueueDwell | null>(null);
   const samples = useRef<Sample[]>([]);
   const lastShownAt = useRef<number | null>(null);
-  /** Where the player stood the last time the offer showed (its walk-off check). */
-  const shownAt = useRef<Sample | null>(null);
   const lat = location?.latitude, lng = location?.longitude;
   useEffect(() => {
     if (lat == null || lng == null || !Number.isFinite(lat) || !Number.isFinite(lng)) return;
@@ -107,14 +114,11 @@ export default function useQueueDwell(parkId: number | null, enabled: boolean, r
     const check = () => {
       const now = read();
       const at = Date.now();
-      const shows = !!now && now.parkId === parkId && dwellShows({ rideId: now.rideId, rideName: now.rideName, parkId: now.parkId }, {
+      const shows = !!now && now.parkId === parkId && !walkingNow(samples.current, at) && dwellShows({ rideId: now.rideId, rideName: now.rideName, parkId: now.parkId }, {
         still: nearlyStill(samples.current, at), endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null, now: at,
       });
-      if (now && shows) {
-        lastShownAt.current = at;
-        shownAt.current = samples.current[samples.current.length - 1] ?? shownAt.current;
-      }
-      const walkedOff = walkedOffFrom(shownAt.current, samples.current);
+      const walkedOff = walkingNow(samples.current, at);
+      if (now && shows && !walkedOff) lastShownAt.current = at;
       setDwell(previous => nextDwell(previous,
         now && now.parkId === parkId ? { rideId: now.rideId, rideName: now.rideName, parkId: now.parkId } : null, shows,
         { now: at, lastShownAt: lastShownAt.current, endedRideId: waitEnded?.rideId ?? null, endedAt: waitEnded?.at ?? null,
