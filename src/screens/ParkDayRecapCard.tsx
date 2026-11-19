@@ -151,7 +151,7 @@ export default function ParkDayRecapCard({ parkId, atPark, refreshVersion, loadR
       <Text style={styles.linkText}>Back to today</Text>
       <GameIcon name="arrow" size={20} />
     </Pressable>}
-    <Text style={styles.note}>This story comes from your game wins and time in line. Your ride memories are in your ride journal.</Text>
+    <Text style={styles.note}>This story comes from your game wins and time in line. Your ride memories are in your Ride Tracker.</Text>
   </View>;
 }
 

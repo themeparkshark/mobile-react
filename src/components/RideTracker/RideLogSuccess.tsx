@@ -116,7 +116,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
               style={{ width: 35, height: 35 }} contentFit="contain" />
           </Pressable>
         </TopbarColumn>
-        <TopbarColumn><TopbarText>Ride Journal</TopbarText></TopbarColumn>
+        <TopbarColumn><TopbarText>Ride Tracker</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false}>
           {onLogAnother && (
             <Pressable
@@ -147,7 +147,7 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
           ) : xpEarned > 0 ? (
             <Text style={styles.xpText}>+{xpEarned} XP</Text>
           ) : (
-            <Text style={styles.journalText}>Saved to your ride journal</Text>
+            <Text style={styles.journalText}>Saved to your Ride Tracker</Text>
           )}
         </Animated.View>
 

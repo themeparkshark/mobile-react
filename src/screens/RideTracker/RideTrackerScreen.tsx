@@ -242,10 +242,10 @@ export default function RideTrackerScreen() {
         >
           <View style={s.heroCenter}>
             <View style={s.heroCopy}>
-              <Text style={s.heroEyebrow}>YOUR RIDE JOURNAL</Text>
+              <Text style={s.heroEyebrow}>YOUR RIDES</Text>
               {has ? <CountUp to={stats.total_rides} style={s.heroNum} />
                 : <Text style={s.heroNum}>{loadUnavailable ? '-' : '0'}</Text>}
-              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'JOURNAL OFFLINE' : Number(stats?.total_rides) === 1 ? 'RIDE LOGGED' : 'RIDES LOGGED'}</Text>
+              <Text style={s.heroLabel}>{loadUnavailable && !stats ? 'RIDES OFFLINE' : Number(stats?.total_rides) === 1 ? 'RIDE LOGGED' : 'RIDES LOGGED'}</Text>
               {waitingRides > 0 && (
                 <View style={s.heroWaiting} accessibilityLabel={`${rideCountWords(waitingRides)} waiting on your phone`}>
                   <Text style={s.heroWaitingText}>+{waitingRides} WAITING</Text>
@@ -329,12 +329,12 @@ export default function RideTrackerScreen() {
 
           {waitingRides > 0 && (
             <View style={s.waitingNote} accessible accessibilityLiveRegion="polite"
-              accessibilityLabel={`${rideCountWords(waitingRides)} saved on your phone: ${waitingList.map(r => r.ride_name).join(', ')}. ${waitingRides === 1 ? 'It joins' : 'They join'} your journal when you have signal.`}>
+              accessibilityLabel={`${rideCountWords(waitingRides)} saved on your phone: ${waitingList.map(r => r.ride_name).join(', ')}. ${waitingRides === 1 ? 'It joins' : 'They join'} your Ride Tracker when you have signal.`}>
               <View style={s.waitingHead}>
                 <GameIcon name="retry" size={24} />
                 <View style={{ flex: 1 }}>
                   <Text style={s.waitingTitle}>{rideCountWords(waitingRides)} saved on your phone</Text>
-                  <Text style={s.waitingText}>{waitingRides === 1 ? 'It joins' : 'They join'} your journal when you have signal.</Text>
+                  <Text style={s.waitingText}>{waitingRides === 1 ? 'It joins' : 'They join'} your Ride Tracker when you have signal.</Text>
                 </View>
               </View>
               {waitingList.slice(0, 3).map(ride => (
@@ -379,7 +379,7 @@ export default function RideTrackerScreen() {
           {/* ── Log a Ride ── */}
           <FadeIn delay={has ? 250 : 100}>
             <Pressable
-              accessibilityRole="button" accessibilityLabel="Log a ride in your journal"
+              accessibilityRole="button" accessibilityLabel="Log a ride in your Ride Tracker"
               onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); nav.navigate('RideLog'); }}
               style={({ pressed }) => [s.logBtn, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.98 }], opacity: 0.9 }]}
             >
@@ -501,7 +501,7 @@ export default function RideTrackerScreen() {
                 <View style={{ alignItems: 'center', paddingVertical: 24 }}>
                   <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
                     style={s.emptyShark} contentFit="contain" />
-                  <Text style={s.emptyTitle}>Start Your Ride Journal!</Text>
+                  <Text style={s.emptyTitle}>Log Your First Ride!</Text>
                   <Text style={s.emptySub}>
                     Track every ride, earn achievements, and level up your rider rank!
                   </Text>

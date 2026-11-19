@@ -78,8 +78,8 @@ export function rideLogWaitReason(error: unknown): RideLogWaitReason {
 export function rideLogWaitLine(reason: RideLogWaitReason, count = 1): string {
   const subject = count === 1 ? 'It joins' : 'They join';
   return reason === 'signin'
-    ? `${subject} your journal when you sign in again.`
-    : `${subject} your journal when you have signal.`;
+    ? `${subject} your Ride Tracker when you sign in again.`
+    : `${subject} your Ride Tracker when you have signal.`;
 }
 
 let signedInPlayerId: number | null = null;

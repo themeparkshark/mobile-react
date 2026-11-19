@@ -322,8 +322,8 @@ test('the recap line, the journal label and the Adventure stamp', () => {
   assert.equal(rideStep.timedWaitMinutes(0, 11 * 60_000 + 50_000), 11, 'whole minutes, like the recap');
   assert.equal(rideStep.timedWaitMinutes(null, 5), null);
   const model = loadTs('src/screens/RideTracker/rideJournalModel.ts');
-  assert.equal(model.journalStepLabel('details', true), 'RIDE JOURNAL', 'never "3 of 3" without steps 1 and 2');
-  assert.equal(model.journalStepLabel('details', false), 'RIDE JOURNAL · 3 OF 3');
+  assert.equal(model.journalStepLabel('details', true), 'LOG A RIDE', 'never "3 of 3" without steps 1 and 2');
+  assert.equal(model.journalStepLabel('details', false), 'LOG A RIDE · 3 OF 3');
   assert.equal(rideStep.adventureRideStampDue({ id: 1, phase: 'celebrate', ride: { ride_id: 583 } }, 583), true);
   assert.equal(rideStep.adventureRideStampDue({ id: 1, phase: 'play', ride: { ride_id: 583 } }, 583), false, 'its line story first');
   assert.equal(rideStep.adventureRideStampDue({ id: 1, phase: 'celebrate', ride: { ride_id: 580 } }, 583), false);

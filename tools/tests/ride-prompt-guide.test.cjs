@@ -14,8 +14,8 @@ test('ride suggestions wait behind a guide and keep their pending detection inta
   });
   receive({ id: 'ride-1', rideId: 10, rideName: 'Space Mountain', confidence: 'high', enteredAt: 0, detectedAt: 1, dwellTimeMs: 600000 });
   app.render(); assert.equal(app.tree, null); assert.equal(app.animations.length, 0);
-  active = false; app.render(); assert.ok(app.find(n => n.props?.accessibilityLabel === 'Yes, I rode Space Mountain'));
+  active = false; app.render(); assert.ok(app.find(n => n.props?.accessibilityLabel === 'I got to the ride: Space Mountain'));
   active = true; app.render(); assert.equal(app.tree, null);
-  active = false; app.render(); assert.ok(app.find(n => n.props?.accessibilityLabel === 'Yes, I rode Space Mountain'));
+  active = false; app.render(); assert.ok(app.find(n => n.props?.accessibilityLabel === 'I got to the ride: Space Mountain'));
   assert.deepEqual(removed, []); assert.deepEqual(navigated, []);
 });

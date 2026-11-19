@@ -46,7 +46,7 @@ const SLIDES: SlideData[] = [
       { x: 0, y: -40, rotate: '0deg' },
       { x: 70, y: -10, rotate: '12deg' },
     ],
-    title: 'Your Ride Journal',
+    title: 'Your Ride Tracker',
     subtitle:
       'Track every ride you\'ve ever been on. Rate them, add photos, build your complete theme park history.',
     gradient: ['#0879ca', '#0768b9'],

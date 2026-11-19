@@ -47,3 +47,21 @@ test('T084: the line Ticket fills over its 10 minutes near the ride, and the cop
     assert.match(src, /10 minutes in a ride line earns/, file);
   }
 });
+
+test('T088: one name (Ride Tracker), the timed wait is said not asked, and the ride sheet uses LinePlay\'s words', () => {
+  const visible = file => read(file).split('\n').filter(line => !/^\s*(\/\/|\*|\/\*)/.test(line)).join('\n');
+  for (const file of ['src/screens/RideTracker/RideTrackerScreen.tsx', 'src/screens/RideTracker/RideLogScreen.tsx',
+    'src/screens/RideTracker/RideBatchConfirmScreen.tsx', 'src/components/RideTracker/RideLogSuccess.tsx',
+    'src/screens/RideTracker/RideOnboardingScreen.tsx', 'src/screens/RideTracker/RideHistoryScreen.tsx',
+    'src/components/RideTracker/ShareableRideCard.tsx', 'src/screens/ParkDayRecapCard.tsx', 'src/services/rideLogOutbox.ts',
+    'src/screens/RideTracker/rideJournalModel.ts']) {
+    assert.doesNotMatch(visible(file), /['">`][^'"`\n]*\b[Jj]ournal\b|JOURNAL/, `${file} never says journal on screen`);
+  }
+  const log = read('src/screens/RideTracker/RideLogScreen.tsx');
+  assert.match(log, /\{waitTimedByLinePlay \? \(\n\s+<View style=\{\[s\.input, s\.waitTimedRow\]\}/);
+  assert.match(log, /useState\(waitTimedByLinePlay \? String\(/, 'filled on the first frame');
+  const sheet = read('src/components/RideTracker/RideDetectionOverlay.tsx');
+  assert.match(sheet, />I got to the ride<\/Text>/);
+  assert.match(sheet, />Not this time<\/Text>/);
+  assert.doesNotMatch(sheet, /DID YOU JUST RIDE|Add My Ride/);
+});

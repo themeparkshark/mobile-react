@@ -91,6 +91,7 @@ export default function RideLogScreen() {
   // and Save adds the memory to the same ride row the outbox is holding.
   const fromRideStep = route.params?.fromRideStep === true;
   const timedWait = route.params?.waitMinutes as number | undefined;
+  const waitTimedByLinePlay = fromRideStep && timedWait != null && Number.isFinite(timedWait);
   // "Log it again" from the Ride Tracker: a kept ride that could not join. Its memory comes back.
   const again = route.params?.again as { id: string; payload: LogRidePayload } | undefined;
 
@@ -103,7 +104,8 @@ export default function RideLogScreen() {
   const [rating, setRating] = useState(0);
   const [reaction, setReaction] = useState<string | null>(null);
   const [note, setNote] = useState('');
-  const [waitTime, setWaitTime] = useState('');
+  // The timed wait is there on the first frame (never an empty row that fills a moment later).
+  const [waitTime, setWaitTime] = useState(waitTimedByLinePlay ? String(Math.max(0, Math.round(timedWait!))) : '');
   const [submitting, setSubmitting] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -448,7 +450,7 @@ export default function RideLogScreen() {
               style={{ width: 35, height: 35 }} contentFit="contain" />
           </Pressable>
         </TopbarColumn>
-        <TopbarColumn><TopbarText>Ride Journal</TopbarText></TopbarColumn>
+        <TopbarColumn><TopbarText>Ride Tracker</TopbarText></TopbarColumn>
         <TopbarColumn stretch={false} />
       </Topbar>
       <ImageBackground source={require('../../../assets/images/seaweed_background.png')}
@@ -507,7 +509,7 @@ export default function RideLogScreen() {
               <Image source={require('../../../assets/images/screens/pin-collections/shark.png')}
                 style={s.unavailableShark} contentFit="contain" />
               <Text style={s.unavailableTitle}>Ride list is taking a break</Text>
-              <Text style={s.unavailableBody}>Your journal is safe. Check your internet and try again.</Text>
+              <Text style={s.unavailableBody}>Your rides are safe. Check your internet and try again.</Text>
               <Pressable onPress={() => selectedPark && loadParkRides(selectedPark)}
                 accessibilityRole="button" style={s.retryButton}>
                 <Text style={s.retryText}>Try Again</Text>
@@ -559,7 +561,15 @@ export default function RideLogScreen() {
           <ReactionPicker selected={reaction} onSelect={setReaction} />
 
           <Text style={s.sectionLabel}>Wait time (minutes)</Text>
-          <TextInput
+          {/* T088: LinePlay already timed this wait, so it is said, never asked again. */}
+          {waitTimedByLinePlay ? (
+            <View style={[s.input, s.waitTimedRow]} accessible accessibilityRole="text"
+              accessibilityLabel={`Your wait: ${waitTime} minutes. LinePlay timed it.`}>
+              <GameIcon name="line" size={22} />
+              <Text style={s.waitTimedText}>{waitTime} min in line</Text>
+              <Text style={s.waitTimedNote}>LinePlay timed it</Text>
+            </View>
+          ) : <TextInput
             style={s.input}
             placeholder={fromRideStep ? 'Minutes in line' : 'Like 45'}
             placeholderTextColor="#94a3b8"
@@ -568,7 +578,7 @@ export default function RideLogScreen() {
             onChangeText={setWaitTime}
             maxLength={4}
             accessibilityLabel="Wait time in minutes, optional"
-          />
+          />}
 
           <Text style={s.sectionLabel}>Notes (optional)</Text>
           <TextInput
@@ -692,6 +702,9 @@ const s = StyleSheet.create({
     color: '#1a1a2e', fontSize: 15, fontFamily: 'Knockout', borderWidth: 1, borderColor: 'rgba(5,52,110,0.06)',
   },
   noteInput: { minHeight: 80, textAlignVertical: 'top' },
+  waitTimedRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  waitTimedText: { color: '#103F75', fontSize: 17, fontFamily: 'Shark' },
+  waitTimedNote: { flex: 1, textAlign: 'right', color: '#315C7C', fontSize: 13, fontFamily: 'Knockout' },
   submitBtn: {
     borderRadius: 16, overflow: 'hidden',
     shadowColor: '#d4a70a', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,

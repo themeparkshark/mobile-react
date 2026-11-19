@@ -275,9 +275,9 @@ test('the kept-ride line says the real fix: signal, or signing in again', () => 
   assert.equal(mod.rideLogWaitReason({ response: { status: 403 } }), 'signin');
   assert.equal(mod.rideLogWaitReason(new Error('Network Error')), 'signal');
   assert.equal(mod.rideLogWaitReason({ response: { status: 503 } }), 'signal');
-  assert.equal(mod.rideLogWaitLine('signin'), 'It joins your journal when you sign in again.');
-  assert.equal(mod.rideLogWaitLine('signal'), 'It joins your journal when you have signal.');
-  assert.equal(mod.rideLogWaitLine('signal', 2), 'They join your journal when you have signal.');
+  assert.equal(mod.rideLogWaitLine('signin'), 'It joins your Ride Tracker when you sign in again.');
+  assert.equal(mod.rideLogWaitLine('signal'), 'It joins your Ride Tracker when you have signal.');
+  assert.equal(mod.rideLogWaitLine('signal', 2), 'They join your Ride Tracker when you have signal.');
   assert.match(read('src/screens/RideTracker/RideLogScreen.tsx'), /queuedReason: rideLogWaitReason\(e\)/);
   assert.match(read('src/components/RideTracker/RideLogSuccess.tsx'), /\{rideLogWaitLine\(queuedReason\)\}/);
 });
@@ -394,7 +394,7 @@ test('a no the app cannot explain offers Save just the ride or Try later, never 
 test('a kept ride shows a calm share line, not a loading bar', () => {
   const card = read('src/components/RideTracker/ShareableRideCard.tsx');
   assert.doesNotMatch(card, /Loading your ride total/);
-  assert.match(card, /Share once it joins your journal/);
+  assert.match(card, /Share once it joins your Ride Tracker/);
   assert.match(card, /if \(rideCount == null && !queued\)/, 'no count fetch for a ride the server does not have yet');
   assert.match(card, /\{loadingCount && <ButtonSpinner still=\{reducedMotion\} \/>\}/, 'a small spinner inside the normal button');
   assert.match(read('src/components/RideTracker/RideLogSuccess.tsx'), /<ShareableRideCard ride=\{ride\} rideCount=\{rideCount\} queued=\{queued\} \/>/);
