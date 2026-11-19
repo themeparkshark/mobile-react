@@ -34,6 +34,7 @@ test('T174: Welcome never shows the server sentence, and a late save is never "t
   assert.match(src, /const saved = await refreshPlayer\(\)\.then\(p => p\?\.username, \(\) => null\);\n\s*if \(nameSaved\(saved, name\)\) \{ celebrate\(\); return; \}\n\s*setServerError\(welcomeSaveLine\(error\)\);/);
   assert.match(src, /await updatePlayer\(\{ username: name \}\);\n\s*await refreshPlayer\(\)\.catch\(\(\) => undefined\);/, 'a saved name never turns into an error because /me was slow');
   assert.doesNotMatch(src, /error\?\.response\?\.data\?\.message/, 'no server sentence on screen');
+  assert.match(src, /slowSave \? 'The game is slow\. Saving your name…'/, 'a long save says so');
 });
 
 test('T185: the name field counts letters and says when it cut a long name; T182: the shark fits its room', () => {

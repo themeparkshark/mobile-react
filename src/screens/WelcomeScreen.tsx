@@ -66,6 +66,13 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   // T185: a name typed past 12 letters was cut: the hint says so instead of cutting it silently.
   const [cut, setCut] = useState(false);
   const [stageH, setStageH] = useState(0);
+  // T174: a save that runs long says so (the button keeps its pulse; the words say the game is just slow).
+  const [slowSave, setSlowSave] = useState(false);
+  useEffect(() => {
+    if (!submitting) { setSlowSave(false); return undefined; }
+    const timer = setTimeout(() => setSlowSave(true), 3000);
+    return () => clearTimeout(timer);
+  }, [submitting]);
   const sharkSize = welcomeSharkSize(stageH);
   const [findingOriginal, setFindingOriginal] = useState(false);
   const { refreshPlayer } = useContext(AuthContext);
@@ -103,7 +110,7 @@ export default function WelcomeScreen({ navigation }: NativeStackScreenProps<any
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ translateX: shake.value }] }));
 
   const status = check(username);
-  const hint = serverError ?? (cut ? `${NAME_MAX} letters is the most. We kept ${username}` : status.hint);
+  const hint = serverError ?? (slowSave ? 'The game is slow. Saving your name…' : cut ? `${NAME_MAX} letters is the most. We kept ${username}` : status.hint);
   const hintOk = !serverError && status.ok;
 
   const newName = () => {
