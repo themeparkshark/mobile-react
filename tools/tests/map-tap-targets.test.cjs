@@ -47,6 +47,33 @@ test('the fan lays every coin on screen, clear of the top HUD, spread wider for 
   assert.equal(fan.fanSpots(0, { x: 1, y: 1 }, screen).length, 0);
 });
 
+test('T017 hold: no fanned coin or name ever sits on another, at any screen edge, on SE, 17 Pro and Pro Max', () => {
+  const overlap = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  const screens = [{ width: 375, height: 667, top: 250, bottom: 170 }, { width: 402, height: 874, top: 280, bottom: 190 },
+    { width: 440, height: 956, top: 300, bottom: 200 }];
+  for (const sc of screens) {
+    for (let n = 1; n <= fan.FAN_MAX; n++) {
+      for (const x of [0, 20, 60, sc.width / 2, sc.width - 60, sc.width - 10]) {
+        for (const y of [sc.top + 10, sc.top + 120, (sc.top + sc.height - sc.bottom) / 2, sc.height - sc.bottom - 20]) {
+          const spots = fan.fanSpots(n, { x, y }, sc, { top: sc.top, bottom: sc.bottom });
+          assert.equal(spots.length, n);
+          const boxes = spots.map(fan.fanSlotBox);
+          for (let i = 0; i < boxes.length; i++) {
+            const b = boxes[i];
+            assert.ok(b.x >= 0 && b.x + b.w <= sc.width, `on screen x (${sc.width} n${n} at ${x},${y})`);
+            assert.ok(b.y >= sc.top - 0.5, `below the guide card (${sc.width} n${n} at ${x},${y}): ${b.y}`);
+            if (n <= 3 || sc.height - sc.bottom - sc.top >= 2 * b.h) assert.ok(b.y + b.h <= sc.height - sc.bottom + 0.5, `above PLAY! (${sc.width} n${n} at ${x},${y})`);
+            for (let j = 0; j < i; j++) assert.ok(!overlap(b, boxes[j]), `coins ${j} and ${i} overlap (${sc.width} n${n} at ${x},${y})`);
+          }
+        }
+      }
+    }
+  }
+  // The grader's case: Pro Max, Fantasyland +2 at the left edge (Alice in Wonderland and Mad Tea Party).
+  const pm = fan.fanSpots(2, { x: 48, y: 505 }, { width: 440, height: 956 }, { top: 300, bottom: 200 });
+  assert.ok(!overlap(fan.fanSlotBox(pm[0]), fan.fanSlotBox(pm[1])), 'Mad Tea Party is never under Alice');
+});
+
 test('a "+N" island fans out instead of zooming, and a fanned coin is picked like its island', () => {
   const press = explore.slice(explore.indexOf('const handleTaskPress = useCallback('), explore.indexOf('const pickTaskRef'));
   assert.doesNotMatch(press, /zoom \+ 1\.5|zoom < 19\.5/, 'no zoom in, zoom back out loop');
