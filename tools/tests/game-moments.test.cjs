@@ -168,7 +168,7 @@ test('the shell wires the countdown, the GO frame and the last 5 seconds', () =>
   assert.match(shell, /<CountdownStage /);
   assert.match(shell, /<FinalSeconds /);
   assert.match(shell, /if \(step\.at >= GO_AT_MS\) beginPlayRef\.current\(\)/, 'play opens on the GO frame');
-  assert.match(shell, /\}, \[phase, visible, clearCountdown, countdownStyle, stageOn\]\);/, 'a re-rendering game never restarts the count');
+  assert.match(shell, /\}, \[phase, visible, clearCountdown, countdownStyle, stageOn, stageHeld\]\);/, 'a re-rendering game never restarts the count');
   assert.match(shell, /startCount\(\[go\], 0\);/, 'tap skips straight to GO');
   assert.match(shell, /secondsLeft\?: number \| null/);
   assert.match(shell, /cdPill/, 'the instruction sits in a pill, the number in clear space');
@@ -197,7 +197,7 @@ test('Whack: no words for a fast tapper (core loop 5.3), a gold clock (never cor
 test('round 2: the count waits for the stage to draw (with a cap), the field fades in, the pill breathes', () => {
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.match(shell, /stageReady\?: boolean/);
-  assert.match(shell, /if \(phase !== 'countdown' \|\| !visible \|\| !stageOn\) return;/, 'no count over a blank stage');
+  assert.match(shell, /if \(phase !== 'countdown' \|\| !visible \|\| !stageOn \|\| stageHeld\) return;/, 'no count over a blank stage, none off stage (w4 T036)');
   assert.match(shell, /setTimeout\(\(\) => setReadyCap\(true\), STAGE_READY_MAX_MS\)/, 'a stage that never reports still counts');
   assert.ok(gm.STAGE_READY_MAX_MS <= 4000);
   assert.match(shell, /fieldInStyle/);

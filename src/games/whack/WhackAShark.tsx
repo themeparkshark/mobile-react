@@ -30,6 +30,7 @@ import AsyncStorage from '../../gamekit/core/playerStorage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
+import { useStageHold } from '../../gamekit/StageHoldContext';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { StampLayer, type StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useCamera } from '../../gamekit/fx/useCamera';
@@ -240,6 +241,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const ride = format === 'ride';
   // The ride format outside a paid ride challenge is Home Defend (HomeLive): no coin, its own title and stamp.
   const rideChallenge = useContext(RideChallengeContext);
+  // Off stage under the ticket punch (T036): the board draws, the music waits for the hand-over.
+  const stageHeld = useStageHold();
   // LinePlay's no-clock rule (T082): in a line the timer ring drains with no number, like a ride coin.
   const inLine = useContext(LinePlayMovementContext) != null;
   const defend = ride && !rideChallenge;
@@ -430,7 +433,7 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const cues = useWhackCues(visible);
 
   const shape = tl?.shape ?? 'b1';
-  const bed = !visible || result ? null
+  const bed = !visible || stageHeld || result ? null
     : fever ? pick('mus_whack_fever', 'chris.track1')
       : shape === 'b5' || shape === 'raid' ? pick('mus_whack_boss', 'chris.track1')
         : shape === 'b3' || shape === 'b4' || shape === 'rush' ? pick('mus_whack_intense', 'chris.track1')

@@ -54,6 +54,7 @@ import {
 } from './engine/config';
 import { factKeysOf, type PoolQuestion } from './engine/content';
 import { lockBadge } from './engine/lockBadge';
+import { tileTapOutcome } from './engine/tapGate';
 import { applyMatchToRank, pickBark, BARKS } from './engine/finAI';
 import {
   createTally, finalPicker, finBellAnswerMs, finCategoryPick, finInput, ghostInput, makeGhost, NO_INPUT, planFromIds, planMatch, resolveRound,
@@ -634,25 +635,19 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const camera = useCamera({ width: W, height: H, config: CAMERA_PRESETS.trivia, timeScale: clock.fxScale, reducedMotion, walking: !!movement?.moving });
 
   /** UI-thread lock gate (tiles): release, or the Final hold ring closing. */
+  // T051: tiles are touchable while still striped; this clock gate decides (engine/tapGate.ts), so a tap
+  // in the moment before the faces draw locks on time, and one before the tiles open wiggles instead of vanishing.
   const onTapUI = useCallback((i: number) => {
     'worklet';
     const q = qc.value;
-    if (q.phase === PH_READ) {
+    const my = q.t - q.unlockAt;
+    const out = tileTapOutcome(q.phase, q.kind, my, ((q.removed >> i) & 1) === 1, GUARD_MS);
+    if (out === 'early') {
       runOnJS(dispatch)(EV_EARLY, i, 0);
-      return;
-    }
-    if ((q.removed >> i) & 1) return;
-    if (q.phase === PH_LIVE && q.kind !== K_BELL) {
-      const my = q.t - q.unlockAt;
-      if (my < GUARD_MS) {
-        runOnJS(dispatch)(EV_EARLY, i, 0);
-        return;
-      }
+    } else if (out === 'lock') {
       q.phase = PH_LOCKED;
       runOnJS(dispatch)(EV_LOCK, i, my);
-      return;
-    }
-    if (q.phase === PH_SUB) {
+    } else if (out === 'sub') {
       q.phase = PH_WAIT;
       runOnJS(dispatch)(EV_SUB_LOCK, i, q.sub);
     }
@@ -1970,6 +1965,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
                         height={tileGeom.h}
                         onTapUI={onTapUI}
                         onTouch={onTileTouch}
+                        disabled={held}
                         holdToLock={finalRound}
                         flipDelay={i * CEREMONY.unlockStaggerMs}
                         heads={heads[i] ?? []}

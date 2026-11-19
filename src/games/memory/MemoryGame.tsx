@@ -60,6 +60,7 @@ import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
 import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
+import { useStageHold } from '../../gamekit/StageHoldContext';
 import { noteRideTry } from '../../gamekit/results/rideTry';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
@@ -427,6 +428,11 @@ export default function MemoryGame({
   const inLineRef = useRef(movement != null);
   inLineRef.current = movement != null;
   const rideChallenge = useContext(RideChallengeContext);
+  // Off stage under the ticket punch or a first play's how-to card (T036, N04): the board is built and dealt
+  // in place (no sound), so it is on screen at the hand-over; the barker and the bot wait for it.
+  const stageHeld = useStageHold();
+  const stageHeldRef = useRef(stageHeld);
+  stageHeldRef.current = stageHeld;
   const rideChallengeRef = useRef(rideChallenge);
   rideChallengeRef.current = rideChallenge;
   const giveUpRef = useRef<(() => void) | null>(null);
@@ -816,9 +822,11 @@ export default function MemoryGame({
     const t = setTimeout(() => {
       if (dealtKey.current === key) return;
       dealtKey.current = key;
-      dealCards(false);
+      // Off stage the cards land in place at once (nobody can see a deal under the punch, N04).
+      const offStage = stageHeldRef.current;
+      dealCards(offStage);
       const n = geo.cols * geo.rows;
-      later(reducedMotion ? 60 : n * 38 + 240, () => setStageDealt(true));
+      later(reducedMotion || offStage ? 60 : n * 38 + 240, () => setStageDealt(true));
     }, 30);
     return () => clearTimeout(t);
   }, [geo, boardKey, dealCards, later, reducedMotion]);
@@ -855,6 +863,14 @@ export default function MemoryGame({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // The first-play-of-the-day barker held off stage plays as soon as the board is seen.
+  const introWaiting = useRef(false);
+  useEffect(() => {
+    if (stageHeld || !introWaiting.current) return;
+    introWaiting.current = false;
+    later(200, () => { stage.current?.intro(); awning.current?.ribbon('CLEAR THE BOARD'); });
+  }, [stageHeld, later]);
+
   // Open / rematch: build a fresh run.
   useEffect(() => {
     if (!visible) return;
@@ -885,7 +901,11 @@ export default function MemoryGame({
       if (mode === 'ride' || mode === 'warmup') {
         const d = new Date();
         const day = `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
-        if (await takeDailyIntro(day)) later(200, () => { stage.current?.intro(); awning.current?.ribbon('CLEAR THE BOARD'); });
+        if (await takeDailyIntro(day)) {
+          // The barker plays where it is seen: after the punch or how-to card hands over (T036).
+          if (stageHeldRef.current) introWaiting.current = true;
+          else later(200, () => { stage.current?.intro(); awning.current?.ribbon('CLEAR THE BOARD'); });
+        }
       }
     })();
     return () => { live = false; clearTimers(); };
@@ -1006,7 +1026,7 @@ export default function MemoryGame({
 
   // Idle shimmer: one random untouched face-down card every 6-8s (every 2s in Showtime).
   useEffect(() => {
-    if (!visible || reducedMotion) return undefined;
+    if (!visible || stageHeld || reducedMotion) return undefined;
     let t: ReturnType<typeof setTimeout>;
     const tick = () => {
       const r = runRef.current;
@@ -1029,7 +1049,7 @@ export default function MemoryGame({
     };
     t = setTimeout(tick, 4000);
     return () => clearTimeout(t);
-  }, [visible, reducedMotion, shimmer]);
+  }, [visible, stageHeld, reducedMotion, shimmer]);
 
   // ---------------------------------------------------------------------------
   // Results
@@ -2454,7 +2474,7 @@ export default function MemoryGame({
   // ---------------------------------------------------------------------------
   // Autoplay (dev capture only)
   // ---------------------------------------------------------------------------
-  useMemoryAutoplay({ runRef, tapSlot, enabled: visible && !result && !tryScreen, capture: captureAutoplay });
+  useMemoryAutoplay({ runRef, tapSlot, enabled: visible && !stageHeld && !result && !tryScreen, capture: captureAutoplay });
 
   // ---------------------------------------------------------------------------
   // Try again (Ride Sprint: 3 tries per Ticket), rematch, wrap-up
@@ -2612,6 +2632,7 @@ export default function MemoryGame({
       finalCount={!calmClock}
       countdownY={0.62}
       stageReady={stageDealt}
+      stageDrawn={!!geo}
       objective={mode === 'ride' ? (r?.signal ? 'Low signal: clear in 24 turns' : 'Clear the board') : mode === 'daily' ? 'Two slips and you are out' : mode === 'race' ? 'Same board, four sharks. First to clear wins.' : mode === 'warmup' ? 'Find the pairs. Remember where you saw them.' : MEMORY_TIME_ATTACK_OBJECTIVE}
       result={result}
       gameId="memory"

@@ -5,7 +5,6 @@ import { AccessibilityInfo, Pressable, StyleSheet, Text, useWindowDimensions, Vi
 import Animated, {
   cancelAnimation,
   Easing,
-  runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withDelay,
@@ -20,6 +19,13 @@ const TICKET = require('../../assets/images/ticket-icon.png');
 const TICKET_RATIO = 549 / 799;
 /** Punch beats (ms after PLAY): the tear, then the game card as soon as the server has dealt it. */
 export const PUNCH_T = { ready: 420, punch: 520, card: 640, done: 1650 } as const;
+/**
+ * Fix round w4 (N04, T036): the game card's shortest stay after the tear (ms), then the punch hands over as soon
+ * as the game under it reports its board drawn. A repeat start (TRY AGAIN) already knows its game: a short stay.
+ */
+export const CARD_HOLD_MS = { first: 900, repeat: 450 } as const;
+/** Never wait longer than this after the tear for the board (a game that never reports drawn hands over anyway). */
+export const BOARD_WAIT_MAX_MS = 3000;
 
 /**
  * Spending a Park Ticket is the "throw": the ticket slides in, gets punched in
@@ -34,6 +40,9 @@ export default function TicketPunch({
   note,
   kicker = 'YOUR GAME',
   winLine,
+  onCardShown,
+  boardReady,
+  quick = false,
   onDone,
 }: {
   /**
@@ -49,6 +58,18 @@ export default function TicketPunch({
   readonly winLine?: string;
   /** Small line under the card, e.g. "Rescue Pass used". */
   readonly note?: string;
+  /**
+   * The tear has started and the game's card is popping (fix round w4, T036): the ride mounts the dealt game
+   * under the punch now, so its mount never holds the tear back and its board is drawn before the hand-over.
+   */
+  readonly onCardShown?: () => void;
+  /**
+   * The game mounted under the punch has drawn its board (w4 N04). Undefined keeps the fixed beat; false holds
+   * the card (never a blank page after the hand-over) until it turns true or BOARD_WAIT_MAX_MS passes.
+   */
+  readonly boardReady?: boolean;
+  /** A repeat start of the same game (TRY AGAIN): the card's short stay (CARD_HOLD_MS.repeat). */
+  readonly quick?: boolean;
   readonly onDone: () => void;
 }) {
   const { width, height } = useWindowDimensions();
@@ -74,6 +95,14 @@ export default function TicketPunch({
     onDone();
   };
   const at = (ms: number, fn: () => void) => { timers.current.push(setTimeout(fn, ms)); };
+  /** The card has had its shortest stay; the hand-over waits only for the board now. */
+  const held = useRef(false);
+  const boardReadyRef = useRef(boardReady);
+  boardReadyRef.current = boardReady;
+  const tryFinish = () => { if (held.current && boardReadyRef.current !== false) finish(); };
+  const holdThen = (ms: number) => at(ms, () => { held.current = true; tryFinish(); });
+  useEffect(() => { if (boardReady) tryFinish(); }, [boardReady]); // eslint-disable-line react-hooks/exhaustive-deps
+  const safetyMs = (fixed: number) => (boardReady === undefined ? fixed : BOARD_WAIT_MAX_MS);
 
   // The ticket slides in at once (PLAY is answered in the first frame) and bobs gently while the spend is on
   // its way; it tears the moment the server has dealt the game, so the scene is never empty (T036).
@@ -105,10 +134,12 @@ export default function TicketPunch({
     if (!torn || !gameName || cardShown.current || reduced == null) return;
     cardShown.current = true;
     if (reduced) {
+      onCardShown?.();
       tear.value = 1;
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       card.value = withTiming(1, { duration: 200 });
-      at(1000, finish);
+      holdThen(quick ? 600 : 1000);
+      at(safetyMs(1000), finish);
       return;
     }
     cancelAnimation(bob);
@@ -118,17 +149,17 @@ export default function TicketPunch({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     playSfx('hit');
     const pop = PUNCH_T.card - PUNCH_T.punch;
-    card.value = withDelay(pop, withSequence(
-      withSpring(1, { damping: 9, stiffness: 190 }),
-      withDelay(PUNCH_T.done - PUNCH_T.card - 500, withTiming(1, { duration: 1 }, (ok) => {
-        if (ok) runOnJS(finish)();
-      })),
-    ));
+    card.value = withDelay(pop, withSpring(1, { damping: 9, stiffness: 190 }));
+    // w4 N04: the hand-over no longer waits for the spring to settle plus a fixed beat (about 1.6 s after the
+    // tear on device); it comes after the card's short stay, as soon as the board under it is drawn.
+    holdThen(pop + (quick ? CARD_HOLD_MS.repeat : CARD_HOLD_MS.first));
     at(pop + 60, () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       playSfx('go', 0.9);
     });
-    at(PUNCH_T.done - PUNCH_T.punch + 400, finish); // safety net
+    at(safetyMs(PUNCH_T.done - PUNCH_T.punch + 400), finish); // safety net
+    // The tear and the card run on the UI thread; the game mounts behind them from here (T036).
+    onCardShown?.();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [torn, gameName, reduced]);
 
@@ -165,7 +196,7 @@ export default function TicketPunch({
   }));
 
   return (
-    <Pressable style={StyleSheet.absoluteFill} onPress={finish} accessibilityRole="button"
+    <Pressable style={StyleSheet.absoluteFill} onPress={() => { held.current = true; tryFinish(); }} accessibilityRole="button"
       accessibilityLabel={`${kicker.charAt(0)}${kicker.slice(1).toLowerCase()}: ${gameName ?? 'your Ticket'}. ${winLine ?? rideName}.${gameName ? ' Tap to start.' : ''}`}>
       <Image source={require('../../assets/images/water_background.png')} style={StyleSheet.absoluteFill} contentFit="cover" />
       <View style={[StyleSheet.absoluteFill, styles.scrim]} />

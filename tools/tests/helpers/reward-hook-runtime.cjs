@@ -146,6 +146,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       // Fix W3 flow: the coin card's pure rules run for real; the seen-cards store, the offer slots and the line lookup are quiet.
       if (/(^|\/)api\/broadcastFilter$/.test(name)) return require('./ts-module.cjs').loadTs('src/api/broadcastFilter.ts');
       if (/(^|\/)task-attempt\/pendingWins$/.test(name)) return { markWinShown() {}, findPendingWin: async () => ({ win: null, unsure: false }), pendingWinRedeemable() {} };
+      // Fix w4 T038: the picture re-deal rule runs for real (picture games are off in these stubs, so it never fires).
+      if (/(^|\/)task-attempt\/pictureRedeal$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/task-attempt/pictureRedeal.ts');
       if (/(^|\/)task-attempt\/reconcileDelay$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/task-attempt/reconcileDelay.ts');
       // Fix W3 T030: PLAY! looks up earned Tickets at 0 Tickets with or without a free try: an empty Stamp Book by default.
       if (/(^|\/)api\/endpoints\/me\/stamps$/.test(name)) return { getStamps: async () => ({ stamps: {}, newly_earned: [] }), claimStampReward: async () => ({}) };
