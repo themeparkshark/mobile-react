@@ -834,6 +834,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const startRound = useCallback((p: MatchPlan, i: number) => {
     const r = p.rounds[i];
     if (!r) return;
+    pressTrace('trivia.round', () => `${i}`);
     setRoundIdx(i);
     setRound(r);
     ringSpeed.value = -1;
@@ -1057,6 +1058,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (__DEV__ && (ev === EV_LOCK || ev === EV_SUB_LOCK || ev === EV_BUZZ || ev === EV_FIN_BUZZ)) console.log('[trivia-duel] ev', { ev, a, b, round: r.index, type: r.spec.type, sub: subMode });
     switch (ev) {
       case EV_UNLOCK: {
+        pressTrace('trivia.open');
         if (r.spec.type === 'buzz') {
           // Rev 7 bell: the tiles stay face-down for everyone; the bell goes live.
           setBellOn(true);
