@@ -14,6 +14,7 @@ import { TREATS_PER_TICKET, type FreeTicketStep } from './freeTickets';
 export type GuideAction =
   | 'go'            // draw the dotted path to the target and follow it
   | 'lineplay'      // open LinePlay for the target's line
+  | 'lineplay_here' // open LinePlay for the line the player is standing in (the in-line offer, T074)
   | 'claim'         // claim the earned Tickets in place
   | 'see_ways'      // the free ways to a Ticket
   | 'level_up'      // open the coin card to level it up
@@ -102,6 +103,29 @@ export interface GuideCopyContext {
 
 /** Within this many meters of its coin, PLAY! is about to rise: the card says "Almost there" (T009), never a number. */
 export const ALMOST_THERE_METERS = 16;
+
+/**
+ * The in-line offer (T074): standing about 90 s in an open ride line puts "In line? LINEPLAY" on the card as its
+ * own picture button under whatever the card says (PLAY!, the path, a pick), feed or no feed, owned coin or not.
+ * It never replaces the card, so the card never flips between Tap PLAY! and In line?. Null when the card already
+ * is about this line (the in-line or Line story state). Pure.
+ */
+export function lineOffer(state: string, dwellRideName: string | null | undefined): { readonly title: string; readonly label: string } | null {
+  if (!dwellRideName || state === 'in_line' || state === 'line_story' || state === 'goodbye' || state === 'home') return null;
+  return { title: 'In line?', label: 'LINEPLAY' };
+}
+
+/**
+ * A tapped queue ride (T078): its callout makes it the guide's target, and the card offers PLAY IN LINE as the
+ * white LinePlay picture button, one tap from the map (Wait Times is no longer the only way in). Only for a ride
+ * with a real line (the queue catalog resolved it) and while the card is about that ride. Pure.
+ */
+export function calloutLineOffer(queueRide: { readonly rideId: number } | null | undefined, selectedTaskId: number | null,
+  targetTaskId: number | null, state: string): { readonly title: string; readonly label: string; readonly action: GuideAction } | null {
+  if (!queueRide || !(queueRide.rideId > 0) || selectedTaskId == null || selectedTaskId !== targetTaskId) return null;
+  if (state === 'in_line' || state === 'line_story' || state === 'goodbye' || state === 'home') return null;
+  return { title: '', label: 'PLAY IN LINE', action: 'lineplay' };
+}
 
 /**
  * One gold button per screen (fix W1 item 9): while PLAY! is up, the card's own gold button becomes its quiet

@@ -24,7 +24,7 @@ import {
 } from '@shopify/react-native-skia';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
 import {
-  CLOCK_BASE, GATE_CLOCK, MODE_RALLY, MODE_RIDE, PH_POCKET, POCKET_SHORT, timedMode, type SimState,
+  CLOCK_BASE, GATE_CLOCK, MODE_QUEUE, MODE_RALLY, MODE_RIDE, PH_POCKET, POCKET_SHORT, timedMode, type SimState,
 } from '../sim/core';
 import type { RivalSlot } from '../useSharkyEngine';
 import type { SharkyLayout } from './view';
@@ -106,8 +106,10 @@ export const SharkyHud = React.memo(function SharkyHud({ layout: L, sim, pres, r
       const full = CLOCK_BASE + 3 * GATE_CLOCK;
       frac = Math.max(0, Math.min(1, s.clockSteps / full));
       if (s.gateX > 0 && s.phase !== PH_POCKET) ghost = Math.min(1 - frac, GATE_CLOCK / full);
-      low = s.clockSteps < 480 && s.phase !== PH_POCKET;
-      label = `${Math.ceil(s.clockSteps / 60)}`;
+      // In a line (LinePlay, T082) the tide only drains: no digits, no coral, no pulse. Practice and ghosts keep them.
+      const calmTide = s.mode === MODE_QUEUE;
+      low = !calmTide && s.clockSteps < 480 && s.phase !== PH_POCKET;
+      label = calmTide ? '' : `${Math.ceil(s.clockSteps / 60)}`;
     } else {
       const within = Math.max(0, Math.min(1, ((s.dist >> 8) - s.sprintStart) / Math.max(1, s.gateX - s.sprintStart)));
       if (s.mode === MODE_RALLY) frac = within;

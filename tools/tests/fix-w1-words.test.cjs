@@ -159,12 +159,12 @@ test('item 18: Whack and Memory on a ride coin have no counting-down number, no 
   const final = read('src/gamekit/fx/FinalSeconds.tsx');
   assert.match(final, /\{count \? <Group opacity=\{ringOpacity\}>/, 'the closing ring only with count');
   assert.match(final, /\{font && count \? \(/, 'the 5-4-3 numbers only with count');
-  assert.match(read('src/gamekit/GameShellV2.tsx'), /count=\{finalCount\}/);
+  assert.match(read('src/gamekit/GameShellV2.tsx'), /count=\{finalCount && !linePlayMovement\}/);
   const whack = read('src/games/whack/WhackAShark.tsx');
   assert.match(whack, /finalCount=\{!ride\}/);
-  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /\{fontM && !hud\.ride \? <Text x=\{timerTextX\}/, 'the ring drains with no number on a ride');
+  assert.match(read('src/games/whack/render/WhackBoard.tsx'), /\{fontM && !hud\.ride && !hud\.quietTimer \? <Text x=\{timerTextX\}/, 'the ring drains with no number on a ride');
   const memory = read('src/games/memory/MemoryGame.tsx');
-  assert.match(memory, /const calmClock = flags\.overtime === 'look';/);
+  assert.match(memory, /const calmClock = flags\.overtime === 'look' \|\| flags\.quietClock;/);
   assert.match(memory, /if \(!calmClockRef\.current\) awning\.current\?\.ribbon\(/);
   assert.match(memory, /rope\.urgent\.value = e\.overtime && !calmClockRef\.current \? 1 : 0;/);
   assert.match(memory, /seconds=\{flags\.clock !== 'none' && !calmClock \? hud\.seconds : null\}/);

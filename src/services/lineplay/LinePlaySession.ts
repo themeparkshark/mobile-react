@@ -75,6 +75,7 @@ import { createNavigationPanel, createNavigationPanelProgress, traceNavigationPa
 import { nextQueueDifficulty, replaySeed, type QueueDifficulty } from './replay';
 import { primeTriviaDeck } from './triviaDeck';
 import { primeTriviaHistory } from './triviaHistory';
+import { insideLineZone, waitIsTimed, type LineZone } from './lineZone';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -106,6 +107,20 @@ export interface LocationSample {
 }
 
 /** Queue credit requires a real, recent position fix rather than a cached coordinate. */
+/** T072: the recap's retry steps while a complete is queued (the last repeats). */
+export const PENDING_RETRY_MS: readonly number[] = [3_000, 8_000, 15_000, 30_000, 60_000];
+
+/**
+ * T072: why a complete call failed. An axios timeout (ECONNABORTED, or a timeout message) or any server answer is
+ * 'slow': the server is there and may already have finished. Only no answer at all is 'offline'.
+ */
+export function completeFailureReason(error: unknown): 'slow' | 'offline' {
+  const e = error as { code?: string; message?: string; response?: unknown } | null;
+  if (e?.response) return 'slow';
+  if (e?.code === 'ECONNABORTED' || e?.code === 'ETIMEDOUT' || /timeout/i.test(e?.message ?? '')) return 'slow';
+  return 'offline';
+}
+
 export function isRecentQueueSample(sample: LocationSample | null | undefined, now = Date.now()): sample is LocationSample & { timestamp: number } {
   return Boolean(sample && Number.isFinite(sample.latitude) && Number.isFinite(sample.longitude) &&
     typeof sample.timestamp === 'number' && Number.isFinite(sample.timestamp) &&
@@ -133,6 +148,8 @@ export interface RideContext {
   readonly imageUrl?: string | null;
   /** False means the server catalog cannot award Parts for this ride. */
   readonly lineRewardsReady?: boolean;
+  /** The ride's line zone from the catalog (lineZone.ts), when known: a wait is claimed only with evidence. */
+  readonly zone?: LineZone | null;
 }
 
 export type WaitSource = 'posted' | 'last_known' | 'estimate';
@@ -201,6 +218,11 @@ export interface SessionSnapshot {
   readonly serverSessionId: string | null;
   /** The server explicitly cannot offer ride rewards for this session. */
   readonly rewardUnavailable: boolean;
+  /**
+   * Honesty (T071): is there evidence this wait happened in the ride's line (the server's timed session, or a fix
+   * inside the line zone)? False means games only: no minutes in line, no ride step, no line story credit.
+   */
+  readonly waitTimed: boolean;
   readonly rewardConnectionIssue?: RewardConnectionIssue | null;
   readonly backgroundTrackingAvailable: boolean | null;
   readonly verifiedEligibleSeconds: number;
@@ -239,6 +261,12 @@ export interface SessionSnapshot {
   readonly plannedWaitMinutes: number;
   readonly waitSource: WaitSource;
   readonly entranceWaitMinutes: number | null;
+  /**
+   * T089: the posted wait on the sign when this line started: the fresh posted wait the wait was sized from, else
+   * the first live entrance wait seen within 10 minutes of the start. Null when neither is known (never a cached
+   * number hours old). The recap's "Sign said N" uses only this.
+   */
+  readonly signAtStartMinutes: number | null;
   readonly entranceWaitObservedAt: number | null;
   readonly entranceWaitChangeMinutes: number;
   readonly extraRoundsAdded: number;
@@ -253,6 +281,11 @@ export interface SessionSnapshot {
   readonly rewards: SessionRewards | null;
   /** True while the complete call is queued for retry (offline). */
   readonly rewardsPending: boolean;
+  /**
+   * Why rewards are still on their way (T072): 'slow' when the server was reached but did not answer in time (the
+   * recap keeps retrying and never says No internet), 'offline' when nothing answered at all. Null when not pending.
+   */
+  readonly rewardsPendingReason: 'slow' | 'offline' | null;
   readonly completedActivityIds: readonly string[];
   readonly loreChoices: Readonly<Record<string, number>>;
   readonly navigationPanels?: Readonly<Record<string, NavigationPanelProgress>>;
@@ -612,6 +645,10 @@ export class LinePlaySession {
   private adaptiveEpisodeRecorded = false;
   private serverSessionId: string | null = null;
   private rewardUnavailable = false;
+  /** A fix inside the ride's line zone, or the server's own timed session, was seen this wait (T071). */
+  private atLineSeen = false;
+  /** A live fix outside the ride's line zone was seen this wait (and none inside yet). */
+  private awaySeen = false;
   private rewardConnectionIssue: RewardConnectionIssue | null = null;
   private verifiedEligibleSeconds = 0;
   private creditedParts: number | null = null;
@@ -642,6 +679,7 @@ export class LinePlaySession {
   private startedAt: number | null = null;
   private endedAt: number | null = null;
   private plannedWaitMinutes = DEFAULT_WAIT_MINUTES;
+  private signAtStart: number | null = null;
   private waitSource: WaitSource = 'estimate';
   private entranceWaitMinutes: number | null = null;
   private entranceWaitObservedAt: number | null = null;
@@ -748,6 +786,10 @@ export class LinePlaySession {
 
   private readonly retryQueue = linePlayRewardQueue;
   private readonly unsubscribeRecovery: () => void;
+  /** T072: why the complete is queued, and the recap's own retry timer while it waits. */
+  private pendingReason: 'slow' | 'offline' = 'offline';
+  private pendingRetryTimer: ReturnType<typeof setTimeout> | null = null;
+  private pendingRetryCount = 0;
 
   constructor() {
     // The queue executes completeInLineTimer with idempotency. On success it
@@ -793,6 +835,8 @@ export class LinePlaySession {
       chapter: this.chapter,
       serverSessionId: this.serverSessionId,
       rewardUnavailable: this.rewardUnavailable,
+      waitTimed: waitIsTimed({ serverSessionId: this.serverSessionId, atLineSeen: this.atLineSeen,
+        awaySeen: this.awaySeen, serverSaidNotNear: this.rewardConnectionIssue === 'nearby' }),
       rewardConnectionIssue: this.guest ? 'sign_in' : this.rewardConnectionIssue,
       backgroundTrackingAvailable: this.backgroundTrackingAvailable,
       verifiedEligibleSeconds: this.verifiedEligibleSeconds,
@@ -801,6 +845,7 @@ export class LinePlaySession {
       partsRemainingToday: this.partsRemainingToday,
       rewards: this.rewards,
       rewardsPending: this.rewardsPending,
+      rewardsPendingReason: this.rewardsPending ? this.pendingReason : null,
       partIntervalSeconds: this.partIntervalSeconds,
       sessionPartCap: this.sessionPartCap,
       ticketIntervalSeconds: this.ticketIntervalSeconds,
@@ -827,6 +872,7 @@ export class LinePlaySession {
       plannedWaitMinutes: this.plannedWaitMinutes,
       waitSource: this.waitSource,
       entranceWaitMinutes: this.entranceWaitMinutes,
+      signAtStartMinutes: this.signAtStart,
       entranceWaitObservedAt: this.entranceWaitObservedAt,
       entranceWaitChangeMinutes: this.entranceWaitChangeMinutes,
       extraRoundsAdded: this.extraRoundsAdded,
@@ -1051,6 +1097,9 @@ export class LinePlaySession {
       bonusQuestProof: this.bonusQuestProof,
       entryFix: this.entryFix,
       offlineTrail: this.offlineTrail,
+      atLineSeen: this.atLineSeen,
+      awaySeen: this.awaySeen,
+      signAtStartMinutes: this.signAtStart,
     };
     this.checkpointWrites = this.checkpointWrites.then(() => writeCheckpoint(data))
       .catch(error => console.warn('[LinePlaySession] checkpoint unavailable:', error));
@@ -1350,6 +1399,12 @@ export class LinePlaySession {
         (this.entranceWaitObservedAt != null && observedAt <= this.entranceWaitObservedAt)) return;
 
     const previous = this.entranceWaitMinutes;
+    // No fresh posted wait at the start: the first live sign within 10 minutes of it is what the sign said.
+    if (this.signAtStart == null && this.startedAt != null && observedAt - this.startedAt <= FRESH_WAIT_MS &&
+        waitMinutes > 0) {
+      this.signAtStart = waitMinutes;
+      this.persistCheckpoint();
+    }
     this.entranceWaitMinutes = waitMinutes;
     this.entranceWaitObservedAt = observedAt;
     this.entranceWaitChangeMinutes = previous == null ? 0 : waitMinutes - previous;
@@ -1471,6 +1526,8 @@ export class LinePlaySession {
     this.backgroundTrackingSessionId = null;
     this.backgroundTrackingAvailable = null;
     this.rewardUnavailable = false;
+    this.atLineSeen = false;
+    this.awaySeen = false;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
@@ -1562,6 +1619,8 @@ export class LinePlaySession {
             ? 'last_known' : saved.waitSource ?? 'estimate' }
       : await resolveSessionWait(ride);
     this.plannedWaitMinutes = wait.minutes;
+    this.signAtStart = saved ? saved.signAtStartMinutes ?? (saved.waitSource === 'posted' ? saved.plannedWaitMinutes : null)
+      : wait.source === 'posted' ? wait.minutes : null;
     this.waitSource = wait.source;
     const initialObservedAt = ride.postedWaitObservedAt;
     const initialAge = initialObservedAt == null ? Infinity : Date.now() - initialObservedAt;
@@ -1598,6 +1657,8 @@ export class LinePlaySession {
         : createCrewRelay(Math.floor(this.startedAt / 1000) + ride.rideId)
       : null;
     this.serverSessionId = saved?.serverSessionId ?? null;
+    this.atLineSeen = saved?.atLineSeen === true || saved?.serverSessionId != null;
+    this.awaySeen = saved?.awaySeen === true;
     this.verifiedEligibleSeconds = saved?.verifiedEligibleSeconds ?? 0;
     this.state = saved?.state === 'complete' ? 'complete' : 'active';
     if (this.state === 'active') this.startTicking();
@@ -1609,6 +1670,7 @@ export class LinePlaySession {
     // too, so a stationary player does not wait for another GPS update.
     const startLocation = initialLocation ?? locationDuringLoad;
     if (!this.entryFix && startLocation && this.state === 'active') this.captureEntry(startLocation);
+    if (startLocation && isRecentQueueSample(startLocation)) this.noteLineZone(startLocation);
     if (this.serverSessionId) {
       try {
         const response = await readInLineTimer(this.serverSessionId);
@@ -1683,6 +1745,8 @@ export class LinePlaySession {
     if (!result.success || !result.session_id) return;
     this.serverSnapshotRevision += 1;
     this.serverSessionId = result.session_id;
+    // The server opens a timed session only near the ride: that is the evidence of this line.
+    this.atLineSeen = true;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = result.eligible_seconds;
     this.creditedParts = result.parts_credited ?? null;
@@ -2134,7 +2198,10 @@ export class LinePlaySession {
     }
     if (!sessionId) {
       if (this.entryFix && this.startRequestId && this.ride && this.ride.rideId > 0 &&
-          this.ride.lineRewardsReady !== false && !this.rewardUnavailable) {
+          this.ride.lineRewardsReady !== false && !this.rewardUnavailable &&
+          // Only a wait with evidence of this line is sent late: never one the server said was not near it.
+          waitIsTimed({ serverSessionId: null, atLineSeen: this.atLineSeen, awaySeen: this.awaySeen,
+            serverSaidNotNear: this.rewardConnectionIssue === 'nearby' })) {
         // The whole wait was offline (airplane mode, a dead zone at the
         // entrance). Its entry checkpoint starts the session late and the
         // exit completes it, from the reward queue, whenever signal returns.
@@ -2144,6 +2211,8 @@ export class LinePlaySession {
           offlineStart: { rideId: this.ride.rideId, startRequestId: this.startRequestId, entry: this.entryFix },
           checkpoint, currentQuestProof: null, storyMemento: this.storyMemento() },
         `offline_${this.startRequestId}`);
+        this.pendingReason = 'offline';
+        this.schedulePendingRetry();
         this.emit();
         return;
       }
@@ -2167,10 +2236,12 @@ export class LinePlaySession {
         this.offlineTrail = [];
         this.applyServerSnapshot(res);
       } else {
+        this.pendingReason = 'slow';
         await this.queueComplete(sessionId, checkpoint);
       }
     } catch (e) {
       console.warn('[LinePlaySession] completeInLineTimer failed, queueing:', e);
+      this.pendingReason = completeFailureReason(e);
       await this.queueComplete(sessionId, checkpoint);
     }
     this.emit();
@@ -2211,6 +2282,25 @@ export class LinePlaySession {
     await this.retryQueue.enqueue({ sessionId,
       currentQuestProof: this.currentQuestVerified ? null : this.currentQuestProof,
       storyMemento: this.storyMemento(), checkpoint }, `complete_${sessionId}`);
+    this.schedulePendingRetry();
+  }
+
+  /**
+   * T072: while the recap waits for a queued complete, retry it (3 s, 8 s, 15 s, 30 s, then every 60 s) so a slow
+   * answer lands on the open recap with its real Part and Ticket. Idempotent on the server (the session id); the
+   * recovery listener applies the answer. Stops once rewards land or the session is disposed.
+   */
+  private schedulePendingRetry(): void {
+    if (this.pendingRetryTimer || this.disposed || !this.rewardsPending) return;
+    const delay = PENDING_RETRY_MS[Math.min(this.pendingRetryCount, PENDING_RETRY_MS.length - 1)];
+    this.pendingRetryTimer = setTimeout(() => {
+      this.pendingRetryTimer = null;
+      if (this.disposed || !this.rewardsPending || this.state !== 'complete') return;
+      this.pendingRetryCount += 1;
+      void this.retryQueue.drain().catch(() => 0).finally(() => {
+        if (!this.disposed && this.rewardsPending) this.schedulePendingRetry();
+      });
+    }, delay);
   }
 
   private storyMemento(): QueueStoryMemento | null {
@@ -2297,6 +2387,8 @@ export class LinePlaySession {
     this.adaptiveEpisodeRecorded = false;
     this.serverSessionId = null;
     this.rewardUnavailable = false;
+    this.atLineSeen = false;
+    this.awaySeen = false;
     this.rewardConnectionIssue = null;
     this.verifiedEligibleSeconds = 0;
     this.lastSuccessfulPresenceUpdateAt = 0;
@@ -2381,6 +2473,8 @@ export class LinePlaySession {
   /** Full teardown: call when the session controller is discarded. */
   dispose(): void {
     this.disposed = true;
+    if (this.pendingRetryTimer) clearTimeout(this.pendingRetryTimer);
+    this.pendingRetryTimer = null;
     this.clearForcedHeartbeats();
     this.stopTicking();
     if (this.graceTimer) clearTimeout(this.graceTimer);
@@ -2403,6 +2497,7 @@ export class LinePlaySession {
   ingestLocation(sample: LocationSample): void {
     const now = sample.timestamp ?? Date.now();
     this.lastSample = { ...sample, timestamp: now };
+    this.noteLineZone(sample);
 
     if (!this.serverSessionId &&
         (this.state === 'active' || this.state === 'paused' || this.state === 'ending')) {
@@ -2431,6 +2526,19 @@ export class LinePlaySession {
     this.lastAdvanceAt = now;
     this.queueAdvanceAt = now;
     this.advanceTrail = [fix];
+    this.emit();
+  }
+
+  /** A live fix inside the ride's line zone is evidence of this line (kept for the whole wait and its relaunch). */
+  private noteLineZone(sample: LocationSample | null | undefined): void {
+    if (this.atLineSeen || !this.ride?.zone || (this.state !== 'active' && this.state !== 'paused')) return;
+    if (!sample || !Number.isFinite(sample.latitude) || !Number.isFinite(sample.longitude)) return;
+    if (!insideLineZone(sample, this.ride.zone)) {
+      if (!this.awaySeen) { this.awaySeen = true; this.persistCheckpoint(); this.emit(); }
+      return;
+    }
+    this.atLineSeen = true;
+    this.persistCheckpoint();
     this.emit();
   }
 

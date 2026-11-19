@@ -129,6 +129,8 @@ export interface SessionRecapProps {
   crewPuzzleBonusParts?: number;
   currentQuestBonusParts?: number;
   rewardsPending: boolean;
+  /** T072: 'slow' (the server was reached) never shows No internet. */
+  rewardsPendingReason?: 'slow' | 'offline' | null;
   rewardsConfirmed: boolean;
   rewardTrackingAvailable: boolean;
   queueStamp?: { earned: boolean; new: boolean } | null;
@@ -203,6 +205,11 @@ export interface SessionRecapProps {
    * block holds the room the rest will take, so the payoff never waits on a near-empty page and nothing jumps.
    */
   settling?: boolean;
+  /**
+   * Honesty (T071): false when nothing shows this wait was in the ride's line (started from afar, the server said
+   * not near). The recap then says games, never minutes in line or a ride.
+   */
+  waitTimed?: boolean;
 }
 
 /** The room the settling block holds: about the earned tiles, the GO card and Done. */
@@ -210,14 +217,14 @@ export const RECAP_SETTLE_BLOCK_HEIGHT = 300;
 
 export default function SessionRecap({
   elapsedSeconds, activityCount, activityNames, earnedEnergy, experience, partsCount, ticketsEarned,
-  masteryBonusParts, crewPuzzleBonusParts = 0, currentQuestBonusParts = 0, rewardsPending, rewardsConfirmed,
+  masteryBonusParts, crewPuzzleBonusParts = 0, currentQuestBonusParts = 0, rewardsPending, rewardsPendingReason = null, rewardsConfirmed,
   rewardTrackingAvailable, queueStamp = null, onOpenStampBook, resolution, predictionUnscored, crewPuzzle,
   crewRelay, crewRouteNames, crewScoreNoun, coin, coinState, playerEnergy, energyUnavailable = false, rideName,
   onOpenCoin, onOpenPark, parkAvailable, feedbackEnabled = false, feedback = null, feedbackLoading = false,
   feedbackSaving = false, feedbackError = null, onRateWait, onFavoriteActivity, endReason = null, onStillInLine, onGotToRide,
   doneLabel = 'Done', onDone, bonusRecap = null, heroInventory = null, onOpenInventory, groupSlot = null, snackSlot = null, nextAdventure = null, adventuresFound = null,
   signLine = null, rideLogged = null, onAddMemory, adventureStamped = false, go = null, goPending = false, onGo, showEnergy = true, showXp = true,
-  showTickets = false, crew = false, settling = false,
+  showTickets = false, crew = false, settling = false, waitTimed = true,
 }: SessionRecapProps) {
   const bonusMode = rewardsConfirmed && bonusRecap != null;
   const rows = bonusMode ? recapRows(bonusRecap) : [];
@@ -225,10 +232,10 @@ export default function SessionRecap({
   const reducedMotion = useReducedGameMotion();
   const minutes = useCountUp(Math.floor(elapsedSeconds / 60), 120, reducedMotion);
   const wholeMinutes = Math.floor(elapsedSeconds / 60);
-  const rideUp = endReason === 'boarded';
-  const leftQueue = endReason === 'left_queue';
-  // "I left the line" (manual) is a wrapped-up wait too, never "time played".
-  const wrappedUp = leftQueue || endReason === 'manual';
+  const rideUp = waitTimed && endReason === 'boarded';
+  const leftQueue = waitTimed && endReason === 'left_queue';
+  // "I left the line" (manual) is a wrapped-up wait too, never "time played". Games only is neither.
+  const wrappedUp = waitTimed && (leftQueue || endReason === 'manual');
   const enter = (index: number) => reducedMotion ? undefined : FadeInDown.delay(420 + index * 90).springify().damping(14);
   const upgradeReady = coin != null && coin.current_level < coin.max_level &&
     (coin.available_parts ?? 0) >= coin.parts_to_next_level && playerEnergy != null &&
@@ -246,7 +253,16 @@ export default function SessionRecap({
           <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : wrappedUp ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
           {/* The wait is said once: the timed wait against the sign when there is one, else the minutes. */}
-          {signLine ? (
+          {!waitTimed ? (
+            // Games only: the count when there is one, never a big zero.
+            activityCount > 0 ? (
+              <>
+                <Text style={styles.recapTime} accessibilityLabel={`${activityCount} ${activityCount === 1 ? 'game' : 'games'} played`}>
+                  {activityCount}</Text>
+                <Text style={styles.recapSub}>{activityCount === 1 ? 'game played' : 'games played'}</Text>
+              </>
+            ) : <Text style={styles.recapSub}>Games only</Text>
+          ) : signLine ? (
             <Text style={styles.recapSignLine} numberOfLines={2}>{signLine}</Text>
           ) : (
             <>
@@ -293,7 +309,19 @@ export default function SessionRecap({
         </Animated.View>
       )}
 
-      {rideLogged && (
+      {!waitTimed && (
+        // Honest about the wait: nothing was timed away from the line, so nothing claims it was.
+        <Animated.View entering={enter(0)} style={styles.keepsake} accessible
+          accessibilityLabel="Wait not timed. Your wait counts only in the ride's line.">
+          <View style={styles.keepsakeBadge}><GameIcon name="line" size={34} /></View>
+          <View style={styles.keepsakeCopy}>
+            <Text style={styles.keepsakeTitle}>Wait not timed</Text>
+            <Text style={styles.keepsakeHint}>Your wait counts only in the ride’s line.</Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {waitTimed && rideLogged && (
         <Animated.View entering={enter(0)}>
           <Pressable accessibilityRole="button" disabled={!onAddMemory} onPress={onAddMemory}
             accessibilityLabel={`Ride logged${rideLogged.waited != null ? `, ${rideLogged.waited} minute wait` : ''}. Add stars and a note.`}
@@ -315,7 +343,7 @@ export default function SessionRecap({
       {earnedAny ? <View style={styles.recapStats}>
         {shownStats.map(t => <RecapStat key={t.key} icon={t.icon} value={t.value} prefix={t.prefix} label={t.label}
           index={stat++} reducedMotion={reducedMotion} />)}
-      </View> : signLine || rideLogged || activityNames.length > 0 || rideUp || wrappedUp ? null : (
+      </View> : !waitTimed || signLine || rideLogged || activityNames.length > 0 || rideUp || wrappedUp ? null : (
         // Nothing played or earned yet (a short wait): a keepsake of the wait itself, never a row of zeros,
         // and only when nothing above already says the wait (the hero's "in line, all saved" does for a
         // wrapped-up or ridden wait).
@@ -419,13 +447,17 @@ export default function SessionRecap({
       )}
 
       {/* One message, never two that disagree: offline sync only applies when this wait could earn. */}
-      {rewardsPending && rewardTrackingAvailable && (
+      {/* T072: a slow server is never "No internet": the recap keeps retrying and shows the real rewards here. */}
+      {rewardsPending && rewardTrackingAvailable && rewardsPendingReason === 'slow' && (
+        <Text style={styles.recapPending} accessibilityLiveRegion="polite">Saving your rewards… they show up here in a moment.</Text>
+      )}
+      {rewardsPending && rewardTrackingAvailable && rewardsPendingReason !== 'slow' && (
         <Text style={styles.recapPending}>No internet. Your rewards will show up when you&apos;re back online.</Text>
       )}
       {rewardTrackingAvailable && !rewardsConfirmed && !rewardsPending && (
         <Text style={styles.recapPending}>Checking your time near the ride...</Text>
       )}
-      {!rewardTrackingAvailable && (
+      {!rewardTrackingAvailable && waitTimed && (
         <Text style={styles.recapPending}>Games done! No Ride Parts this time. You only earn Parts near a ride that has them.</Text>
       )}
 

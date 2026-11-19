@@ -17,7 +17,7 @@ import {
   type GuideAdventure, type GuideState, type GuideTarget, type LiveMemo,
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
-import { guideCardCopy, oneGoldButton, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
+import { guideCardCopy, lineOffer, oneGoldButton, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
 import { coinsToday, INSIDE_PARK_METERS, leavingPark, parkDayStore, welcomedToday } from '../../services/guide/parkDay';
 import { localDay } from '../../services/reveal/revealLadder';
 import { adventureAfterWin, guideCoinsFor, inLineTaskFor, ridesByTask, showLikeTaskIds, withAdventureCoin, withPlayRange } from './guideCoins';
@@ -49,6 +49,8 @@ export interface NextCoinGuideInput {
   readonly adventureWonTaskId?: number | null;
   /** The ride detector's 90 s dwell (a catalog ride id), or null. */
   readonly dwellRideId: number | null;
+  /** The name of the ride whose line the player stands in (the map's dwell), for the in-line offer. */
+  readonly dwellRideName?: string | null;
   readonly starTaskIds?: ReadonlySet<number>;
   readonly rushTaskIds?: ReadonlySet<number>;
   /** Coins on the player's shelf in this park (the map's own list carries no ownership). */
@@ -74,6 +76,8 @@ export interface NextCoinGuide {
   readonly target: GuideTarget | null;
   readonly state: GuideState;
   readonly copy: GuideCardCopy;
+  /** The in-line offer under the card (T074), or null. */
+  readonly lineOffer: { readonly title: string; readonly label: string } | null;
   /** The coin whose line the player stands in, or null. */
   readonly inLineTaskId: number | null;
   /** Catalog rides by coin (for LinePlay and the queue checks). */
@@ -314,7 +318,9 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const adventureTab = !!input.adventure && input.adventure.park_id === parkId && input.adventure.phase !== 'complete'
     && !adventureDots && state !== 'arrive' && state !== 'welcome_back';
   const pathPoint = guidePathPoint(targetPoint, adventureStep);
-  return { target: shown, state, copy, inLineTaskId, rides, targetTask, targetPoint, pathPoint: leaving ? null : pathPoint,
+  // The in-line offer (T074): any open line the player has stood in for about 90 s, coin or no coin, under the card.
+  const offer = lineOffer(state, input.dwellRideName ?? null);
+  return { target: shown, state, copy, lineOffer: offer, inLineTaskId, rides, targetTask, targetPoint, pathPoint: leaving ? null : pathPoint,
     targetOffMap: !!shown && !targetTask && !!targetCoin, arrivedAt, adventureTab: adventureTab && !leaving,
     leavingParkId: leaving ? leavingFrom?.parkId ?? null : null };
 }

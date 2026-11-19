@@ -44,7 +44,7 @@ export interface MapGuideInput {
   readonly livePark: LivePark | null;
   readonly adventure: AdventureTicket | null | undefined;
   readonly tripGoalData: TripGoalData | null | undefined;
-  readonly queueDwell: { readonly rideId: number } | null | undefined;
+  readonly queueDwell: { readonly rideId: number; readonly rideName?: string } | null | undefined;
   readonly starRides: ReadonlySet<number>;
   readonly rushes: readonly { readonly task: { readonly id: number } }[];
   readonly rangeChecked: boolean;
@@ -139,7 +139,7 @@ export default function useMapGuide(input: MapGuideInput) {
   }, [visibleTasks, playUp]);
   const nextCoin = useNextCoinGuide({
     enabled: !!player && !!park, ready: guideReady, tripGoalLoaded: !!tripGoalData, parkId: park?.id ?? null, parkName: park?.name ?? null, location,
-    tasks: guideTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null,
+    tasks: guideTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null, dwellRideName: queueDwell?.rideName ?? null,
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
     starRushUnlocked: coinLevelsRung.open, coinLevelsUnlocked: coinLevelsRung.open,
     wallet, queueTicketsOn: guideFlags.queue_tickets === true,

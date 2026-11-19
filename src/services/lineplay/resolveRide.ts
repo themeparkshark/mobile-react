@@ -12,6 +12,7 @@
 import { getRides, RideType } from '../../api/endpoints/rides';
 import type { RideContext } from './LinePlaySession';
 import { QUEUE_RIDE_TYPES } from '../../constants/queueRideTypes';
+import { lineZoneFor, type LineZone } from './lineZone';
 
 const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
 
@@ -84,6 +85,24 @@ async function getRideNameMap(parkId: number): Promise<Map<string, RideType>> {
 /** The park's ride catalog (the same cached request), for the Coin Guide's Line Play rows. */
 export async function loadParkRides(parkId: number): Promise<RideType[]> {
   return [...(await getRideNameMap(parkId)).values()];
+}
+
+/**
+ * The ride's line zone (lineZone.ts) from the park catalog, or null when the catalog has no position for it or
+ * does not answer within timeoutMs (LinePlay then starts as before and stays honest from its live fixes).
+ */
+export async function lineZoneForRide(parkId: number | null | undefined, rideId: number, timeoutMs = 3_000): Promise<LineZone | null> {
+  if (!parkId || !(rideId > 0)) return null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    const rides = await Promise.race([loadParkRides(parkId),
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), timeoutMs); })]);
+    return rides ? lineZoneFor(rides.find(item => item.id === rideId)) : null;
+  } catch {
+    return null;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 /**

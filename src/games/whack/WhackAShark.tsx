@@ -20,6 +20,7 @@
  * audio, haptics and FX, and owns the Burst / breather / result flow.
  */
 
+import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import React, { forwardRef, useCallback, useContext, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { LogBox, StyleSheet, View, type LayoutChangeEvent } from 'react-native';
 import { GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -239,6 +240,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const ride = format === 'ride';
   // The ride format outside a paid ride challenge is Home Defend (HomeLive): no coin, its own title and stamp.
   const rideChallenge = useContext(RideChallengeContext);
+  // LinePlay's no-clock rule (T082): in a line the timer ring drains with no number, like a ride coin.
+  const inLine = useContext(LinePlayMovementContext) != null;
   const defend = ride && !rideChallenge;
   const defendRef = useRef(defend);
   defendRef.current = defend;
@@ -1371,11 +1374,12 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const hud = useMemo(() => ({
     burstLabel: ride ? 'RIDE' : format === 'raid' ? 'RAID' : `BURST ${burstIdx + 1}/${totalBursts}`,
     ride,
+    quietTimer: ride || inLine,
     feverOn: !!tl?.fever,
     boss: !!tl?.boss,
     notches: tl?.winBonks ?? winBonks,
     ...(defend ? { winWord: HOME_DEFEND.win } : {}),
-  }), [ride, format, burstIdx, totalBursts, tl?.fever, tl?.boss, tl?.winBonks, winBonks, defend]);
+  }), [ride, inLine, format, burstIdx, totalBursts, tl?.fever, tl?.boss, tl?.winBonks, winBonks, defend]);
   useEffect(() => {
     runtime.rt.value.reducedMotion = reducedMotion;
   }, [reducedMotion, runtime.rt]);

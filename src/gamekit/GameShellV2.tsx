@@ -1444,9 +1444,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
             </TouchableOpacity>
             <View style={[styles.headerCenter, hudBack && styles.headerHidden]} importantForAccessibility={hudBack ? 'no-hide-descendants' : 'auto'}>
               <Text style={styles.title} numberOfLines={1}>
-                {title}
+                {linePlayMovement?.gameName || title}
               </Text>
-              {subtitle ? (
+              {subtitle && !linePlayMovement?.gameName ? (
                 <Text style={styles.subtitle} numberOfLines={1}>
                   {subtitle}
                 </Text>
@@ -1474,7 +1474,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           <Animated.View style={[styles.field, kickStyle, fieldInStyle]} onLayout={onFieldLayout}>{children}</Animated.View>
 
           {/* The last 5 seconds: gold edge, stamped seconds, TIME!. */}
-          <FinalSeconds secondsLeft={secondsLeft} remainingMs={remainingMs} timeStamp={finalTimeStamp} count={finalCount} width={SCREEN_W} height={SCREEN_H}
+          <FinalSeconds secondsLeft={secondsLeft} remainingMs={remainingMs} timeStamp={finalTimeStamp}
+            // LinePlay's no-clock rule (T082): in a line the last seconds never count down in digits.
+            count={finalCount && !linePlayMovement} width={SCREEN_W} height={SCREEN_H}
             stampY={finalStampFieldY != null ? fieldY + finalStampFieldY : finalStampY ?? SCREEN_H * countdownY}
             reduced={reducedMotion} active={phase === 'playing'} edge={budget.level !== 'calm' || !!budget.ambient} />
 

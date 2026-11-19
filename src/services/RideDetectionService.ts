@@ -520,6 +520,9 @@ class RideDetectionService {
     } else if (this.linePlay && this.linePlay.endedAt == null) {
       const endedRide = this.linePlay.rideId;
       this.lastLinePlayEnd = { rideId: endedRide, at: now };
+      // A wait just ended here: the next line's dwell starts from now (T074), never "In line for" the ride next
+      // door the moment the recap closes because the guest stood near it during this wait.
+      this.queueArea = null;
       this.linePlay = { ...this.linePlay, endedAt: now };
       if (!this.linePlayInVisit()) this.linePlay = null;
       noteLinePlayWaitEnded(endedRide, now);

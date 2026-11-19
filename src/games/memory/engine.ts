@@ -230,18 +230,23 @@ export interface ModeFlags {
   railToken: boolean;
   ranked: boolean;
   paid: boolean;
+  /**
+   * LinePlay's no-clock rule (T082): the round still drains, but the rim shows no digits, nothing turns urgent and
+   * no last-5 count runs. Scoring is unchanged.
+   */
+  quietClock: boolean;
 }
 
 const F = (o: Partial<ModeFlags>): ModeFlags => ({
   clock: 'none', scoreOnHud: false, golden: false, showtime: false, photoFlash: false, peek: false,
   quick: false, overtime: 'none', heat: false, strikes: false, fair: false, glint: false, charm: false,
-  railToken: false, ranked: false, paid: false, ...o,
+  railToken: false, ranked: false, paid: false, quietClock: false, ...o,
 });
 
 export const MODE_FLAGS: Record<MMMode, ModeFlags> = {
   warmup: F({ glint: true }),
   ride: F({ clock: 'charged', overtime: 'look', paid: true }),
-  timeAttack: F({ clock: 'bleed', scoreOnHud: true, golden: true, showtime: true, photoFlash: true, peek: true, quick: true, overtime: 'x2', heat: true, glint: true, charm: true }),
+  timeAttack: F({ clock: 'bleed', scoreOnHud: true, golden: true, showtime: true, photoFlash: true, peek: true, quick: true, overtime: 'x2', heat: true, glint: true, charm: true, quietClock: true }),
   daily: F({ strikes: true, fair: true, railToken: true, ranked: true }),
   lineDuel: F({ clock: 'charged', overtime: 'look', fair: true, railToken: true, ranked: true }),
   race: F({ clock: 'plain', showtime: true, overtime: 'x2', fair: true }),

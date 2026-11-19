@@ -47,8 +47,11 @@ import { keepRideStepLog, releaseRideLogHold } from '../../services/rideLogOutbo
 import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
 import { slotPartsShown, waitingSlotParts } from '../../services/lineplay/slotParts';
 import { celebrateAdventureTicket, getTripGoal } from '../../api/endpoints/me/trip-goal';
-import { loadParkRides } from '../../services/lineplay/resolveRide';
+import { lineZoneForRide, loadParkRides } from '../../services/lineplay/resolveRide';
+import { startAwayCopy, startAwayMeters } from '../../services/lineplay/lineZone';
+import { readCheckpoint } from '../../services/lineplay/checkpoint';
 import { guide } from '../../services/guide/nextCoin';
+import { doneKeepsTarget } from '../../services/lineplay/recapExit';
 import { recordProgress, useRung } from '../../services/reveal/revealLadder';
 import { useQueueTicketsOn } from '../../services/lineplay/lineFlags';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
@@ -118,7 +121,7 @@ const EYES_UP_KEY = 'lineplay_eyes_up_seen_v1';
 import { resolveProjectMission } from '../../services/lineplay/projectMission';
 import { crewRelayEpilogue } from '../../services/lineplay/crewRelay';
 import { ADAPTIVE_STORY_TOTAL, nextAdaptiveStoryTitle, type LinePlayChapter } from '../../services/lineplay/chapters';
-import { noteFoundAdventure } from '../../services/lineplay/foundAdventures';
+import { noteFoundAdventure, storyCreditEarned } from '../../services/lineplay/foundAdventures';
 import { linePlayPages, queueArcadeDestinations } from '../../services/lineplay/presentation';
 import { personalizeChapterFinale, resolveChapterClue } from '../../services/lineplay/chapterClue';
 import { useGroupPlay, type GroupTurnLaunch } from './group/useGroupPlay';
@@ -131,6 +134,7 @@ const NIGHT_BACKDROP = ['#3B2A6B', '#2B2350', '#1E1838'] as const;
 /** Returning after this long away gets a quick "welcome back" heads up. */
 const WELCOME_BACK_AFTER_MS = 20_000;
 /** The dialog answers that end the wait at the tap: the dialog fades once the recap is drawn under it. */
+const GAMES_DONE: readonly number[] = [0];
 const RODE_OR_LEFT: readonly number[] = [0, 1];
 const RODE: readonly number[] = [1];
 /** The longest the "Saving your wait" card waits for the recap's rewards and GO before the recap opens anyway. */
@@ -466,7 +470,9 @@ export default function LinePlayScreen() {
   const [adventureStamped, setAdventureStamped] = useState(false);
   const rideStepDone = useRef<string | null>(null);
   useEffect(() => {
-    if (!ride || snapshot.state !== 'complete' || !snapshot.boardingConfirmed || snapshot.startedAt == null) return;
+    // Only a wait with evidence of this line logs a ride (T071): games played from afar never claim one.
+    if (!ride || snapshot.state !== 'complete' || !snapshot.boardingConfirmed || snapshot.startedAt == null ||
+        !snapshot.waitTimed) return;
     const id = rideStepLogId(ride.rideId, snapshot.startedAt, snapshot.serverSessionId);
     if (rideStepDone.current === id) return;
     rideStepDone.current = id;
@@ -486,7 +492,7 @@ export default function LinePlayScreen() {
       return celebrateAdventureTicket(ticket!.id).then(() => setAdventureStamped(true));
     }).catch(() => undefined);
   }, [ride, snapshot.state, snapshot.boardingConfirmed, snapshot.startedAt, snapshot.boardingAt,
-    snapshot.serverSessionId, player?.id]);
+    snapshot.serverSessionId, snapshot.waitTimed, player?.id]);
   const rideLoggedRef = useRef<{ id: string } | null>(null);
   rideLoggedRef.current = rideLogged;
   useEffect(() => () => {
@@ -538,11 +544,33 @@ export default function LinePlayScreen() {
     if (startedRef.current?.session === session && startedRef.current.playerId === sessionPlayer &&
         startedRef.current.rideId === ride.rideId) return;
     startedRef.current = { session, playerId: sessionPlayer, rideId: ride.rideId };
-    const freshSample = latestLocationSampleRef.current;
-    void session.start(ride, isRecentQueueSample(freshSample) ? freshSample : undefined, playerId,
-      // A finished wait whose ride question is still to be put (a phone pocketed to board) reopens to ask it.
-      { guest: playerId == null, rideQuestionPending: linePlayBoardingPending });
+    const owner = startedRef.current;
+    void (async () => {
+      // Honesty (T071): the ride's line zone rides along, so the session claims a wait only with evidence of it.
+      const zone = ride.zone !== undefined ? ride.zone : await lineZoneForRide(ride.parkId, ride.rideId);
+      const saved = playerId ? await readCheckpoint(playerId, ride.rideId).catch(() => null) : null;
+      if (startedRef.current !== owner) return;
+      const freshSample = latestLocationSampleRef.current;
+      const sample = isRecentQueueSample(freshSample) ? freshSample : undefined;
+      const zoned: RideContext = { ...ride, zone };
+      // A fresh start from outside the line asks first; a wait already running here reopens as it was.
+      const away = saved?.state === 'active' ? null : startAwayMeters(sample, zone);
+      if (away != null) { setAwayAsk({ meters: away, ride: zoned, playerId }); return; }
+      void session.start(zoned, sample, playerId,
+        // A finished wait whose ride question is still to be put (a phone pocketed to board) reopens to ask it.
+        { guest: playerId == null, rideQuestionPending: linePlayBoardingPending });
+    })();
   }, [ride, session, player?.id, authReady]);
+  const [awayAsk, setAwayAsk] = useState<{ meters: number; ride: RideContext; playerId: number | undefined } | null>(null);
+  const answerAway = useCallback((play: boolean) => {
+    const ask = awayAsk;
+    setAwayAsk(null);
+    if (!ask) return;
+    if (!play) { navigation.goBack(); return; }
+    const freshSample = latestLocationSampleRef.current;
+    void session.start(ask.ride, isRecentQueueSample(freshSample) ? freshSample : undefined, ask.playerId,
+      { guest: ask.playerId == null, rideQuestionPending: linePlayBoardingPending });
+  }, [awayAsk, navigation, session, latestLocationSampleRef]);
 
   // The existing queue feed supplies an entrance-board signal. Poll only
   // while this screen is foregrounded; it never estimates the guest's place.
@@ -707,8 +735,11 @@ export default function LinePlayScreen() {
   const [adventuresFound, setAdventuresFound] = useState<{ count: number; isNew: boolean } | null>(null);
   useEffect(() => {
     if (snapshot.state !== 'complete' || !snapshot.chapter?.adaptive || !player?.id) return;
+    // Story credit needs real time in this line (T081): a timed wait of a few minutes, never a walk-on or games from afar.
+    if (!storyCreditEarned({ waitTimed: snapshot.waitTimed, elapsedSeconds: snapshot.elapsedSeconds })) return;
     void noteFoundAdventure(player.id, snapshot.chapter.title).then(setAdventuresFound);
-  }, [snapshot.state, snapshot.chapter?.adaptive, snapshot.chapter?.title, player?.id]);
+  }, [snapshot.state, snapshot.chapter?.adaptive, snapshot.chapter?.title, player?.id, snapshot.waitTimed,
+    snapshot.elapsedSeconds]);
   // Games this account has played (any wait), for the arcade's NEW pills. Null while loading: no NEW yet.
   const [playedEver, setPlayedEver] = useState<ReadonlySet<string> | null>(null);
   useEffect(() => {
@@ -745,7 +776,8 @@ export default function LinePlayScreen() {
   // Leaving the queue area starts a quiet wrap-up: the calm "Looks like you left the line" card with RESUME
   // (no timer, no dialog). If the guest does not come back, the wait ends by itself and the recap offers Undo.
   const leftLineWrapUp = snapshot.state === 'ending' && snapshot.endReason === 'left_queue' && activeGame == null;
-  const boardingAsk = snapshot.boardingSuggested && activeGame == null &&
+  // A wait with no evidence of this line (T071) never asks about the ride: it was games only.
+  const boardingAsk = snapshot.boardingSuggested && snapshot.waitTimed && activeGame == null &&
     (snapshot.state === 'active' || snapshot.state === 'paused' ||
       (snapshot.endReason === 'left_queue' && !snapshot.boardingConfirmed &&
         (snapshot.state === 'ending' || snapshot.state === 'complete')));
@@ -871,13 +903,18 @@ export default function LinePlayScreen() {
     void session.endNow(boarded).catch(finishFailed);
   }, [session, waitEndPrompt, finishFailed, noteRideQuestionAnswered]);
 
+  // The next coin the map held when LinePlay opened (T076): only GO moves it, so DONE puts it back if it moved.
+  const heldAtOpen = useRef(guide.current());
   const handleExit = useCallback(async () => {
     try {
       // Closing the wait (Done) answers its ride question: nothing reopens it later to ask.
       noteRideQuestionAnswered();
       await session.complete();
       if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();
-      navigation.goBack();
+      const keep = doneKeepsTarget(heldAtOpen.current, guide.current());
+      if (keep != null) guide.setTarget(keep, 'lineplay_done');
+      // DONE always closes to the map (T076), wherever LinePlay was opened from (Wait Times, a callout, the guide).
+      navigation.navigate('Explore' as never);
     } catch {
       finishFailed();
     }
@@ -1281,6 +1318,8 @@ export default function LinePlayScreen() {
   const movementContext = useMemo(() => ({
     moving: snapshot.moving,
     onResume: () => undefined,
+    // One name per game (T086): the header says what the tile and PLAY said.
+    gameName: activeGame ? pageName(activeGame, snapshot.chapter) : null,
     lineMovePolicy: 'passive' as const,
     queueEnded,
     rideUpLikely: snapshot.boardingSuggested,
@@ -1306,7 +1345,8 @@ export default function LinePlayScreen() {
       actionLabel: 'PLAY FOR BONUS',
       onPress: () => { setActiveGame(null); setArcadeOpen(true); },
     } : null,
-  }), [snapshot.moving, bonus != null, activeGame?.gameId, activeGame?.groupTurn, queueEnded, snapshot.boardingSuggested, finishFailed]);
+  }), [snapshot.moving, bonus != null, activeGame?.gameId, activeGame?.id, activeGame?.groupTurn, queueEnded, snapshot.boardingSuggested,
+    snapshot.chapter, finishFailed]);
   useEffect(() => {
     const id = pendingEncoreId.current;
     if (!id) return;
@@ -1601,6 +1641,7 @@ export default function LinePlayScreen() {
           {snapshot.state === 'complete' || (snapshot.state === 'ending' && !leftLineWrapUp) ? (
             <SessionRecap
               settling={snapshot.state !== 'complete' || holdRecap || rideLoggedPending}
+              waitTimed={snapshot.waitTimed}
               nextAdventure={ride ? nextAdaptiveStoryTitle(snapshot.chapter, ride.rideName) : null}
               adventuresFound={adventuresFound && adventuresFound.count > 0 ? [adventuresFound.count, ADAPTIVE_STORY_TOTAL, adventuresFound.isNew] : null}
               snackSlot={snapshot.serverSessionId && snapshot.rewards ? <LineSnackOffer sessionId={snapshot.serverSessionId} /> : null}
@@ -1639,6 +1680,7 @@ export default function LinePlayScreen() {
               })}
               onOpenInventory={() => RootNavigation.navigate('Inventory')}
               rewardsPending={snapshot.rewardsPending}
+              rewardsPendingReason={snapshot.rewardsPendingReason}
               rewardsConfirmed={snapshot.rewards != null}
               rewardTrackingAvailable={snapshot.serverSessionId != null}
               queueStamp={queueStamp}
@@ -1670,8 +1712,10 @@ export default function LinePlayScreen() {
               onFavoriteActivity={(favorite) => {
                 if (feedback) void submitFeedback(feedback.rating, favorite);
               }}
-              signLine={snapshot.boardingConfirmed ? signSaidLine({ postedMinutes: snapshot.plannedWaitMinutes,
-                waitSource: snapshot.waitSource, waitedMinutes: timedWaitMinutes(snapshot.startedAt, snapshot.boardingAt) }) : null}
+              signLine={snapshot.boardingConfirmed && snapshot.waitTimed ? signSaidLine({
+                // T089: what the sign said when this line started, never an hours-old cached number.
+                postedMinutes: snapshot.signAtStartMinutes,
+                waitSource: snapshot.signAtStartMinutes != null ? 'posted' : 'estimate', waitedMinutes: timedWaitMinutes(snapshot.startedAt, snapshot.boardingAt) }) : null}
               rideLogged={rideLogged}
               onAddMemory={rideLogged && player?.id != null ? openRideJournal : undefined}
               adventureStamped={adventureStamped}
@@ -1981,9 +2025,23 @@ export default function LinePlayScreen() {
         else if (page != null) { jumpToPage(page, false); setResumeHandoff('page'); }
       }} />
 
+      {/* Started away from the ride (Wait Times, the guide): ask first. Play anyway is games only until the line. */}
+      <GameDialog
+        visible={focused && awayAsk != null}
+        title={awayAsk ? startAwayCopy(awayAsk.meters).title : ''}
+        message={awayAsk ? startAwayCopy(awayAsk.meters).message : undefined}
+        icon="line"
+        buttons={[
+          { text: 'Play anyway', icon: 'play' },
+          { text: 'Back', icon: 'back', style: 'cancel' },
+        ]}
+        equalChoices
+        onAnswer={index => answerAway(index === 0)}
+      />
+
       {/* End by hand: one branded sheet (header End, back, or a footer tab). */}
       <GameDialog
-        visible={focused && waitEndPrompt != null && (snapshot.state === 'active' || snapshot.state === 'paused')}
+        visible={focused && waitEndPrompt != null && snapshot.waitTimed && (snapshot.state === 'active' || snapshot.state === 'paused')}
         title="How did your wait end?"
         message={waitEndPrompt?.tab
           ? `Your recap opens first, then ${tabLabel(waitEndPrompt.tab)}. You keep what you earned either way.`
@@ -1991,15 +2049,31 @@ export default function LinePlayScreen() {
           : prediction ? 'You keep what you earned either way. Your wait guess counts if you got to the ride.'
             : 'You keep what you earned either way.'}
         icon="line"
+        // A picture leads each choice (T085): the exit, the ride car, play on. A kid reads the picture.
         buttons={[
-          { text: 'I left the line' },
-          { text: 'I got to the ride' },
-          { text: 'Keep playing', style: 'cancel' },
+          { text: 'I left the line', icon: 'back' },
+          { text: 'I got to the ride', icon: 'ride' },
+          { text: 'Keep playing', icon: 'play', style: 'cancel' },
         ]}
         // Rode or left: the wait ends at the tap, and the dialog fades only once the recap is drawn under it.
         holdUntilHidden={RODE_OR_LEFT}
         onPick={index => { if (index === 0 || index === 1) answerWaitEnd(index === 1); }}
         onAnswer={index => { if (index !== 0 && index !== 1) answerWaitEnd(null); }}
+      />
+
+      {/* Games only (no evidence of this line, T071): ending never asks about a wait or a ride that was not timed. */}
+      <GameDialog
+        visible={focused && waitEndPrompt != null && !snapshot.waitTimed && (snapshot.state === 'active' || snapshot.state === 'paused')}
+        title="Done playing?"
+        message="Your games are saved. Your wait counts only in the ride’s line."
+        icon="line"
+        buttons={[
+          { text: 'Done', icon: 'check' },
+          { text: 'Keep playing', icon: 'play', style: 'cancel' },
+        ]}
+        holdUntilHidden={GAMES_DONE}
+        onPick={index => { if (index === 0) answerWaitEnd(false); }}
+        onAnswer={index => { if (index !== 0) answerWaitEnd(null); }}
       />
 
       {/* The ride question, once per wait, in the ride step's own words: nothing counts down and play keeps going. */}

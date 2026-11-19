@@ -499,7 +499,11 @@ export function guideState(input: GuideInput, target: GuideTarget | null): Guide
     && !target.inRange) return 'arrive';
   // Standing in today's Adventure ride's line after its coin: that is where its line story plays.
   if (target.reason === 'line_story') return 'line_story';
-  if (input.inLineTaskId != null && input.inLineTaskId === target.taskId) return 'in_line';
+  // In its line and PLAY! is up for it: Tap PLAY! stays the card and the in-line offer rides under it (T074),
+  // so the card never alternates between the two.
+  const playUpHere = input.playableTaskId !== undefined ? input.playableTaskId != null && input.playableTaskId === target.taskId
+    : target.inRange;
+  if (input.inLineTaskId != null && input.inLineTaskId === target.taskId && !playUpHere) return 'in_line';
   if (target.reason === 'level_up') return 'level_up';
   // Ride Parts come from its line, not from a Ticket: at the ride the card opens LinePlay.
   if (target.reason === 'parts') return target.inRange ? 'in_line' : 'walk';

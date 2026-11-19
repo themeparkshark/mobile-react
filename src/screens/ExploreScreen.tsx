@@ -104,6 +104,7 @@ import TrailHost from '../components/trail/TrailHost';
 import TooFarDialog from './ExploreScreen/TooFarDialog';
 import { withWs2Profiler } from './ExploreScreen/ws2Profiler';
 import useQueueDwell, { noteWaitEnded } from './ExploreScreen/useQueueDwell';
+import { calloutLineOffer } from '../services/guide/guideCopy';
 import useSwapTapGuard from './ExploreScreen/useSwapTapGuard';
 import { revealDelays } from './ExploreScreen/mapMarkerPresentation';
 import { gameTimestamp } from './ExploreScreen/mapOpportunityTiming';
@@ -1577,6 +1578,12 @@ export function ExploreScreenBody() {
     if (catalogRide) noteWaitEnded(catalogRide.id);
     navigation.navigate('LinePlay', ride ? { ride } : undefined);
   }, [park, adventure, adventureOwner, queueDwell, nextCoin.inLineTaskId, nextCoin.rides, navigation]);
+  const openLinePlayHere = useCallback(async () => {
+    if (!park || !queueDwell) return;
+    const ride = await resolveQueueStoryContext(park.id, queueDwell.rideId, queueDwell.rideName);
+    noteWaitEnded(queueDwell.rideId);
+    navigation.navigate('LinePlay', { ride });
+  }, [park, queueDwell, navigation]);
   const onGuideAction = useCallback((action: GuideAction) => {
     welcome.finish();
     const task = nextCoin.targetTask;
@@ -1586,6 +1593,9 @@ export function ExploreScreenBody() {
         if (task) setSelectedTask(task);
         return;
       case 'lineplay': void openLinePlayFor(nextCoin.target?.taskId ?? null, nextCoin.target?.name ?? task?.name ?? null)
+        .catch(() => gameAlert('LinePlay', 'Could not open this line. Try again in a moment.')); return;
+      // The in-line offer (T074): the line the player stands in, whatever the card points at.
+      case 'lineplay_here': void openLinePlayHere()
         .catch(() => gameAlert('LinePlay', 'Could not open this line. Try again in a moment.')); return;
       case 'claim': void claimTickets(); return;
       case 'see_ways':
@@ -1607,7 +1617,7 @@ export function ExploreScreenBody() {
       default:
         if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
     }
-  }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, nextCoin.leavingParkId, openLinePlayFor, claimTickets,
+  }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, nextCoin.leavingParkId, openLinePlayFor, openLinePlayHere, claimTickets,
     guideFlags.queue_tickets, guideFlags.ride_rescue_pass, park, player, welcome]);
   // The home guide card (core loop 4.1 "Home"): next park day, Tickets ready, the ticket meter, PLAN = your shelf.
   const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;
@@ -2031,7 +2041,8 @@ export function ExploreScreenBody() {
           coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
-          adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null} />}
+          adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null}
+          lineOffer={nextCoin.lineOffer ?? calloutLineOffer(queueRide, selectedTask?.id ?? null, nextCoin.target?.taskId ?? null, nextCoin.state)} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}

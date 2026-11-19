@@ -50,6 +50,12 @@ export interface LinePlayCheckpoint {
   entryFix?: CheckpointFix | null;
   /** L1 fixes taken while the server was unreachable, waiting to sync. */
   offlineTrail?: CheckpointFix[];
+  /** Evidence this wait was in the ride's line (lineZone.ts): a zone fix or the server's timed session. */
+  atLineSeen?: boolean;
+  /** A fix outside the ride's line zone (and none inside) was seen this wait. */
+  awaySeen?: boolean;
+  /** T089: the posted wait on the sign when this line started (null when unknown). */
+  signAtStartMinutes?: number | null;
 }
 
 function isBonusProof(value: unknown): boolean {
@@ -114,6 +120,10 @@ export function parseCheckpoint(raw: string | null, playerId: number, rideId: nu
       (value.endReason !== undefined && value.endReason !== null &&
         !['manual', 'left_queue', 'boarded'].includes(value.endReason)) ||
       (value.boardingConfirmed !== undefined && typeof value.boardingConfirmed !== 'boolean') ||
+      (value.atLineSeen !== undefined && typeof value.atLineSeen !== 'boolean') ||
+      (value.awaySeen !== undefined && typeof value.awaySeen !== 'boolean') ||
+      (value.signAtStartMinutes !== undefined && value.signAtStartMinutes !== null &&
+        (!Number.isFinite(value.signAtStartMinutes) || value.signAtStartMinutes < 0 || value.signAtStartMinutes > 600)) ||
       (value.boardingAt !== undefined && value.boardingAt !== null &&
         (!Number.isFinite(value.boardingAt) || value.boardingAt < value.startedAt || value.boardingAt > nowMs + 60_000)) ||
       (value.crewRelay !== undefined && value.crewRelay !== null && !isCrewRelayProgress(value.crewRelay)) ||

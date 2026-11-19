@@ -20,6 +20,7 @@ function loadResolver(getRides, now = () => Date.now()) {
     require(name) {
       if (name === '../../api/endpoints/rides') return { getRides };
       if (name === '../../constants/queueRideTypes') return { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] };
+      if (name === './lineZone') return require('./helpers/lineplay-zone.cjs');
       throw new Error(`Unexpected dependency: ${name}`);
     },
   }, { filename: file });

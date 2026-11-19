@@ -30,6 +30,7 @@ import rideDetectionService, {
 import { PARK_WIKI_IDS } from '../constants/parkWaitTimes';
 import { navigationRef, navigate } from '../RootNavigation';
 import { rideDetectionEmitter } from '../services/RideDetectionEmitter';
+import { onRideDetectionRetry, rideInitRetryDelay } from '../services/rideDetectionInit';
 import { detectionExpired, detectionStillAskable, linePlayRideNow, minRideDwellMs, rideLoggedUntil,
   setDetectionLiveRows } from '../services/RideDetectionService';
 import { ensureRideQuestionLedger, lastCoinGameAt, rideQuestionOwner, unaskedLinePlayBoardings,
@@ -291,8 +292,21 @@ export function useRideDetection(enabled: boolean, parkId?: number | null) {
     if (!enabled) return;
 
     let cancelled = false;
+    // T073: a failed start-up (one bad GET /rides) retries with backoff, and the map's retry starts it at once.
+    let started = false;
+    let failures = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    let running = false;
+    const retryNow = () => {
+      if (cancelled || started || running) return;
+      if (retryTimer) { clearTimeout(retryTimer); retryTimer = null; }
+      void init();
+    };
+    const stopRetryListen = onRideDetectionRetry(retryNow);
 
     async function init() {
+      if (running) return;
+      running = true;
       try {
         const rides = await getRides();
         if (cancelled) return;
@@ -317,15 +331,22 @@ export function useRideDetection(enabled: boolean, parkId?: number | null) {
             checkAndShowPendingRides();
           }, 2000);
         }
+        started = true;
       } catch (e) {
-        console.error('Failed to initialize ride detection:', e);
+        console.warn('Ride detection could not start yet; retrying:', e);
+        failures += 1;
+        if (!cancelled && !started) retryTimer = setTimeout(retryNow, rideInitRetryDelay(failures));
+      } finally {
+        running = false;
       }
     }
 
-    init();
+    void init();
 
     return () => {
       cancelled = true;
+      stopRetryListen();
+      if (retryTimer) clearTimeout(retryTimer);
       stopDetection();
       setRidesLoaded(false);
     };

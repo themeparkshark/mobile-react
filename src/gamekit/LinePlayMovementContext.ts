@@ -28,6 +28,11 @@ export interface LinePlayMovement {
   readonly moving: boolean;
   /** Legacy hook: LinePlay's resume bookkeeping. Called when play resumes. */
   readonly onResume: () => void;
+  /**
+   * One name per game (T086): the name LinePlay's tile, page and PLAY used. The shell's header says it instead of
+   * the game's own title and mode line ("Follow the stamp" never opens "Whack-a-Shark / Bonk Rush").
+   */
+  readonly gameName?: string | null;
   readonly lineMovePolicy?: LineMovePolicy;
   /** Set for client-scored games only: their wins never pay Parts (queue-bonus.md 7.5). */
   readonly justForFunNote?: JustForFunNote | null;
