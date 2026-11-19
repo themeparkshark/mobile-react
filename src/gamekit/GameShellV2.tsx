@@ -458,6 +458,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const stageDealtRef = useRef(stageDealt);
     stageDealtRef.current = stageDealt;
     const playWaitsDealRef = useRef(false);
+    /** A tap asked to skip the count (w5 N04): a count that starts after it goes straight to GO. */
+    const skipWantedRef = useRef(false);
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
@@ -655,6 +657,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
         return;
       }
       playWaitsDealRef.current = false;
+      skipWantedRef.current = false;
       startedRef.current = true;
       playedOnceRef.current = true;
       pressTrace('shell.play', () => gameIdRef.current);
@@ -871,7 +874,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       // Start once the game has drawn its first frames (never count over a blank stage).
       let raf2: unknown = 0;
       const raf1 = nextFrame(() => {
-        raf2 = nextFrame(() => startCount(steps, lead));
+        // A tap that came in before this count began (TRY AGAIN's reset, w5 N04) skips it: GO alone.
+        raf2 = nextFrame(() => (skipWantedRef.current ? startCount([steps[steps.length - 1]], 0) : startCount(steps, lead)));
       });
       return () => {
         cancelFrame(raf1);
@@ -922,6 +926,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // (2-1-GO, no how-to line). Never on the first mount.
     const retryRound = useContext(RetryRoundContext);
     const retryRoundSeen = useRef(retryRound);
+    const retryRoundRef = useRef(retryRound);
+    retryRoundRef.current = retryRound;
     // The render after the reset below (so the touch guard on the root lifts even when no other state changed).
     const [, setRetrySeen] = useState(retryRound);
     useEffect(() => {
@@ -1398,6 +1404,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // Tap anywhere skips straight to GO (the burst still plays over live play).
     const skipCountdown = useCallback(() => {
       if (phase !== 'countdown') return;
+      skipWantedRef.current = true;
       pressTrace('shell.skip', () => gameIdRef.current);
       clearCountdown();
       const steps = countSteps(countdownStyle === 'none' ? 'go' : countdownStyle);
@@ -1406,6 +1413,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       if (hasDemoRef.current) { cancelAnimation(pillOut); pillOut.value = 1; setPillGone(true); }
       startCount([go], 0);
     }, [phase, clearCountdown, countdownStyle, startCount, pillOut]);
+    // w5 N04: a tap in the one render that still draws the last try (before the TRY AGAIN reset runs) is never
+    // dropped: it skips the new count once the reset is in (the count effect reads skipWantedRef).
+    const skipCountdownRef = useRef(skipCountdown);
+    skipCountdownRef.current = skipCountdown;
+    const queueRetrySkip = useCallback(() => {
+      pressTrace('shell.skipqueued', () => gameIdRef.current);
+      if (retryRoundSeen.current === retryRoundRef.current) skipCountdownRef.current();
+      else skipWantedRef.current = true;
+    }, []);
 
     // Paid games share the ride flow's native presentation. Opening another
     // native Modal inside it races both dismissals against the coin reward.
@@ -1524,7 +1540,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // reset above runs; nothing in it takes a touch. The ride card lets the kept board take touches from TRY AGAIN.
     const retryResetPending = retryRound !== retryRoundSeen.current;
     const gameContent = (
-        <View style={styles.root} pointerEvents={retryResetPending ? 'none' : 'auto'}>
+        <View style={styles.root} pointerEvents={retryResetPending ? 'box-only' : 'auto'}
+          onTouchEnd={retryResetPending ? queueRetrySkip : undefined}>
           {/* Header */}
           {/* While results are up the card is the only thing to read: the
               game's title and score step back and the close X dims (it still
