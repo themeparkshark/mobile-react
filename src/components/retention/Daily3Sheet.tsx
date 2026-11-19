@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
@@ -12,6 +12,8 @@ import {
 import { freezesShown, goalGo, goalPassLine, homeSideGoal, weekStartsLine } from '../../services/retention/rewardsModel';
 import { BRAND, GameIcon, ICON_SOURCES } from '../../ui';
 import { useAmbient } from './power';
+import { playSfx } from '../../gamekit/SFX';
+import { TICK_FIRST_MS, TICK_GAP_MS, chestAfterTicksMs } from '../../services/retention/daily3Seen';
 
 const DAILY_CHEST = require('../../../assets/images/daily/chest-closed.png');
 const SNACK = require('../../../assets/images/social/topic_snacks.png');
@@ -29,7 +31,8 @@ export type GoalTap = 'chest' | 'closet' | 'friends' | 'snack' | 'ride' | 'shelf
  * Every number on it comes from the server.
  */
 export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyFreeze, onGoal, onClose, onReminders, busy, coins,
-  celebrate, reducedMotion, coach, onCoachDone, atPark = false, passToday = null, remindersReady = false, closeLabel = 'BACK TO MAP' }: {
+  celebrate, reducedMotion, coach, onCoachDone, atPark = false, passToday = null, remindersReady = false, closeLabel = 'BACK TO MAP',
+  ticksHeld = false }: {
   readonly state: DailyThreeState;
   readonly now: number;
   /** At a park the goals are as sent; at home a park goal shows its home side and GO never names a park. */
@@ -48,8 +51,10 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
   readonly onReminders: (on: boolean) => void;
   readonly busy: boolean;
   readonly coins: number;
-  /** Goal keys that just turned done: they stamp in when the card opens. */
+  /** Goal keys to tick, in order, one by one (first sight of the day, or goals that just turned done). */
   readonly celebrate: readonly string[];
+  /** The how-it-works card is up: the ticks wait until it is gone, so the player sees each one land. */
+  readonly ticksHeld?: boolean;
   readonly reducedMotion: boolean;
   /** First open: a three-line "how it works" card over the sheet. */
   readonly coach: boolean;
@@ -98,14 +103,15 @@ export default function Daily3Sheet({ state, now, onClaim, onClaimWeekly, onBuyF
           const shown = homeSideGoal(g, atPark);
           const go = goalGo(shown, atPark);
           return (
-            <GoalRow key={g.key} goal={shown} index={i} pop={celebrate.includes(g.key)} reducedMotion={reducedMotion}
+            <GoalRow key={g.key} goal={shown} tick={celebrate.includes(g.key) ? celebrate.indexOf(g.key) : null} held={ticksHeld} reducedMotion={reducedMotion}
               go={go} passLine={passToday && !shown.parkOnly ? goalPassLine(shown, passToday) : null}
               onPress={() => { if (go) onGoal(go); }} />
           );
         })}
       </View>
 
-      <ChestBlock state={state} done={done} busy={busy} onClaim={onClaim} reducedMotion={reducedMotion} />
+      <ChestBlock state={state} done={done} busy={busy} onClaim={onClaim} reducedMotion={reducedMotion}
+        ticks={reducedMotion ? 0 : celebrate.filter(k => state.goals.some(g => g.key === k && g.done)).length} held={ticksHeld} />
 
       <View style={styles.week}>
         <View style={styles.weekDays}>
@@ -200,35 +206,48 @@ function goalIcon(g: DailyGoal) {
   return <GameIcon name="shark" size={38} />;
 }
 
-function GoalRow({ goal, index, pop, onPress, reducedMotion, go, passLine }: {
-  readonly goal: DailyGoal; readonly index: number; readonly pop: boolean; readonly onPress: () => void; readonly reducedMotion: boolean;
+function GoalRow({ goal, tick, held, onPress, reducedMotion, go, passLine }: {
+  readonly goal: DailyGoal; readonly onPress: () => void; readonly reducedMotion: boolean;
+  /** This goal ticks as number `tick` of the ones playing (null: shown as it is). */
+  readonly tick: number | null;
+  /** Ticks wait (the how-it-works card is up): a goal still to tick shows as not done yet. */
+  readonly held: boolean;
   /** Where GO goes (null: no GO, e.g. a park-only goal at home). */
   readonly go: GoalTap | null;
   /** "Climbs your Shark Pass" after the Shark Pass unlocks (one extra line). */
   readonly passLine: string | null;
 }) {
-  const stamp = useSharedValue(goal.done && !pop ? 1 : 0);
+  // Fix pass w4 T096: a goal that ticks reads as not done until its own beat, then the row turns green and the check
+  // stamps in, one goal after another (never a sheet that opens with every check already there).
+  const plays = tick !== null && goal.done && !reducedMotion;
+  const [ticked, setTicked] = useState(!plays);
+  const stamp = useSharedValue(goal.done && !plays ? 1 : 0);
   useEffect(() => {
-    if (!goal.done) { stamp.value = 0; return; }
-    if (!pop || reducedMotion) { stamp.value = 1; return; }
-    // The check stamps in, one goal after another.
-    stamp.value = withDelay(350 + index * 260, withSpring(1, { damping: 8, stiffness: 220 }));
-    const timer = setTimeout(() => haptic('success'), 350 + index * 260);
+    if (!goal.done) { stamp.value = 0; setTicked(false); return undefined; }
+    if (!plays) { stamp.value = 1; setTicked(true); return undefined; }
+    stamp.value = 0; setTicked(false);
+    if (held) return undefined;
+    const timer = setTimeout(() => {
+      setTicked(true);
+      stamp.value = withSpring(1, { damping: 8, stiffness: 220 });
+      haptic('success'); playSfx('fx.coinTick', 0.7);
+    }, TICK_FIRST_MS + (tick ?? 0) * TICK_GAP_MS);
     return () => clearTimeout(timer);
-  }, [goal.done, pop, index, reducedMotion, stamp]);
+  }, [goal.done, plays, held, tick, stamp]);
   const checkStyle = useAnimatedStyle(() => ({ opacity: stamp.value, transform: [{ scale: 1.8 - stamp.value * 0.8 }] }));
+  const doneNow = goal.done && ticked;
   const actionable = !goal.done && go !== null;
   const pct = Math.min(1, goal.progress / Math.max(1, goal.target));
   return (
     <Pressable onPress={actionable ? onPress : undefined} disabled={!actionable} accessibilityRole="button"
-      accessibilityLabel={`${goal.title}. ${goal.done ? 'Done' : goal.hint}`}
-      style={({ pressed }) => [styles.goal, goal.done && styles.goalDone, pressed && styles.goalPressed]}>
+      accessibilityLabel={`${goal.title}. ${doneNow ? 'Done' : goal.hint}`}
+      style={({ pressed }) => [styles.goal, doneNow && styles.goalDone, pressed && styles.goalPressed]}>
       <View style={styles.goalIcon}>{goalIcon(goal)}</View>
       <View style={styles.goalText}>
-        <Text style={[styles.goalTitle, goal.done && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
+        <Text style={[styles.goalTitle, doneNow && styles.goalTitleDone]} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>
           {goal.title}
         </Text>
-        {goal.done ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) && go !== null ? (
+        {doneNow ? <Text style={styles.goalHintDone} numberOfLines={1}>Done!</Text> : showsBar(goal) && go !== null ? (
           <View style={styles.bar}><View style={[styles.barFill, { width: `${pct * 100}%` }]} />
             <Text style={styles.barText}>{`${goal.progress}/${goal.target}`}</Text></View>
         ) : <Text style={styles.goalHint} numberOfLines={1}>{goal.hint}</Text>}
@@ -243,11 +262,26 @@ function GoalRow({ goal, index, pop, onPress, reducedMotion, go, passLine }: {
   );
 }
 
-function ChestBlock({ state, done, busy, onClaim, reducedMotion }: {
+function ChestBlock({ state, done: doneAll, busy, onClaim, reducedMotion, ticks, held }: {
   readonly state: DailyThreeState; readonly done: number; readonly busy: boolean; readonly onClaim: () => void; readonly reducedMotion: boolean;
+  /** Fix pass w4 T096: how many goals tick one by one; the count climbs with them and the chest is offered after. */
+  readonly ticks: number;
+  /** The ticks wait (the how-it-works card is up). */
+  readonly held: boolean;
 }) {
   const bob = useSharedValue(0);
-  const ready = state.claimable;
+  const [ticked, setTicked] = useState(ticks > 0 ? 0 : -1);
+  useEffect(() => {
+    if (ticks <= 0) { setTicked(-1); return undefined; }
+    setTicked(0);
+    if (held) return undefined;
+    const timers = Array.from({ length: ticks }, (_, i) => setTimeout(() => setTicked(i + 1), TICK_FIRST_MS + i * TICK_GAP_MS));
+    timers.push(setTimeout(() => setTicked(-1), chestAfterTicksMs(ticks)));
+    return () => timers.forEach(clearTimeout);
+  }, [ticks, held]);
+  // -1: every tick has played (or none were due). Else the goals ticked so far.
+  const done = ticked < 0 ? doneAll : Math.max(0, doneAll - ticks) + ticked;
+  const ready = state.claimable && ticked < 0;
   const ambient = useAmbient();
   useEffect(() => {
     if (!ready || reducedMotion || !ambient) { bob.value = 0; return; }

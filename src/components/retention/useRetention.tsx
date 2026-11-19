@@ -32,7 +32,7 @@ import { devLadderFeed } from '../../services/retention/devLadderFeed';
 import {
   askForDailyChest, autoOpenUsed, noteAppState, noteAutoOpen, rewardMayAutoOpen,
 } from '../../services/retention/rewardPresence';
-import { daily3SeenDate, noteDaily3Seen, tickToast } from '../../services/retention/daily3Seen';
+import { daily3SeenDate, noteDaily3Seen, seenToday, tickToast, ticksOnFirstSight } from '../../services/retention/daily3Seen';
 import { showToast } from '../../utils/toast';
 import { claimOrReconcile, LOST_CLAIM_WAITS_MS, reconcileClaim } from '../../services/retention/claimReconcile';
 import { emptyLine, rewardsRows, rewardsSummary, BADGE_SETTLE_MS, flameNote, settleBadge, stampClaimNote, withChestOpened, type RewardsInput, type RewardsRowKey, type RewardsSummary } from '../../services/retention/rewardsModel';
@@ -385,7 +385,13 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
   const openSheet = (fromRewards = false) => {
     // Opening Daily 3 is seeing it: its NEW tag (rung 4) clears.
     markRungSeen('daily');
-    if (daily && playerIdRef.current != null) { noteDaily3Seen(playerIdRef.current, daily.date); setSeenDate(daily.date); }
+    if (daily && playerIdRef.current != null) {
+      // Fix pass w4 T096: the first sight of today's goals ticks the ones already done, one by one, before the chest.
+      const first = ticksOnFirstSight({ ...daily, goals: withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date)) },
+        seenToday(daily, seenDate));
+      if (first.length) setCelebrate(first);
+      noteDaily3Seen(playerIdRef.current, daily.date); setSeenDate(daily.date);
+    }
     setSheetFromRewards(fromRewards);
     setView({ k: 'sheet' });
     void AsyncStorage.getItem(COACH_KEY).then(v => { if (!v && mounted.current) setCoach(true); }).catch(() => undefined);
@@ -539,7 +545,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       ? { unclaimed: dailyGift.redeemed_at === null, day: Math.min(giftLadder, Math.max(1, dailyGift.day ?? 1)), of: giftLadder } : null,
     daily3: wantDaily && daily ? {
       done: doneCount(withChestOpened(daily.goals, chestOpenedOn(dailyGift, daily.date))), total: Math.max(3, daily.goals.length), claimable: daily.claimable,
-      claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenDate === daily.date,
+      claimed: daily.claimed && !daily.claimable, flame: daily.streak.days, seen: seenToday(daily, seenDate),
       counted: daily.streak.counted_today, best: daily.streak.best,
     } : null,
     weekly: wantDaily && daily ? { claimable: daily.week.claimable } : null,
@@ -649,7 +655,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
         return;
       case 'daily3':
         // T096: the chest opens straight from here only once today's goals were shown; else the goals come first.
-        if (daily?.claimable && seenDate === daily.date) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
+        if (daily?.claimable && seenToday(daily, seenDate)) { backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }
         else openSheet(true);
         return;
       case 'level_chest':
@@ -793,7 +799,7 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
       <Daily3Sheet state={dailyShown ?? daily} now={Date.now()} busy={busy} coins={player?.coins ?? 0} celebrate={celebrate}
         atPark={atPark} passToday={passOn ? passToday : null} remindersReady={flagOn(flags, 'retention_push') || localOn}
         closeLabel={sheetFromRewards ? 'BACK' : 'BACK TO MAP'}
-        reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone}
+        reducedMotion={reducedMotion} onClose={close} onGoal={onGoal} coach={coach} onCoachDone={coachDone} ticksHeld={coach}
         onReminders={on => { void toggleReminders(on); }}
         onClaim={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'daily', claimDate: daily.claimable_date, rewards: null, opening: false }); }}
         onClaimWeekly={() => { if (sheetFromRewards) backToRewards.current = true; setView({ k: 'reveal', src: 'weekly', rewards: null, opening: false }); }}

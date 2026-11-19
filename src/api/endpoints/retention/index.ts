@@ -49,6 +49,12 @@ export interface DailyThreeState {
   /** What the last Daily 3 chest paid (today or yesterday), for a claim whose answer was lost. */
   readonly claimed_rewards?: (PaidRewards & { readonly date?: string }) | null;
   readonly reward: DailyThreeReward;
+  /** When the player first opened today's goals (fix pass w4, B07); null until then. Older servers: absent. */
+  readonly seen_at?: string | null;
+  /** Today's goals finished before the player first saw them (B07): they tick one by one on first sight. */
+  readonly done_before_seen?: readonly string[] | null;
+  /** The flame started over after days away (B06): sent until the player has seen it once. */
+  readonly streak_reset?: { readonly days_away: number } | null;
   readonly streak: {
     readonly days: number; readonly best: number; readonly freezes: number; readonly freeze_cap: number;
     readonly freeze_price: number; readonly at_risk: boolean; readonly counted_today: boolean;

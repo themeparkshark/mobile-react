@@ -65,7 +65,9 @@ export function rewardsRows(i: RewardsInput): RewardsRow[] {
   }
   if (i.daily3) {
     const d = i.daily3;
-    if (d.claimable && d.seen === false) rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.total} of ${d.total} goals done. See them`, ready: 1, action: 'go' });
+    // Fix pass w4 T096: before today's goals were shown, the row names the goals (never a done count or a chest):
+    // the sheet then ticks the finished ones one by one and only then offers the chest.
+    if (d.seen === false && !d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: `See your ${d.total} goals for today`, ready: d.claimable ? 1 : 0, action: 'go' });
     else if (d.claimable) rows.push({ key: 'daily3', title: 'Daily 3 Chest', line: 'All 3 done! Open your chest', ready: 1, action: 'open' });
     else if (d.claimed) rows.push({ key: 'daily3', title: 'Daily 3', line: 'Done for today. New goals tomorrow', ready: 0, action: 'go' });
     else rows.push({ key: 'daily3', title: 'Daily 3', line: `${d.done} of ${d.total} done`, ready: 0, action: 'go' });

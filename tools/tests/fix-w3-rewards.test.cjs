@@ -78,14 +78,14 @@ test('T096: Daily 3 is met as its three goals, never first as "All 3 done!"; tic
   const unseen = model.rewardsRows({ ...base, daily3: { ...d, seen: false } }).find(r => r.key === 'daily3');
   assert.equal(unseen.action, 'go', 'SEE: the goals first');
   assert.doesNotMatch(unseen.line, /All 3 done/);
-  assert.equal(unseen.line, '3 of 3 goals done. See them');
+  assert.equal(unseen.line, 'See your 3 goals for today');
   const seen = model.rewardsRows({ ...base, daily3: { ...d, seen: true } }).find(r => r.key === 'daily3');
   assert.equal(seen.action, 'open');
   const seenMod = loadTs('src/services/retention/daily3Seen.ts', { '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => undefined } } });
   assert.equal(seenMod.tickToast(1, 3), 'Daily 3: 1 of 3 done');
   assert.equal(seenMod.tickToast(3, 3), 'Daily 3: all 3 done! Your chest is in Rewards');
   const hook = read('src/components/retention/useRetention.tsx');
-  assert.match(hook, /if \(daily\?\.claimable && seenDate === daily\.date\) \{ backToRewards\.current = true;/, 'the row opens the chest only after the goals were shown');
+  assert.match(hook, /if \(daily\?\.claimable && seenToday\(daily, seenDate\)\) \{ backToRewards\.current = true;/, 'the row opens the chest only after the goals were shown');
   assert.match(hook, /noteDaily3Seen\(playerIdRef\.current, daily\.date\)/, 'opening Daily 3 is seeing its goals');
   assert.match(hook, /if \(mapClearRef\.current\) showToast\(tickToast\(/, 'a tick on the map says so');
 });
