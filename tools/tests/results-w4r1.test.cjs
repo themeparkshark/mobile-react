@@ -44,7 +44,8 @@ test('the shared card says each idea once: no star-gap pill over the bar, BEST o
 
 test('extras sit inside the card above the buttons, so DONE is always the bottom row', () => {
   const card = read('src/gamekit/results/ResultsCard.tsx');
-  assert.match(card, /\) : <View style=\{styles\.extras\}>\{extras\}<\/View>\n\s+\) : null\}\n\n\s+\{actions \? <View style=\{styles\.actions\}>\{actions\}<\/View> : null\}/);
+  // Fix pass w4 N03: the extras panel wears the shared results input lock (it still sits right above the buttons).
+  assert.match(card, /\) : <LockedResultActions style=\{styles\.extras\}>\{extras\}<\/LockedResultActions>\n\s+\) : null\}\n\n\s+\{actions \? <View style=\{styles\.actions\}>\{actions\}<\/View> : null\}/);
   const shell = read('src/gamekit/GameShellV2.tsx');
   assert.doesNotMatch(shell, /<\/ResultsCard>\n\s+\{resultExtras/);
 });

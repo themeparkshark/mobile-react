@@ -25,6 +25,9 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import TapHint, { TAP_HINT_SIZE } from '../../components/TapHint';
 import { Image, Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from 'react-native';
+import GameIcon from '../../ui/GameIcon';
+// T041: Whack's themed stage props stand in Memory's sky per land (existing art, no new art).
+import { PROPS as WHACK_PROPS } from '../whack/art.generated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   Easing,
@@ -231,6 +234,46 @@ function WarmupSky({ g }: { g: BoothGeo }) {
           style={{ position: 'absolute', left: (g.W - bw) / 2, top, width: bw, height: h }} />
       </View>
       <MatchCue top={cueTop} left={(g.W - cueW * 2 - 10) / 2} h={cueH} />
+    </View>
+  );
+}
+
+/**
+ * T041: the land a Memory deck belongs to, as one of Whack's themed stages (Alex's existing props). Main Street,
+ * the ocean and the other carnival decks keep the carnival sky.
+ */
+export function landStageForDeck(deckId: string): keyof typeof LAND_PROPS | null {
+  if (deckId === 'space' || deckId === 'launch-code') return 'space';
+  if (deckId === 'pirates' || deckId === 'jungle' || deckId === 'mansion' || deckId === 'backlot') return deckId;
+  return null;
+}
+/** Whack's themed stage props (art.generated PROPS, PROP_BOX aspect w/h): one stands in the sky per land. */
+const LAND_PROPS = {
+  space: { src: WHACK_PROPS.space_gantry, aspect: 0.805 },
+  pirates: { src: WHACK_PROPS.pirates_bow, aspect: 0.867 },
+  mansion: { src: WHACK_PROPS.mansion_gate, aspect: 1.315 },
+  jungle: { src: WHACK_PROPS.jungle_steps, aspect: 1.6 },
+  backlot: { src: WHACK_PROPS.backlot_chair, aspect: 0.823 },
+} as const;
+
+/** T041: the land's own landmark stands behind the booth, between Finn and the HUD plates (no new art). */
+function LandSky({ g, land }: { g: BoothGeo; land: keyof typeof LAND_PROPS }) {
+  const prop = LAND_PROPS[land];
+  const room = g.awning.y - 8;
+  if (room < 70) return null;
+  const left = g.barker.x + g.barker.w * 0.82;
+  // The HUD band spans the right 60 %, but its chain plate is content-sized at the right edge (about 84 pt).
+  const right = g.hud.x + g.hud.w - 92;
+  const maxW = Math.max(0, right - left);
+  let h = Math.min(170, room);
+  let w = h * prop.aspect;
+  if (w > maxW) { w = maxW; h = w / prop.aspect; }
+  if (h < 56) return null;
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      testID={`memory-land-${land}`}>
+      <Image source={prop.src} resizeMode="contain"
+        style={{ position: 'absolute', left: left + (maxW - w) / 2, top: g.awning.y - h + 6, width: w, height: h }} />
     </View>
   );
 }
@@ -2656,6 +2699,7 @@ export default function MemoryGame({
         {g ? (
           <>
             {mode === 'warmup' ? <WarmupSky g={g} /> : null}
+            {mode !== 'warmup' && landStageForDeck(deck.id) ? <LandSky g={g} land={landStageForDeck(deck.id)!} /> : null}
             {/* The first-win card's pictures, drawn invisibly while the kid plays, so the card is whole on frame one. */}
             {mode === 'warmup' ? (
               <View style={styles.preload} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -2787,8 +2831,11 @@ export default function MemoryGame({
             <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.headsUp, headsUpStyle]} />
 
             {tip ? (
-              <View pointerEvents="none" style={[styles.tip, tip.kind === 'slip' && styles.tipSlip, { top: g.awning.y - 46 }]} accessibilityLiveRegion="polite">
-                <Text style={styles.tipText}>{tip.text}</Text>
+              // T052 and T059: the first SCOUT and SLIP are taught with a picture, never a sentence to read
+              // (the words stay as the VoiceOver label): the chip's own glyph, what happened, then the chain.
+              <View pointerEvents="none" style={[styles.tip, tip.kind === 'slip' && styles.tipSlip, { top: g.awning.y - 58 }]}
+                accessible accessibilityLabel={tip.text} accessibilityLiveRegion="polite">
+                <TipPicture kind={tip.kind} />
               </View>
             ) : null}
             {unlock ? (
@@ -2863,6 +2910,42 @@ function ArrowGlyph({ dir }: { dir: 'h' | 'v' }) {
   );
 }
 
+/** T052/T059: the card the tips picture (the Ocean deck's shark face, existing art). */
+const TIP_FACE = require('../../assets/games/memory/deck-ocean-shark.png');
+/** The chain plate's own flame (Hud ChainPlate), so the tip points at the HUD it explains. */
+const TIP_STREAK = require('../../assets/games/memory/studio/streak.png');
+
+/**
+ * The first SCOUT or SLIP, as a picture. SCOUT: the chip's magnifier, a card back turning into a new face,
+ * then the chain flame with a check (a new card is free, the chain stays). SLIP: the chip's crack colour,
+ * a face you already saw (magnifier on it), then the chain flame with a cross (it resets).
+ */
+function TipPicture({ kind }: { kind: 'scout' | 'slip' }) {
+  const slip = kind === 'slip';
+  return (
+    <View style={styles.tipRow}>
+      <View style={[styles.tipChip, slip && styles.tipChipSlip]}><GameIcon name="search" size={20} /></View>
+      {slip ? (
+        <View style={styles.tipMarkWrap}>
+          <Image source={TIP_FACE} style={styles.tipCard} resizeMode="contain" />
+          <View style={[styles.tipMark, { borderColor: MM.scout }]}><GameIcon name="search" size={12} /></View>
+        </View>
+      ) : (
+        <>
+          <Image source={CARD_BACK} style={styles.tipCard} resizeMode="contain" />
+          <GameIcon name="arrow" size={16} />
+          <Image source={TIP_FACE} style={styles.tipCard} resizeMode="contain" />
+        </>
+      )}
+      <GameIcon name="arrow" size={16} />
+      <View style={styles.tipMarkWrap}>
+        <Image source={TIP_STREAK} style={styles.tipStreak} resizeMode="contain" />
+        <View style={[styles.tipMark, slip && styles.tipMarkNo]}><GameIcon name={slip ? 'close' : 'check'} size={12} /></View>
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   preload: { position: 'absolute', left: 0, top: 0, width: 24, height: 24, opacity: 0, overflow: 'hidden' },
   preloadImg: { position: 'absolute', width: 24, height: 24 },
@@ -2893,6 +2976,15 @@ const styles = StyleSheet.create({
   tip: { position: 'absolute', alignSelf: 'center', backgroundColor: '#ffffff', borderRadius: 16, borderWidth: 3, borderColor: MM.scout, paddingHorizontal: 14, paddingVertical: 6 },
   tipSlip: { borderColor: '#0768b9' },
   tipText: { fontFamily: 'Knockout', fontSize: 16, color: MM.navyText },
+  tipRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  tipChip: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: MM.scout },
+  tipChipSlip: { backgroundColor: '#3d6fa8' },
+  tipCard: { width: 34, height: 44, borderRadius: 6 },
+  tipMarkWrap: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
+  tipStreak: { width: 32, height: 32 },
+  tipMark: { position: 'absolute', right: -4, bottom: -4, width: 22, height: 22, borderRadius: 11, backgroundColor: '#ffffff',
+    borderWidth: 2, borderColor: '#2fa84f', alignItems: 'center', justifyContent: 'center' },
+  tipMarkNo: { borderColor: '#e2574c' },
   unlock: { position: 'absolute', left: 40, right: 40, alignItems: 'center', backgroundColor: '#ffffff', borderRadius: 18, borderWidth: 3, borderColor: MM.gold, paddingVertical: 10 },
   unlockKicker: { fontFamily: 'Knockout', fontSize: 14, color: MM.ink, letterSpacing: 1 },
   unlockText: { fontFamily: 'Shark', fontSize: 28, color: MM.navyText },

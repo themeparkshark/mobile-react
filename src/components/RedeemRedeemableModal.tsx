@@ -1525,6 +1525,8 @@ export default function RedeemRedeemableModal({
                 preferredGame={selectedGame}
                 attemptSeed={attemptRef.current?.seed}
                 rewardMode="task-attempt"
+                // T060 (play-teach): the coin being played for, so the game's HUD shows its own coin art.
+                coinImageUrl={coinUri ?? undefined}
                 prewarm={flowState === 'spinning'}
                 onStageDrawn={markBoardDrawn}
                 kid={kidRulesFor(attemptRef.current, pictureOnlyRef.current)}

@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
+import { RideChallengeContext } from '../gamekit/RideChallengeContext';
 import { useNavigation } from '@react-navigation/native';
 import { Cell, Section, TableView } from 'react-native-tableview-simple';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -23,7 +24,7 @@ import EngineDemo from '../gamekit/demo/EngineDemo';
 import FxLab from '../gamekit/demo/FxLab';
 import FeelLab from '../gamekit/demo/FeelLab';
 import JuiceLab from '../gamekit/demo/JuiceLab';
-import { CurrentQuestGame, CurrentQuestHub, type HubPick } from '../games/current-quest';
+import { CurrentQuestGame, CurrentQuestHub, CurrentQuestQueueGame, type HubPick } from '../games/current-quest';
 import LagoonDashPreview from '../games/current-quest/party/LagoonDashPreview';
 import { LinePlayMovementContext } from '../gamekit/LinePlayMovementContext';
 import { PerfOverlay, usePerfProbe } from '../gamekit/perf/PerfOverlay';
@@ -96,6 +97,17 @@ export default function MiniGameTesterScreen() {
   const rhythmDemo = __DEV__ ? process.env.EXPO_PUBLIC_RHYTHM_DEMO : undefined;
   const [rhythmRun, setRhythmRun] = useState(0);
   if (rhythmDemo === 'sprint') return <SprintLab seed={Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 1)} />;
+  // Dev only (lane captures, T032): EXPO_PUBLIC_CQ_V1_LAB=1 opens LinePlay's Current Quest (the v1 route puzzle) with
+  // PLAY AGAIN, logging each run's proof instead of sending it.
+  const cqV1Lab = __DEV__ && process.env.EXPO_PUBLIC_CQ_V1_LAB === '1';
+  const [cqV1Run, setCqV1Run] = useState(0);
+  if (cqV1Lab) {
+    return (
+      <CurrentQuestQueueGame key={cqV1Run} visible seed={20261119} taskName="Pirates of the Caribbean"
+        onRunProof={(meta) => console.log('[cq-v1-lab] run proof', JSON.stringify({ seed: meta.seed, score: meta.score }))}
+        onComplete={() => setCqV1Run((n) => n + 1)} onClose={() => setCqV1Run((n) => n + 1)} />
+    );
+  }
   if (rhythmDemo === 'queue' || rhythmDemo === 'ride') {
     const seedEnv = Number(process.env.EXPO_PUBLIC_RHYTHM_SEED || 0);
     return (
@@ -311,12 +323,14 @@ export default function MiniGameTesterScreen() {
       </Wrapper>
       {WHACK_PERF_CONTROL ? <PerfControl /> : null}
 
-      {/* Mini-Game */}
+      {/* Mini-Game. Dev only: EXPO_PUBLIC_RIDE_GAME_PREVIEW_CHALLENGE=1 plays it as a paid ride challenge (the coin card's context). */}
+      <RideChallengeContext.Provider value={ridePreview && process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW_CHALLENGE === '1'}>
       <MiniGameSelector
         visible={activeGame !== null}
         taskId={999}
         taskName={previewRideName}
-        coinImageUrl={undefined}
+        // Dev only (lane captures): EXPO_PUBLIC_RIDE_GAME_PREVIEW_COIN is the previewed ride's coin_url (T060 HUD ring).
+        coinImageUrl={ridePreview ? process.env.EXPO_PUBLIC_RIDE_GAME_PREVIEW_COIN || undefined : undefined}
         preferredGame={activeGame === 'random' ? undefined : activeGame ?? undefined}
         rewardMode={ridePreview && sharkyPreview !== 'queue' ? 'task-attempt' : 'legacy'}
         isPractice={ridePreview}
@@ -324,6 +338,7 @@ export default function MiniGameTesterScreen() {
         onClose={handleClose}
         onComplete={handleComplete}
       />
+      </RideChallengeContext.Provider>
 
       {/* Studio engine demo (dev) */}
       {engineDemo ? (

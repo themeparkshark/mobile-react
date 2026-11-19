@@ -19,6 +19,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import LockedResultActions from '../../gamekit/results/LockedResultActions';
 import Animated, {
   cancelAnimation,
   Easing,
@@ -137,7 +138,9 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
               style={[styles.shell, i >= left && styles.shellUsed]} />
           ))}
         </View>
-        <Animated.View style={[styles.actions, buttonSt]}>
+        <Animated.View style={buttonSt}>
+        {/* N03: one shared input lock (the TIME'S UP try card too): a kid still flipping never presses TRY AGAIN by accident. */}
+        <LockedResultActions style={styles.actions} delayMs={reducedMotion ? 0 : sched.button}>
           {canRetry ? (
             <Pressable onPress={onTryAgain} style={({ pressed }) => [styles.btn, compact && styles.btnCompact, pressed && styles.down]}
               accessibilityRole="button" accessibilityLabel={`Try again. ${triesLeftLine(left)}`}>
@@ -151,6 +154,7 @@ export function TryCard({ copy, pairs, total, left, bottom, compact = false, ent
               <Text style={canRetry ? styles.doneText : styles.btnText}>DONE</Text>
             </Pressable>
           ) : null}
+        </LockedResultActions>
         </Animated.View>
       </Pressable>
     </Animated.View>

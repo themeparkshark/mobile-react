@@ -8,7 +8,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { DURATION } from '../../ui/motion';
-import { RESULT_INPUT_LOCK_MS, RESULT_QUIET_MS, nextMashUnlock } from './mashGuard';
+import { RESULT_INPUT_LOCK_MS, RESULT_QUIET_MS, nextMashUnlock, quietWaitLeft } from './mashGuard';
+import { lastUserTouchAt } from '../../hooks/useUserIdle';
 
 /** Locked buttons show at this opacity: plainly resting, never a muddy colour over the blue card (0.55 read green). */
 export const LOCKED_BUTTON_OPACITY = 0.8;
@@ -23,8 +24,19 @@ export default function useResultInputLock(active: boolean, firstMs: number = RE
   const schedule = useCallback((delay: number) => {
     unlockAt.current = Date.now() + delay;
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => setArmed(true), delay);
-  }, []);
+    // Fix pass w4 N03: the buttons wake only once the finger has been quiet ANYWHERE for quietMs (the app's root
+    // touch clock, useUserIdle), not only on the buttons: a kid tapping the board around the card is still tapping.
+    const wake = () => {
+      const left = quietWaitLeft(lastUserTouchAt(), Date.now(), quietMs);
+      if (left > 0) {
+        unlockAt.current = Date.now() + left;
+        timer.current = setTimeout(wake, left);
+        return;
+      }
+      setArmed(true);
+    };
+    timer.current = setTimeout(wake, delay);
+  }, [quietMs]);
   useEffect(() => {
     setArmed(false);
     if (!active) { unlockAt.current = Number.POSITIVE_INFINITY; return undefined; }

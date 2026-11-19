@@ -16,7 +16,7 @@ import React, { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import {
   Canvas, Circle, ColorMatrix, Group, Image, LinearGradient, Path, Picture, Rect, RoundedRect, Skia, Text, createPicture, rect,
-  useFont, vec, type SkFont, type SkImage,
+  useFont, useImage, vec, type SkFont, type SkImage,
 } from '@shopify/react-native-skia';
 import { useCachedImage } from './imageCache';
 import { useDerivedValue, type SharedValue } from 'react-native-reanimated';
@@ -157,6 +157,8 @@ export interface HudProps {
   compact?: boolean;
   /** Home Defend plays the ride format, but its meter fills to DEFENDED!, never a coin it does not give. */
   winWord?: string;
+  /** T060: the ride's own coin art (the server's coin_url), drawn inside the ride round's ring. */
+  coinUrl?: string | null;
 }
 
 export interface WhackBoardProps {
@@ -417,6 +419,9 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
   const tr = 20;
   const tcx = px + 10 + tr;
   const tcy = py + ph / 2;
+  // T060: a ride round's ring holds the coin being played for (it read as an empty blue circle).
+  const coinImg = useImage(hud.ride && hud.coinUrl ? hud.coinUrl : null);
+  const coinR = tr - 4;
   const timerPath = useDerivedValue(() => {
     tick.value;
     const s = sim.value;
@@ -537,6 +542,7 @@ function HudPlate({ L, sim, rs, tick, hud, fontS, fontM, fontL }: {
           <Group transform={timerT}>
             <Circle cx={tcx} cy={tcy} r={tr + 3} color={NAVY} />
             <Circle cx={tcx} cy={tcy} r={tr} color={timerFace} />
+            {coinImg ? <Image image={coinImg} x={tcx - coinR} y={tcy - coinR} width={coinR * 2} height={coinR * 2} fit="contain" /> : null}
             <Path path={timerPath} style="stroke" strokeWidth={5} strokeCap="round" color={timerColor} />
             {/* A paid ride game shows the draining ring only, no counting-down number (fix round W1 item 18). */}
             {fontM && !hud.ride && !hud.quietTimer ? <Text x={timerTextX} y={tcy + 7} text={timerText} font={fontM} color={timerNum} /> : null}

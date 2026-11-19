@@ -27,6 +27,33 @@ export function nextMashUnlock(unlockAt: number, now: number, quietMs: number = 
 }
 
 /**
+ * Fix pass w4 N03: how much longer the buttons must wait after the last touch anywhere on screen (0 = wake now).
+ * A touch on the board around the card counts like a touch on the buttons: the player is still tapping.
+ */
+export function quietWaitLeft(lastTouchAt: number, now: number, quietMs: number = RESULT_QUIET_MS): number {
+  if (!(lastTouchAt > 0)) return 0;
+  return Math.max(0, lastTouchAt + quietMs - now);
+}
+
+/**
+ * Replays a tapper whose taps land anywhere (board, card or buttons) against the lock: the first tap that
+ * lands on a button after the buttons woke, or null. `onButton(i)` says whether tap i hit a button.
+ */
+export function firstButtonPressOf(taps: readonly number[], onButton: (i: number) => boolean,
+  firstMs: number = RESULT_INPUT_LOCK_MS, quietMs: number = RESULT_QUIET_MS): number | null {
+  let wakeAt = firstMs;
+  let last = 0;
+  for (let i = 0; i < taps.length; i += 1) {
+    const at = taps[i];
+    // The wake timer fires at wakeAt; it waits on while a touch landed less than quietMs before it.
+    while (wakeAt <= at && quietWaitLeft(last, wakeAt, quietMs) > 0) wakeAt = last + quietMs;
+    if (at >= wakeAt && onButton(i)) return at;
+    last = at;
+  }
+  return null;
+}
+
+/**
  * Replays a tapper against the lock (tests and tuning): taps at `taps` ms after the card appeared.
  * Returns the time of the first tap that would press a button, or null when every tap was absorbed.
  */

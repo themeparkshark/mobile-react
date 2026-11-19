@@ -107,6 +107,8 @@ export interface WhackASharkProps {
   /** Resolved ride theme (queue passes it); otherwise derived from taskName. */
   theme?: WhackTheme;
   taskName?: string;
+  /** T060: the ride coin's art (coin_url), shown in the ride round's HUD ring. */
+  coinImage?: string | null;
   /** The ride whose line this is (Line of the Day seed, Finn cards, mastery). */
   rideId?: string | number;
   userId?: number | string;
@@ -235,7 +237,7 @@ async function readJson<T>(key: string): Promise<T | null> {
 
 export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function WhackAShark(props, ref) {
   const {
-    visible, taskName, onComplete, onClose, onQuit, onBurstBanked, walkMeters, ghost: ghostProp, duel, raid,
+    visible, taskName, onComplete, onClose, onQuit, onBurstBanked, walkMeters, ghost: ghostProp, duel, raid, coinImage,
   } = props;
   const format: WhackFormat = props.format ?? 'queue';
   const ride = format === 'ride';
@@ -1382,7 +1384,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     boss: !!tl?.boss,
     notches: tl?.winBonks ?? winBonks,
     ...(defend ? { winWord: HOME_DEFEND.win } : {}),
-  }), [ride, inLine, format, burstIdx, totalBursts, tl?.fever, tl?.boss, tl?.winBonks, winBonks, defend]);
+    coinUrl: ride && !defend ? coinImage ?? null : null,
+  }), [ride, inLine, format, burstIdx, totalBursts, tl?.fever, tl?.boss, tl?.winBonks, winBonks, defend, coinImage]);
   useEffect(() => {
     runtime.rt.value.reducedMotion = reducedMotion;
   }, [reducedMotion, runtime.rt]);

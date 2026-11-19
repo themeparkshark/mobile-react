@@ -276,7 +276,7 @@ export default function MemoryMatchMiniGame({
 
     const messages = won
       ? stars === 3 ? 'PERFECT!' : stars === 2 ? 'GREAT!' : 'NICE!'
-      : 'TIME UP!';
+      : 'GOOD TRY!';
 
     setResult({ won, message: messages, stars });
     setPhase('ended');

@@ -20,6 +20,10 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AuthContext } from '../../context/AuthProvider';
 import { StyleSheet, Text, TouchableOpacity, View, type LayoutChangeEvent } from 'react-native';
+import HoldDemo from '../../components/help/HoldDemo';
+import { GAME_INTROS } from '../../services/help/helpTopics';
+/** T045: Sharky's own art for the pictured hold (the how-to card uses the same frame). */
+const HOLD_SHARK = require('../../assets/games/sharky/shark-swim-1.png');
 import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import Animated, { runOnUI, useSharedValue, withTiming, Easing } from 'react-native-reanimated';
 import { GameShellV2, type GameResult, type GameShellV2Handle, type ShellResultsArgs } from '../../gamekit/GameShellV2';
@@ -579,7 +583,9 @@ export function SharkySwim({
       mgr.activate();
       const inp = input.value;
       if (inp.fingers === 0) {
-        inp.q.push(IN_PRESS, 0, 0);
+        // T045: a finger back down before a tap's short swim ended just keeps swimming (no new press).
+        if (inp.releasePending) inp.releasePending = false;
+        else inp.q.push(IN_PRESS, 0, 0);
         inp.holding = true;
       }
       inp.fingers = e.numberOfTouches;
@@ -590,7 +596,8 @@ export function SharkySwim({
       const left = e.numberOfTouches - e.changedTouches.length;
       inp.fingers = left < 0 ? 0 : left;
       if (inp.fingers === 0) {
-        if (inp.holding) inp.q.push(IN_RELEASE, 0, 0);
+        // T045: the engine applies the release once the press has swum TAP_SWIM_STEPS (a tap is a short swim).
+        if (inp.holding) inp.releasePending = true;
         inp.holding = false;
         mgr.end();
       }
@@ -598,7 +605,8 @@ export function SharkySwim({
     .onTouchesCancelled((_e, mgr) => {
       'worklet';
       const inp = input.value;
-      if (inp.holding) inp.q.push(IN_RELEASE, 0, 0);
+      if (inp.holding || inp.releasePending) inp.q.push(IN_RELEASE, 0, 0);
+      inp.releasePending = false;
       inp.holding = false;
       inp.fingers = 0;
       mgr.end();
@@ -618,7 +626,8 @@ export function SharkySwim({
     runOnUI(() => {
       'worklet';
       const inp = input.value;
-      if (inp.holding) inp.q.push(IN_RELEASE, 0, 0);
+      if (inp.holding || inp.releasePending) inp.q.push(IN_RELEASE, 0, 0);
+      inp.releasePending = false;
       inp.holding = false;
       inp.fingers = 0;
     })();
@@ -699,8 +708,8 @@ export function SharkySwim({
 
   const title = runMode === 'ride' ? 'Win the coin' : runMode === 'rally' ? 'Rally' : runMode === 'ghost' ? 'Ghost Rally' : 'Sharky Swim';
   const objective = runMode === 'ride'
-    ? 'Reach the Ride Gate. Hold to swim up, let go to sink.'
-    : cfg.tier === 0 ? 'Hold anywhere to swim up. Let go to sink.' : 'Skim close past the sparkle halos to build your chain.';
+    ? `Reach the Ride Gate. ${GAME_INTROS.shark.how}`
+    : cfg.tier === 0 ? GAME_INTROS.shark.how : 'Skim close past the sparkle halos to build your chain.';
 
   return (
     <GameShellV2
@@ -715,6 +724,8 @@ export function SharkySwim({
       hideHeaderScore
       personalBest={result && bestBeforeRun.current != null ? bestBeforeRun.current : prog.best[runMode] ?? 0}
       objective={objective}
+      // T045: the start card pictures the hold (finger pressed down, Sharky rising), zero reading.
+      countdownDemo={<HoldDemo subject={HOLD_SHARK} motion="rise" reduced={reducedMotion} />}
       result={result}
       thresholds={cfg.mode === MODE_RIDE ? RIDE_STARS : QUEUE_STARS}
       gameId="sharky"
@@ -775,6 +786,8 @@ export function SharkySwim({
             {frozen ? (
               <View pointerEvents="none" style={styles.freeze}>
                 <View style={styles.freezeBubble}>
+                  {/* T045: the hold, pictured (the words stay for grown-ups). */}
+                  <HoldDemo subject={HOLD_SHARK} motion="rise" reduced={reducedMotion} />
                   <Text style={styles.freezeText}>HOLD TO SWIM</Text>
                 </View>
               </View>
@@ -834,7 +847,7 @@ const styles = StyleSheet.create({
   pill: { backgroundColor: 'rgba(255,255,255,0.92)', borderRadius: 999, borderWidth: 3, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 6, maxWidth: 120 },
   pillText: { fontFamily: 'Knockout', fontSize: 12, color: INK },
   freeze: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(235,248,255,0.55)' },
-  freezeBubble: { backgroundColor: NEUTRAL, borderRadius: 999, borderWidth: 4, borderColor: INK, paddingHorizontal: 26, paddingVertical: 14 },
+  freezeBubble: { backgroundColor: NEUTRAL, borderRadius: 32, borderWidth: 4, borderColor: INK, paddingHorizontal: 26, paddingVertical: 12, alignItems: 'center' },
   freezeText: { fontFamily: 'Shark', fontSize: 30, color: INK },
   revive: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center' },
   reviveCard: { width: '80%', backgroundColor: '#fff8e4', borderRadius: 24, borderWidth: 4, borderColor: INK, padding: 20, alignItems: 'center' },

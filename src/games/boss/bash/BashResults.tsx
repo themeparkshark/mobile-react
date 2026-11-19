@@ -21,6 +21,7 @@ import { ResultsRibbon } from '../../../gamekit/results/ResultsRibbon';
 import { bossTitle } from '../../../gamekit/results/feelings';
 import { ResultChip } from '../../../gamekit/results/ResultsCard';
 import { ResultSecondaryButton } from '../../../gamekit/results/ResultButtons';
+import LockedResultActions from '../../../gamekit/results/LockedResultActions';
 
 import { bashChips } from './bashChips';
 import { STAR_SLOT } from '../../../gamekit/results/starSlot';
@@ -246,6 +247,8 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
         <Image source={BASH_ART.finFull} style={{ width: 20, height: 20 }} contentFit="contain" />
         <Text style={styles.warmText} maxFontSizeMultiplier={1.2}>HEAD START EARNED</Text>
       </View>}
+      {/* N03: one shared input lock: a kid still bashing never presses ATTACK AGAIN or DONE by accident. */}
+      <LockedResultActions style={styles.lockWrap}>
       {!won && !noHits && n.can && onAgain ? <>
         <Pressable accessibilityRole="button" onPress={once(onAgain)} style={({ pressed: p }) => [styles.again, p && { transform: [{ scale: 0.97 }] }]}
           accessibilityLabel={`Attack again for ${next?.energyCost} Energy${warmNext ? ', with a free head start fin' : ''}. You have ${n.energyAfter} Energy and ${n.attacksAfter} ${n.attacksAfter === 1 ? 'attack' : 'attacks'} left.`}>
@@ -262,6 +265,7 @@ export default function BashResults({ args, bossName, boss, startHp, hpMax, dama
           <Text style={[styles.againText, { color: BRAND.navy }]}>DONE</Text>
         </Pressable>
       </>}
+      </LockedResultActions>
       {perfLine ? <Text style={styles.perf}>{perfLine}</Text> : null}
     </View>
     </View>
@@ -280,6 +284,7 @@ function Loot({ icon, n, count = false, reduced = false, small = false }: { icon
 
 const styles = StyleSheet.create({
   // The one results surface every game shares: the blue card with a white border.
+  lockWrap: { alignSelf: 'stretch' },
   stage: { width: '100%', alignItems: 'center', justifyContent: 'flex-end',
     paddingTop: (initialWindowMetrics?.insets.top ?? 20) + 56, paddingBottom: Math.max(10, initialWindowMetrics?.insets.bottom ?? 0) + 6 },
   card: { width: '92%', backgroundColor: BRAND.blue, borderRadius: 26, borderWidth: 4, borderColor: BRAND.white, padding: 16, paddingTop: 44, marginTop: 30,

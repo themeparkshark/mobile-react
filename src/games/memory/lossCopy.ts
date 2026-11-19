@@ -21,7 +21,7 @@ export function memoryLossCopy(pairs: number, total: number, outOfTurns = false,
   // The line says what the kid did ("3 of 8 pairs!"), never the how-to again. Only a kid
   // who never flipped a card hears the one move.
   const did = `${p} of ${t} pairs!`;
-  if (p === 0) return { title: outOfTurns ? 'OUT OF FLIPS!' : "TIME'S UP!", line: flipped ? `${did} Try again!` : 'Tap 2 cards to flip them!' };
+  if (p === 0) return { title: outOfTurns ? 'OUT OF FLIPS!' : 'GOOD TRY!', line: flipped ? `${did} Try again!` : 'Tap 2 cards to flip them!' };
   if (outOfTurns && left > 2) return { title: 'OUT OF FLIPS!', line: did };
   if (left <= 2) return { title: 'SO CLOSE!', line: `${did} Just ${left} to go!` };
   if (p * 2 >= t) return { title: 'NICE TRY!', line: did };

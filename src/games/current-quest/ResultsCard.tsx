@@ -17,6 +17,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import LockedResultActions from '../../gamekit/results/LockedResultActions';
 import Animated, {
   FadeIn, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming, ZoomIn,
 } from 'react-native-reanimated';
@@ -243,7 +244,7 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, againF
                 <Text style={styles.podPlace}>{['1st', '2nd', '3rd', '4th'][r.place - 1] ?? `${r.place}th`}</Text>
                 <Image source={AVATAR[r.avatar] ?? AVATAR.you} style={styles.podAvatar} />
                 <Text style={styles.podName} numberOfLines={1}>{r.you ? 'You' : r.name}</Text>
-                <Text style={styles.podStat}>{r.finished ? `${r.shells} shells, ${r.strokes} strokes` : 'out of time'}</Text>
+                <Text style={styles.podStat}>{r.finished ? `${r.shells} shells, ${r.strokes} strokes` : 'still swimming'}</Text>
               </View>
             ))}
           </View>
@@ -253,7 +254,9 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, againF
           {s.nextStar ? <Text style={styles.next}>{s.nextStar}</Text> : null}
           {s.line ? <Text style={styles.line}>{s.line}</Text> : null}
         </Animated.View>
-        <Animated.View entering={skip ? undefined : FadeIn.delay(d(endAt)).duration(220)} style={styles.actions}>
+        <Animated.View entering={skip ? undefined : FadeIn.delay(d(endAt)).duration(220)}>
+        {/* N03: one shared input lock: a kid still tapping tiles never presses a button by accident. */}
+        <LockedResultActions style={styles.actions} delayMs={d(endAt)} resetKey={skip ? 1 : 0}>
           {onAgain && againFirst ? (
             <Pressable onPress={onAgain} style={({ pressed }) => [styles.btn, styles.btnGold, pressed && styles.pressed]} accessibilityRole="button">
               <Text style={styles.btnTxt}>PLAY AGAIN</Text>
@@ -267,6 +270,7 @@ export function CqResultsCard({ s, stars, reducedMotion, onDone, onAgain, againF
               <Text style={styles.btnTxt}>PLAY AGAIN</Text>
             </Pressable>
           ) : null}
+        </LockedResultActions>
         </Animated.View>
         {onChallenge || (onShare && s.shareLabel) ? (
           <Animated.View entering={skip ? undefined : FadeIn.delay(d(endAt + 120)).duration(220)} style={styles.actions}>

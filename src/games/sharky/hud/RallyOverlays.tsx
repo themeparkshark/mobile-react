@@ -52,7 +52,7 @@ export function RallyLobby({ state, crew, onReady, onLeave, toLocal }: {
             </View>
           ))}
         </View>
-        <Text style={styles.body}>18 seconds. Same course for everyone. Skim close and hit Perfect rings for points. Keep your chain going. Your Overdrive sends a gift to the shark behind you.</Text>
+        <Text style={styles.body}>Same course for everyone. Skim close and hit Perfect rings for points. Keep your chain going. Your Overdrive sends a gift to the shark behind you.</Text>
         {state.phase === 'lobby' ? (
           <>
             <TouchableOpacity accessibilityRole="button" style={[styles.btn, me?.ready && styles.btnDone]} onPress={onReady} disabled={!!me?.ready}>

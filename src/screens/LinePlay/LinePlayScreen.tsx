@@ -897,7 +897,9 @@ export default function LinePlayScreen() {
       case 'shark': return <SharkySwim {...common} difficulty={activeGame.difficulty} />;
       case 'banana': return <BananaBasketGame {...common}
         difficulty={(activeGame.kidRound ? 1 : Math.max(2, activeGame.difficulty)) as QueueDifficulty} />;
-      case 'current': return <CurrentQuestQueueGame {...common} taskName={ride.rideName} tier={activeGame.tier} />;
+      // T032 (play-teach): PLAY AGAIN hands the finished run's proof to the session first, like DONE would.
+      case 'current': return <CurrentQuestQueueGame {...common} taskName={ride.rideName} tier={activeGame.tier}
+        onRunProof={groupTurn ? undefined : (meta) => session.recordCurrentQuest(meta)} />;
       case 'showdown': return <SharkShowdown {...common} rideId={ride.rideId} parkId={ride.parkId}
         chapterId={snapshot.chapter?.id} rideName={ride.rideName} />;
       case 'trivia':

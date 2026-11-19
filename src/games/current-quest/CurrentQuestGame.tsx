@@ -1260,7 +1260,7 @@ export default function CurrentQuestGame({
     } else {
       sfxChest();
       CQH.success();
-      banner(done ? `${['1ST', '2ND', '3RD', '4TH'][place - 1]} PLACE` : 'OUT OF TIME', PRI_GOLDEN, done ? 0 : 1, 1000);
+      banner(done ? `${['1ST', '2ND', '3RD', '4TH'][place - 1]} PLACE` : 'RACE OVER', PRI_GOLDEN, done ? 0 : 1, 1000);
     }
     const s = svRef.current;
     const p = s.shark.value;
@@ -1285,14 +1285,14 @@ export default function CurrentQuestGame({
     const proof = proofOf(run, now, done ? starsFor(shells, true, run.boards.length) : 0, !done && run.failed);
     later(2700, () => {
       setSummary({
-        title: done ? (place === 1 ? (tie ? 'Shared crown!' : 'Ghost Race won!') : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Out of time',
+        title: done ? (place === 1 ? (tie ? 'Shared crown!' : 'Ghost Race won!') : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Race over',
         grid: shellsRef.current.map((x) => x.slice()), stars, failed: false, newBest: false, nextStar: null,
         stamp: tie && place === 1 ? 'DEAD HEAT' : null, coinPour: 0, line: 'Most shells wins. Ties go to fewer strokes, then fewer undos. Time never counts.',
         podium, shareLabel: null,
       });
       setResult({
         score: shells, stars, thresholds,
-        message: done ? (place === 1 ? 'Showdown won!' : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Out of time',
+        message: done ? (place === 1 ? 'Showdown won!' : `${['1st', '2nd', '3rd', '4th'][place - 1]} place`) : 'Race over',
         stats: [{ label: 'Place', value: `${place} of ${list.length}` }, { label: 'Shells', value: `${shells}/${run.boards.length * 3}` }],
         meta: { proof, showdown: { place, tie, racers: podium }, seed: runSeed, context, v: 3, perf_tier: TIER_NAMES[tier.tierJs] },
       });

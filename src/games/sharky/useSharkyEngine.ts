@@ -80,6 +80,27 @@ export interface EngineInput {
   /** Drafting: steps spent in a rival's wake, and a re-arm latch. */
   draftZone: number;
   draftUsed: boolean;
+  /**
+   * T045: the finger lifted before TAP_SWIM_STEPS of swimming; the release is applied (and logged)
+   * once the press has lasted that long, so a quick tap gives Sharky a short swim instead of nothing.
+   */
+  releasePending?: boolean;
+}
+
+/**
+ * T045: the shortest swim a press gives (steps at STEP_HZ 60, 150 ms). A quick tap used to press and
+ * release in the same few steps, so the shark barely moved and a kid read the game as broken. The
+ * release waits here, in the input layer, and is logged when it applies, so replays and the server
+ * verifier see ordinary press and release inputs (the sim itself is unchanged).
+ */
+export const TAP_SWIM_STEPS = 9;
+
+/** Pure: should a pending release apply now (the press has swum at least TAP_SWIM_STEPS)? */
+export function releaseDue(simHolding: boolean, step: number, holdStart: number, minSteps: number): boolean {
+  // No default parameter: a worklet's default value is not captured on the UI runtime (it threw
+  // "Property 'TAP_SWIM_STEPS' doesn't exist" on device); the caller passes the constant.
+  'worklet';
+  return simHolding && step - holdStart >= minSteps;
 }
 
 /** Ambient/presentation particles (not part of the sim): bubble jet, rising bubbles, sand puffs. */
@@ -314,6 +335,15 @@ export function useSharkyEngine(
         pushEvent(r, BR_INPUT, kind, q[i + 1], q[i + 2], s.step);
       }
       if (q.length) inp.q = [];
+      // T045: a quick tap's release lands once the press has swum TAP_SWIM_STEPS (logged like any input).
+      if (inp.releasePending) {
+        if (!s.holding) inp.releasePending = false;
+        else if (releaseDue(!!s.holding, s.step, s.holdStart, TAP_SWIM_STEPS)) {
+          applyInput(s, IN_RELEASE, 0, 0);
+          pushEvent(r, BR_INPUT, IN_RELEASE, 0, 0, s.step);
+          inp.releasePending = false;
+        }
+      }
       // Lockstep rival sims.
       const rv = rivals.value;
       for (let j = 0; j < rv.length; j++) {

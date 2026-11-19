@@ -8,6 +8,7 @@
 
 import { useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, Animated, Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { GAME_INTROS } from '../../../services/help/helpTopics';
 import {
   spacing,
   borderRadius,
@@ -96,8 +97,9 @@ const GAME_PREVIEWS: Record<string, string> = {
   timing: 'Tap in rhythm as the pattern speeds up.',
   memory: 'Match the pairs. Your crew can call out the pairs.',
   trivia: 'Answer a short round of park questions.',
-  shark: 'Guide your shark through a fast swim challenge.',
-  banana: 'Catch the good snacks and dodge the bad ones.',
+  // T045: one rule wording everywhere: the tile says what the how-to and the start card say.
+  shark: GAME_INTROS.shark.how,
+  banana: GAME_INTROS.banana.how,
   current: 'Guide your shark through three changing routes. Collect pearls and find the treasure.',
   showdown: 'Challenge Captain Gill to a three-question ride trivia duel. Play solo or take turns with your crew.',
 };

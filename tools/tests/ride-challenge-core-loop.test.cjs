@@ -704,7 +704,8 @@ test('kid test: the Trivia toggle shows a question with a cross, the ball a chec
   assert.match(intro, /<Picture pic=\{\{ art: ART\.question, mark: 'close' \}\} \/>/);
   assert.doesNotMatch(intro, /art: ART\.fin, mark: 'close'/, 'never the rival with a cross ("wrong shark")');
   assert.match(intro, /question: require\('\.\.\/\.\.\/\.\.\/assets\/images\/screens\/community-center-question\.png'\)/, 'existing art only');
-  assert.match(intro, /banana: \[\[\{ art: ART\.basket \}, \{ art: ART\.banana, mark: 'check' \}\], \[\{ art: ART\.ball, mark: 'check' \}\]\]/);
+  // Fix pass w4 T045: the basket wears the moving hold demo (a finger held on it, sliding); banana and ball both checked.
+  assert.match(intro, /banana: \[\[\{ art: ART\.basket, demo: 'slide' \}\], \[\{ art: ART\.banana, mark: 'check' \}, \{ art: ART\.ball, mark: 'check' \}\]\]/);
   assert.ok(fs.existsSync(path.join(root, 'assets/images/screens/community-center-question.png')));
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /const TREAT_ART = require\('\.\.\/\.\.\/assets\/images\/prep-items\/churros\/churro_18\.png'\);/);
@@ -794,7 +795,8 @@ test('battery: the challenge card runs no endless animation while it sits mounte
 test('how-to pictures teach the action: Parade Beat taps on the line, Sharky holds to swim up, one line each', () => {
   const intro = read('src/components/help/GameIntroCard.tsx');
   assert.match(intro, /timing: \[\[\{ art: ART\.note, line: true \}\], \[\{ art: ART\.drum, tap: true, mark: 'check' \}\]\]/);
-  assert.match(intro, /shark: \[\[\{ art: ART\.hand, hold: true \}\], \[\{ art: ART\.swimmer, up: true, mark: 'check' \}\]\]/);
+  // Fix pass w4 T045: the hold moves (HoldDemo: the finger pressed and held, Sharky rising while it holds).
+  assert.match(intro, /shark: \[\[\{ art: ART\.swimmer, demo: 'rise' \}\]\]/);
   assert.doesNotMatch(intro, /shark: \[\[\{ icon: 'play' \}\]/, 'never a play icon where hold is meant');
   // Beat the Buzzer: a question, then the hand on the bell (the rival's thinking face taught nothing to a non-reader).
   assert.match(intro, /trivia: \[\[\{ art: ART\.question \}\], \[\{ art: ART\.bell, tap: true, mark: 'check' \}\]\]/);

@@ -538,7 +538,7 @@ export function Breather(p: BreatherProps) {
               <Image source={THEMED_SHARK_FRAMES[theme][1]} style={styles.padShark} resizeMode="contain" />
               <Text style={styles.goText}>GO</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, 7 seconds of double points" onPress={p.readyEnabled ? p.onFever : undefined}
+            <Pressable accessibilityRole="button" accessibilityLabel="Go with fever, a burst of double points" onPress={p.readyEnabled ? p.onFever : undefined}
               style={styles.goFever}>
               {p.reduced ? null : <View pointerEvents="none" style={styles.shineClip}><Animated.View style={[styles.shine, shineStyle]}><LinearGradient colors={SHINE_COLORS} start={SHINE_START} end={SHINE_END} style={StyleSheet.absoluteFill} /></Animated.View></View>}
               <Image source={ART.golden} style={styles.padShark} resizeMode="contain" />

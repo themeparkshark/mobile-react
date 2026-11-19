@@ -284,7 +284,7 @@ export default function MiniGameSelector({
           return <WhackRushLab visible={visible} onClose={onClose} autoplay={process.env.EXPO_PUBLIC_GAME_AUTOPLAY === '1'} />;
         }
         return (
-          <WhackAShark visible={onStage} seed={seed} taskName={taskName}
+          <WhackAShark visible={onStage} seed={seed} taskName={taskName} coinImage={coinImageUrl ?? null}
             format={WHACK_DEV.format ?? (rewardMode === 'task-attempt' ? 'ride' : 'queue')}
             unlockLevel={WHACK_DEV.unlock} theme={WHACK_DEV.theme}
             kid={kid && rewardMode === 'task-attempt'}

@@ -24,6 +24,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import LockedResultActions from './LockedResultActions';
 import Animated, {
   Easing,
   cancelAnimation,
@@ -358,12 +359,15 @@ export function ResultsCard({
 
       {note && !sendOff ? <Text style={styles.note}>{note}</Text> : null}
 
+      {/* N03: a game's extra buttons (Parade Beat's TRY TWO THUMBS? YES / NO THANKS) wear the same input
+          lock as the card's own buttons, so a drummer still tapping never answers them by accident. The bare
+          unlock tile (a picture, no button) stays undimmed on the blue. */}
       {extras ? (
         extrasBeat ? (
           <View style={styles.extrasBare}>
             <ResultsSettleContext.Provider value={settle}>{extras}</ResultsSettleContext.Provider>
           </View>
-        ) : <View style={styles.extras}>{extras}</View>
+        ) : <LockedResultActions style={styles.extras}>{extras}</LockedResultActions>
       ) : null}
 
       {actions ? <View style={styles.actions}>{actions}</View> : null}

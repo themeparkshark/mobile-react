@@ -310,7 +310,8 @@ test('the first win is a staged celebration: squash pop, ribbon unfurl, one-shot
   assert.match(card, /fly\.value = withTiming\(1/, 'the coin hops on CONTINUE');
   assert.match(card, /setFirstWinCoinSpot\(/, 'the coin hands its screen spot to the shelf step');
   assert.match(card, /claimTimer\.current = setTimeout\(claim, FIRST_WIN_BEATS\.coinLift\)/, 'the coin step follows the coin');
-  assert.match(card, /if \(reducedMotion\) \{ claim\(\); return; \}/, 'reduced motion goes on at once');
+  // Fix pass w4 T052: a signed-in player (no guest shelf next) goes on at once too.
+  assert.match(card, /if \(reducedMotion \|\| !guest\) \{ claim\(\); return; \}/, 'reduced motion goes on at once');
   assert.match(card, /<TapHint delay=\{0\} style=\{styles\.firstWinHand\} \/>/, 'a tapping hand on CONTINUE after 3 s');
   assert.match(source, /next: 200, button: 320, live: 650, pulse: 1100, hand: 3000/, 'rows settle by 0.3 s, CONTINUE live at 0.65 s');
   assert.doesNotMatch(card.slice(card.indexOf('const nextSt'), card.indexOf('const coinSt')), /opacity: (next|btn)\.value/, 'the rows are never invisible on the card');
