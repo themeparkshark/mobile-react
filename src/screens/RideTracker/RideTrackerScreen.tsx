@@ -19,6 +19,9 @@ import countText from '../../helpers/countText';
 import { clearLetGoRideLog, drainRideLogs, letGoRideLogs, onRideLogOutboxChange, pendingRideLogs, rideCountWords,
   type LetGoRideLog, type QueuedRideLog } from '../../services/rideLogOutbox';
 import { GameIcon, showGameDialog } from '../../ui';
+import { ridesToCheck } from '../../hooks/useRideDetection';
+import { rideDetectionEmitter } from '../../services/RideDetectionEmitter';
+import type { DetectedRide } from '../../services/RideDetectionService';
 
 // ─── Rider Levels (based on rides logged) ───
 const RIDER_LEVELS = [
@@ -195,7 +198,18 @@ export default function RideTrackerScreen() {
     const sent = await drainRideLogs().catch(() => 0);
     if (sent > 0) await load();
   }, [preview, load]);
-  useFocusEffect(useCallback(() => { load(); void sendWaiting(); }, [load, sendWaiting]));
+  // Rides ride detection noticed (T079): they wait here for the guest, never open by themselves over the map.
+  const [toCheck, setToCheck] = useState<DetectedRide[]>([]);
+  const loadToCheck = useCallback(() => {
+    if (preview) return;
+    void ridesToCheck().then(setToCheck).catch(() => undefined);
+  }, [preview]);
+  useEffect(() => {
+    const offCleared = rideDetectionEmitter.on('pendingCleared', loadToCheck);
+    const offDetected = rideDetectionEmitter.on('rideDetected', loadToCheck);
+    return () => { offCleared(); offDetected(); };
+  }, [loadToCheck]);
+  useFocusEffect(useCallback(() => { load(); void sendWaiting(); loadToCheck(); }, [load, sendWaiting, loadToCheck]));
   const onRefresh = useCallback(async () => {
     setRefreshing(true); await sendWaiting(); await load(); setRefreshing(false);
   }, [load, sendWaiting]);
@@ -330,6 +344,35 @@ export default function RideTrackerScreen() {
                 </View>
               ))}
               {waitingRides > 3 && <Text style={s.waitingText}>and {rideCountWords(waitingRides - 3).toLowerCase()} more</Text>}
+            </View>
+          )}
+
+          {toCheck.length > 0 && (
+            <View style={s.waitingNote} accessible={false}>
+              <View style={s.waitingHead}>
+                <GameIcon name="ride" size={24} />
+                <View style={{ flex: 1 }} accessible accessibilityRole="text"
+                  accessibilityLabel={`${rideCountWords(toCheck.length)} to check: ${toCheck.map(r => r.rideName).join(', ')}`}>
+                  <Text style={s.waitingTitle}>{rideCountWords(toCheck.length)} to check</Text>
+                  <Text style={s.waitingText}>You spent time near {toCheck.length === 1 ? 'it' : 'them'} today. Did you ride?</Text>
+                </View>
+              </View>
+              {toCheck.slice(0, 3).map(ride => (
+                <View key={ride.id} style={s.waitingRow}>
+                  <Text style={s.waitingRide} numberOfLines={1}>{ride.rideName}</Text>
+                </View>
+              ))}
+              {toCheck.length > 3 && <Text style={s.waitingText}>and {rideCountWords(toCheck.length - 3).toLowerCase()} more</Text>}
+              <View style={s.letGoActions}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Check ${rideCountWords(toCheck.length).toLowerCase()}`}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    nav.navigate('RideBatchConfirm', { detections: toCheck });
+                  }}
+                  style={({ pressed }) => [s.letGoButton, pressed && { transform: [{ scale: reducedMotion ? 1 : 0.97 }] }]}>
+                  <Text style={s.letGoButtonText}>Check my rides</Text>
+                </Pressable>
+              </View>
             </View>
           )}
 
