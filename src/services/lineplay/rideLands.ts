@@ -70,6 +70,11 @@ const DISNEYLAND_LANDS: Readonly<Record<string, string>> = {
   'donalds duck pond': "Mickey's Toontown",
   'mickeys house and meet mickey mouse': "Mickey's Toontown",
   'minnies house': "Mickey's Toontown",
+  // The railroad's stations each read as their own line in the wait feed.
+  'disneyland railroad main street u s a': 'Main Street, U.S.A.',
+  'disneyland railroad new orleans square': 'New Orleans Square',
+  'disneyland railroad mickeys toontown': "Mickey's Toontown",
+  'disneyland railroad tomorrowland': 'Tomorrowland',
 };
 
 const MAGIC_KINGDOM_LANDS: Readonly<Record<string, string>> = {

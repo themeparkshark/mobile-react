@@ -402,7 +402,7 @@ const MAGIC_KINGDOM_SPACE_MOUNTAIN: LinePlayChapter = {
   navigationPanel: true,
   episodeCount: 3,
   episodeLabel: 'FLIGHT 1 OF 3',
-  parkLabel: 'MAGIC KINGDOM',
+  parkLabel: 'TOMORROWLAND',
   title: 'The Lost Star Chart',
   story: 'Your shark navigator lost three signals on the way to the stars. Fix the signal, find a clue in your surroundings, then rebuild the chart together.',
   completedTitle: 'Star chart restored!',
@@ -634,7 +634,7 @@ function magicKingdomSpaceFlight(episode: number): LinePlayChapter {
  */
 const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
   id: 'dl-space-mountain',
-  parkLabel: 'DISNEYLAND',
+  parkLabel: 'TOMORROWLAND',
   title: 'The Missing Launch Code',
   story: 'Your shark’s flight vehicle is ready, but three launch signals have gone missing. Decode Mission Control, spot a signal from your place in line, and restore the code before the countdown.',
   completedTitle: 'Launch code restored!',
@@ -722,7 +722,7 @@ const DISNEYLAND_SPACE_MOUNTAIN: LinePlayChapter = {
  */
 const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
   id: 'dl-jungle-cruise',
-  parkLabel: 'DISNEYLAND',
+  parkLabel: 'ADVENTURELAND',
   title: 'The Missing Skipper’s Log',
   story: 'Your shark crew found an empty logbook beside the river. Gather three clues from your place in line, then choose a course to bring the skipper’s lost pages home.',
   completedTitle: 'Skipper’s log recovered!',
@@ -793,7 +793,7 @@ const DISNEYLAND_JUNGLE_CRUISE: LinePlayChapter = {
 
 const DISNEYLAND_PIRATES: LinePlayChapter = {
   id: 'dl-pirates',
-  parkLabel: 'DISNEYLAND',
+  parkLabel: 'NEW ORLEANS SQUARE',
   title: 'The Vanishing Compass',
   story: 'A shark cartographer has lost the compass that points to a secret harbor. Assemble a crew, read the bayou clues, and choose a course before your boat arrives.',
   completedTitle: 'Compass recovered!',
@@ -875,7 +875,7 @@ const DISNEYLAND_PIRATES: LinePlayChapter = {
  */
 const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
   id: 'mk-haunted-mansion',
-  parkLabel: 'MAGIC KINGDOM',
+  parkLabel: 'LIBERTY SQUARE',
   title: 'The Missing Guest Book',
   story: 'A friendly ghost invited your shark crew to the mansion, but their names vanished from the guest book. Gather three clues from your place in line and choose how to sign in before your Doom Buggy arrives.',
   completedTitle: 'Your crew made the guest list!',
@@ -958,7 +958,7 @@ const MAGIC_KINGDOM_HAUNTED_MANSION: LinePlayChapter = {
  */
 const DISNEYLAND_HAUNTED_MANSION: LinePlayChapter = {
   id: 'dl-haunted-mansion',
-  parkLabel: 'DISNEYLAND PARK',
+  parkLabel: 'NEW ORLEANS SQUARE',
   title: 'The Vanishing Portrait Frame',
   story: 'In New Orleans Square, your shark crew finds an empty portrait frame. Three clues will help you imagine who belongs in it. Choose a route and reveal your crew’s own ghostly portrait before your mansion visit.',
   completedTitle: 'Your portrait is complete!',
@@ -1121,7 +1121,7 @@ const UNIVERSAL_STUDIO_TOUR: LinePlayChapter = {
  * https://disneyparksblog.com/dlr/today-in-disney-history-big-thunder-mountain-railroad-opening-date-at-disneyland-in-1979/
  */
 const DISNEYLAND_BIG_THUNDER: LinePlayChapter = {
-  id: 'dl-big-thunder', parkLabel: 'DISNEYLAND',
+  id: 'dl-big-thunder', parkLabel: 'FRONTIERLAND',
   title: 'The Rainbow Ridge Dispatch',
   story: 'A runaway train carried off your shark crew’s dispatch from Rainbow Ridge. Decode the first clue, gather a signal from your place in line, and choose which trail brings the message home.',
   completedTitle: 'Dispatch delivered!',

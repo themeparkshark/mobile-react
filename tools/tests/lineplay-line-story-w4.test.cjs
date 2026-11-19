@@ -106,6 +106,9 @@ test('T077: lands are per park (Haunted Mansion is Liberty Square at Magic Kingd
   // A Disneyland ride with no checked fact still names its land (Main Street Vehicles, Toontown play spots).
   assert.equal(rideLands.rideLand(8, 'Main Street Vehicles'), 'Main Street, U.S.A.');
   assert.equal(rideLands.rideLand(8, "Goofy's How-to-Play Yard"), "Mickey's Toontown");
+  assert.equal(rideLands.rideLand(8, "Disneyland Railroad - Mickey's Toontown"), "Mickey's Toontown");
+  assert.equal(rideLands.rideLand(8, 'Disneyland Railroad - New Orleans Square'), 'New Orleans Square');
+  assert.equal(rideLands.rideLand(8, 'Disneyland Railroad'), null);
   assert.equal(rideLands.rideLand(2, 'Walt Disney World Railroad - Fantasyland'), 'Fantasyland');
   const mine = chapters.getLinePlayChapter(2, 'seven-dwarfs-mine-train-2', 'Seven Dwarfs Mine Train', 1, 292);
   assert.equal(mine.parkLabel, 'FANTASYLAND');
@@ -219,4 +222,15 @@ test('T075: a new puzzle round starts clean in the same update that deals it (no
   const card = read('src/screens/LinePlay/components/PicturePuzzleCard.tsx');
   assert.match(card, /const nextRound = \(value: number\) => \{ setWrong\(\[\]\); setRight\(null\); setRound\(value\); \};/);
   assert.doesNotMatch(card, /useEffect\(\(\) => \{ setWrong\(\[\]\); setRight\(null\); \}/);
+});
+
+test('T077: authored line stories head their page with the ride\'s land, like every other ride', () => {
+  for (const [park, slug, name] of [[2, 'space-mountain-2', 'Space Mountain'], [8, 'space-mountain-8', 'Space Mountain'],
+    [8, 'jungle-cruise-8', 'Jungle Cruise'], [8, 'pirates-of-the-caribbean-8', 'Pirates of the Caribbean'],
+    [2, 'haunted-mansion-2', 'Haunted Mansion'], [8, 'haunted-mansion-8', 'Haunted Mansion'],
+    [8, 'big-thunder-mountain-railroad-8', 'Big Thunder Mountain Railroad']]) {
+    const chapter = chapters.getLinePlayChapter(park, slug, name);
+    assert.equal(chapter.adaptive, undefined, `${name} is authored`);
+    assert.equal(chapter.parkLabel, rideLands.rideLand(park, name).toUpperCase(), `${name} at park ${park}`);
+  }
 });
