@@ -83,13 +83,6 @@ export const GATE_SHOW_WATCHDOG_MONEY_MS = 8000;
 export function gateWatchdogMs(reason: GateReason | null | undefined): number {
   return reason && (reason.kind === 'money' || reason.kind === 'renews' || reason.kind === 'vip') ? GATE_SHOW_WATCHDOG_MONEY_MS : GATE_SHOW_WATCHDOG_MS;
 }
-/**
- * hold-2: a gate that has not shown this long after it was asked for is asked to present again (iOS can refuse a
- * <Modal> while the sheet around it is still settling, and never retries by itself), at most GATE_REPRESENT_TRIES
- * times before the watchdog. Longer than a slow dev build's present (about 2 s), far shorter than the watchdog.
- */
-export const GATE_REPRESENT_MS = 2500;
-export const GATE_REPRESENT_TRIES = 2;
 /** How long the kind "tap again" hint stays up after the gate could not show. */
 export const GATE_HINT_MS = 2200;
 /**
@@ -426,19 +419,6 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const layerFront = useModalLayer(!!req && !nested, 'wait');
   const front = nested ? !!req : layerFront;
   const presenting = !!req && front && closing === null;
-  // A new key mounts a fresh <Modal>, which asks iOS to present again (hold-2: a refused gate used to sit silent 8 s).
-  const [presentKey, setPresentKey] = useState(0);
-  const representTries = useRef(0);
-  useEffect(() => { representTries.current = 0; }, [req]);
-  useEffect(() => {
-    if (!presenting) return undefined;
-    const t = setTimeout(() => {
-      if (shownRef.current || !reqRef.current || answerRef.current !== null || representTries.current >= GATE_REPRESENT_TRIES) return;
-      representTries.current += 1;
-      setPresentKey(k => k + 1);
-    }, GATE_REPRESENT_MS);
-    return () => clearTimeout(t);
-  }, [presenting, req, presentKey]);
   useEffect(() => {
     if (!presenting) return undefined;
     const t = setTimeout(() => {
@@ -485,7 +465,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   };
   return (
     <>
-    <Modal key={presentKey} visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
+    <Modal visible={closing === null && !devRefuse()} transparent animationType="fade" onRequestClose={() => close(false)} statusBarTranslucent
       onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       <View style={styles.scrim}>
         {details ? (

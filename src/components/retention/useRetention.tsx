@@ -921,10 +921,8 @@ export default function useRetention(o: RetentionOptions): RetentionResult {
           {faceView(slot.face)}
         </View>
       ))}
-      {/* The grown-up gate inside this native sheet (Daily 3's calm Shark Pass card), so it shows above it. Only while the
-          sheet is really presented (hold-2): a reveal waiting behind the coin card used to hold the top gate slot, so the
-          coin card's Park Day Pack row asked through a gate that could never show (8 s of nothing, then a silent no). */}
-      {layer.present && !!content && <GrownUpGateSlot />}
+      {/* The grown-up gate inside this native sheet (Daily 3's calm Shark Pass card), so it shows above it. */}
+      {!!content && <GrownUpGateSlot />}
     </CalmModal>
   );
 

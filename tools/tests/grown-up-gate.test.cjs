@@ -266,7 +266,7 @@ test('the gate shows above any share modal: a slot inside each one, the top slot
 
 test('the gate answers only after it has faded out, so the share sheet can present (ship gate, Oct 23)', () => {
   const gate = read('src/components/GrownUpGate.tsx');
-  assert.match(gate, /<Modal key=\{presentKey\} visible=\{closing === null && !devRefuse\(\)\}[\s\S]{0,200}?onShow=\{\(\) => \{ shownRef\.current = true; \}\} onDismiss=\{finish\}>/);
+  assert.match(gate, /<Modal visible=\{closing === null && !devRefuse\(\)\}[\s\S]{0,200}?onShow=\{\(\) => \{ shownRef\.current = true; \}\} onDismiss=\{finish\}>/);
   assert.match(gate, /setTimeout\(finish, GATE_DISMISS_FALLBACK_MS\)/, 'a missed onDismiss still answers');
   assert.match(gate, /if \(shownRef\.current \|\| !reqRef\.current \|\| answerRef\.current !== null\) return;[\s\S]{0,200}?showRetryHint\(gateRetryHint\(reqRef\.current\.reason\)\);\s*answerRef\.current = false;\s*finish\(\);\s*\}, gateWatchdogMs\(req\?\.reason\)\)/, 'a refused gate answers no at once, with a kind hint (real money waits longer)');
   const g = gateModule();

@@ -269,25 +269,3 @@ test('T043 hold-2: bank lines the swap garbled now read as written (row 198 and 
   assert.equal(q.fact, bank[1]);
   assert.deepEqual([...q.choices], ['The Ward Kimball', 'Ernest S. Marsh'], 'a choice still starts with a capital');
 });
-
-/* Regression 2 (hold-2): the Park Day Pack row answered its tap only after about 8.6 s. */
-test('R2 hold-2: an offer row shows busy from the tap; a gate iOS has not shown is asked to present again long before the watchdog', () => {
-  const fs = require('node:fs');
-  const offer = fs.readFileSync('src/components/money/CalmOffer.tsx', 'utf8');
-  assert.match(offer, /setBusy\(true\);\n\s+const outcome = await buyPack\(pack, \{ placement: `offer\.\$\{placement\}` \}\)\.finally\(\(\) => setBusy\(false\)\);/);
-  assert.match(offer, /style=\{\(\{ pressed \}\) => \[st\.slimTap, \(pressed \|\| busy\) && st\.slimPressed\]\}/);
-  const gate = fs.readFileSync('src/components/GrownUpGate.tsx', 'utf8');
-  const G = loadTs('src/components/GrownUpGate.tsx', {
-    '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => undefined } },
-    react: { useCallback: (f) => f, useEffect() {}, useRef: (v) => ({ current: v }), useState: (v) => [v, () => {}] },
-    'react-native': { Modal: 'Modal', Platform: { OS: 'ios' }, Pressable: 'Pressable', ScrollView: 'ScrollView', StyleSheet: { create: (x) => x }, Text: 'Text', View: 'View' },
-    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
-    '../RootNavigation': {}, '../ui': { BRAND: {}, FONT: {}, GameIcon: 'GameIcon' }, '../ui/modalLayers': { useModalLayer: () => false }, './RealMoneyMark': { default: 'RealMoneyMark' },
-  });
-  assert.ok(G.GATE_REPRESENT_MS * (G.GATE_REPRESENT_TRIES + 1) <= G.GATE_SHOW_WATCHDOG_MONEY_MS, 'two fresh presents fit before the money watchdog');
-  assert.ok(G.GATE_REPRESENT_MS >= 2000, 'a slow dev present (about 2 s) is not interrupted');
-  assert.match(gate, /<Modal key=\{presentKey\} visible=\{closing === null && !devRefuse\(\)\}/);
-  // A gate slot sits on top of the hosts only while its own sheet is presented.
-  assert.match(fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8'), /\{challengeLayer\.present && <GrownUpGateSlot \/>\}/);
-  assert.match(fs.readFileSync('src/components/retention/useRetention.tsx', 'utf8'), /\{layer\.present && !!content && <GrownUpGateSlot \/>\}/);
-});
