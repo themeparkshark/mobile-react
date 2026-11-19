@@ -28,7 +28,9 @@ test('T020: a limited coin names its ride on the tag, above the date', () => {
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
   assert.match(marker, /<Text style=\{styles\.limitedName\} numberOfLines=\{1\}>\{task\.name\}<\/Text>/);
   assert.match(marker, /rideTagSize\(tagKind, limited\?\.toUpperCase\(\) \?\? '', task\.name\)/, 'the declutter reserves the two-line tag');
-  assert.match(read('src/screens/ExploreScreen.tsx'), /limitedText: task\.limited\?\.active \? limitedLabel\(task\.limited\) : null, name: task\.name,/);
+  // Merge w3: lane shelf T228 (decision default) takes the Limited tag off the map; the shelf shows it with its date.
+  // The map still passes the ride name, so a tag that ever returns names its ride.
+  assert.match(read('src/screens/ExploreScreen.tsx'), /limitedText: null, name: task\.name,/);
   assert.doesNotMatch(marker, /limitedBadge\}><GameIcon name="timer"/, 'a sparkle, not a stopwatch');
 });
 
