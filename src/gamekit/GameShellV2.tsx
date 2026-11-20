@@ -43,6 +43,7 @@ import {
   AppState,
   BackHandler,
   type LayoutChangeEvent,
+  type GestureResponderEvent,
 } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -67,7 +68,7 @@ import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovem
 import { RideChallengeContext } from './RideChallengeContext';
 import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
-import { StageDrawnContext, StageHoldContext } from './StageHoldContext';
+import { RetryRoundContext, StageDealtContext, StageDrawnContext, StageHoldContext } from './StageHoldContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
@@ -95,6 +96,7 @@ import { CountdownStage } from './fx/CountdownStage';
 import { FinalSeconds } from './fx/FinalSeconds';
 import { COACH_EXIT_MS, COACH_LEAD_MS, COUNT_END_MS, COUNT_WATCHDOG_MS, advanceCountClock, GO_AT_MS, GO_SPARKLES, type CountStep, RARE_GO_SPARKLES, STAGE_READY_MAX_MS, countPose, countStartsOf, countSteps, finalSecondsBeat, isRareGo, noteCountStart } from './core/gameMoments';
 import { AMBIENT, DURATION, flashPeak, momentParticles } from '../ui/motion';
+import { pressTrace, pressTraceOn } from '../ui/pressTrace';
 import { isDimFlashingLightsEnabled } from '../../modules/flash-safety';
 
 /** Dev capture only: hold the drawn count on this clock time (ms) for 6 s. Never set in release. */
@@ -448,9 +450,17 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // Off stage (under the ride's ticket punch or a first play's how-to card, T036): mounted and drawn, never counting.
     const stageHeld = useContext(StageHoldContext);
     const stageHeldRef = useRef(stageHeld);
+    if (stageHeldRef.current !== stageHeld) pressTrace('shell.render', () => `held=${stageHeld}`);
     stageHeldRef.current = stageHeld;
     /** Told once the held stage is drawn, so the ride's punch hands over onto a drawn board (w4 N04). */
     const onStageDrawn = useContext(StageDrawnContext);
+    /** False while a kept board counts ahead of its try's deal (w5 N04): GO waits for it. */
+    const stageDealt = useContext(StageDealtContext);
+    const stageDealtRef = useRef(stageDealt);
+    stageDealtRef.current = stageDealt;
+    const playWaitsDealRef = useRef(false);
+    /** A tap asked to skip the count (w5 N04): a count that starts after it goes straight to GO. */
+    const skipWantedRef = useRef(false);
     const reducedMotion = useReducedGameMotion();
     const reducedMotionRef = useRef(reducedMotion);
     reducedMotionRef.current = reducedMotion;
@@ -640,8 +650,18 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     onStartRef.current = onStart;
     const beginPlay = useCallback(() => {
       if (startedRef.current) return;
+      // w5 N04: a kept board counts while its try's deal is on the way; play opens only on the dealt try (its seed,
+      // its trivia round, its rules), the frame after the deal lands (the deal-gate effect below).
+      if (!stageDealtRef.current) {
+        playWaitsDealRef.current = true;
+        pressTrace('shell.waitdeal', () => gameIdRef.current);
+        return;
+      }
+      playWaitsDealRef.current = false;
+      skipWantedRef.current = false;
       startedRef.current = true;
       playedOnceRef.current = true;
+      pressTrace('shell.play', () => gameIdRef.current);
       setPhase('playing');
       onStartRef.current();
     }, []);
@@ -696,6 +716,15 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // (a new onStart each render) never restarts it from 3.
     const beginPlayRef = useRef(beginPlay);
     beginPlayRef.current = beginPlay;
+    // w5 N04: GO landed before the deal: play opens the frame after it lands, once the game has read the dealt try
+    // (its own effects run in the deal's commit). Hidden or reset, nothing waits.
+    useEffect(() => {
+      if (!visible) { playWaitsDealRef.current = false; return undefined; }
+      if (!stageDealt || !playWaitsDealRef.current) return undefined;
+      let raf2: unknown = 0;
+      const raf1 = nextFrame(() => { raf2 = nextFrame(() => { if (playWaitsDealRef.current) beginPlayRef.current(); }); });
+      return () => { cancelFrame(raf1); cancelFrame(raf2); };
+    }, [stageDealt, visible]);
     const fireStepRef = useRef(fireCountStep);
     fireStepRef.current = fireCountStep;
     const countStepsRef = useRef<readonly CountStep[]>([]);
@@ -781,7 +810,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       // Safety only: if the UI thread never ticks (it always does in the foreground), JS opens play.
       const expected = lead + (steps[steps.length - 1].at - from);
       countdownTimers.current.push(setTimeout(() => {
-        if (startedRef.current) return;
+        if (startedRef.current || playWaitsDealRef.current) return;
         cdLive.value = false;
         countFrame.setActive(false);
         cdClock.value = -1;
@@ -811,6 +840,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     const fieldOn = (stageDrawn ?? stageReady) || stageOn;
     const fieldIn = useSharedValue(fieldOn ? 1 : 0);
     useEffect(() => {
+      if (fieldOn) pressTrace('shell.drawn', () => `${gameIdRef.current} held=${stageHeld}`);
       if (fieldOn && stageHeld) onStageDrawn?.();
     }, [fieldOn, stageHeld, onStageDrawn]);
     useEffect(() => {
@@ -821,7 +851,9 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // then GO throws gold confetti (never on a first play).
     const [rareGo, setRareGo] = useState(false);
     useEffect(() => {
+      if (phase === 'countdown' && visible) pressTrace('shell.gate', () => `${gameIdRef.current} on=${stageOn} held=${stageHeld}`);
       if (phase !== 'countdown' || !visible || !stageOn || stageHeld) return;
+      pressTrace('shell.live', () => gameIdRef.current);
       clearCountdown();
       if (countdownStyle === 'none') {
         beginPlayRef.current();
@@ -843,7 +875,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       // Start once the game has drawn its first frames (never count over a blank stage).
       let raf2: unknown = 0;
       const raf1 = nextFrame(() => {
-        raf2 = nextFrame(() => startCount(steps, lead));
+        // A tap that came in before this count began (TRY AGAIN's reset, w5 N04) skips it: GO alone.
+        raf2 = nextFrame(() => (skipWantedRef.current ? startCount([steps[steps.length - 1]], 0) : startCount(steps, lead)));
       });
       return () => {
         cancelFrame(raf1);
@@ -887,6 +920,51 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       setPhase('countdown');
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [result, rescue, phase, wrap, visible]);
+
+    // -- TRY AGAIN on a kept board (fix pass w5, N04): the ride bumps the try number instead of mounting a
+    // new game. Everything the last try left in the shell resets here (its result, a hold sheet left by Leave,
+    // the end watch, the count), in the same commit as the game's own reset, and the next start is a repeat
+    // (2-1-GO, no how-to line). Never on the first mount.
+    const retryRound = useContext(RetryRoundContext);
+    const retryRoundSeen = useRef(retryRound);
+    const retryRoundRef = useRef(retryRound);
+    retryRoundRef.current = retryRound;
+    // The render after the reset below (so the touch guard on the root lifts even when no other state changed).
+    const [, setRetrySeen] = useState(retryRound);
+    useEffect(() => {
+      if (retryRound === retryRoundSeen.current) return;
+      retryRoundSeen.current = retryRound;
+      setRetrySeen(retryRound);
+      clearCountdown();
+      stopCountStage();
+      clearCelebration();
+      clearResume();
+      clearHeadsUp();
+      clearEndWatch();
+      endWatchRun.current = 0;
+      hadResultRef.current = false;
+      startedRef.current = false;
+      claimedRef.current = false;
+      playedOnceRef.current = true;
+      playWaitsDealRef.current = false;
+      backFromPocketRef.current = false;
+      setRescue(null);
+      setWrap(null);
+      setHoldReason(null);
+      setPauseReason(undefined);
+      setHeadsUp(false);
+      setCountText(firstCount);
+      setPhase('countdown');
+      pressTrace('shell.retry', () => `${gameIdRef.current} round=${retryRound}`);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [retryRound]);
+    // The reset is on screen (the commit after the reset above): the ride card may show the kept board now.
+    const retryShownRound = useRef(retryRound);
+    useEffect(() => {
+      if (retryShownRound.current === retryRound || phase !== 'countdown' || result || rescue) return;
+      retryShownRound.current = retryRound;
+      onStageDrawn?.();
+    }, [retryRound, phase, result, rescue, onStageDrawn]);
 
     // -- Transition to results when the game (or a wrap-up) reports one. ----
     useEffect(() => {
@@ -1327,6 +1405,8 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // Tap anywhere skips straight to GO (the burst still plays over live play).
     const skipCountdown = useCallback(() => {
       if (phase !== 'countdown') return;
+      skipWantedRef.current = true;
+      pressTrace('shell.skip', () => gameIdRef.current);
       clearCountdown();
       const steps = countSteps(countdownStyle === 'none' ? 'go' : countdownStyle);
       const go = steps[steps.length - 1];
@@ -1334,6 +1414,18 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       if (hasDemoRef.current) { cancelAnimation(pillOut); pillOut.value = 1; setPillGone(true); }
       startCount([go], 0);
     }, [phase, clearCountdown, countdownStyle, startCount, pillOut]);
+    // w5 N04: a tap in the one render that still draws the last try (before the TRY AGAIN reset runs) is never
+    // dropped: it skips the new count once the reset is in (the count effect reads skipWantedRef).
+    const skipCountdownRef = useRef(skipCountdown);
+    skipCountdownRef.current = skipCountdown;
+    const queueRetrySkip = useCallback((e: GestureResponderEvent) => {
+      // Only a touch on the root itself: the touch it took while it was box-only (taps on the board bubble past).
+      // Read when JS gets to it, which on a busy thread is after the reset is in, so the handler is always set.
+      if (e.target !== e.currentTarget) return;
+      pressTrace('shell.skipqueued', () => gameIdRef.current);
+      if (retryRoundSeen.current === retryRoundRef.current) skipCountdownRef.current();
+      else skipWantedRef.current = true;
+    }, []);
 
     // Paid games share the ride flow's native presentation. Opening another
     // native Modal inside it races both dismissals against the coin reward.
@@ -1448,8 +1540,12 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // button), and the card is the only way on.
     const xGone = showSharedCard && SCREEN_H < SHORT_PHONE_PT;
 
+    // w5 N04: the render that brings a new try number still draws the last try (its results, its board) until the
+    // reset above runs; nothing in it takes a touch. The ride card lets the kept board take touches from TRY AGAIN.
+    const retryResetPending = retryRound !== retryRoundSeen.current;
     const gameContent = (
-        <View style={styles.root}>
+        <View style={styles.root} pointerEvents={retryResetPending ? 'box-only' : 'auto'}
+          onTouchEnd={rideChallenge ? queueRetrySkip : undefined}>
           {/* Header */}
           {/* While results are up the card is the only thing to read: the
               game's title and score step back and the close X dims (it still
@@ -1538,6 +1634,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
           {phase === 'countdown' ? (
             <Pressable
               style={styles.cdTouch}
+              onPressIn={pressTraceOn ? () => pressTrace('shell.pressin', () => phase) : undefined}
               onPress={skipCountdown}
               accessibilityRole="button"
               accessibilityLabel={`${objective ? `${objective} ` : ""}Starting in ${countText}. Tap to skip.`}

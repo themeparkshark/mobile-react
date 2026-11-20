@@ -30,7 +30,7 @@ test('T038: a started trivia try whose player just turned Picture games on is de
 });
 
 test('T038: the re-deal sends a new request id with picture_only through the normal spend path (no new Ticket)', () => {
-  assert.match(modal, /await writeTaskAttemptCheckpoint\(\{ \.\.\.saved, pictureOnly: true,\n\s+requestId: `tps-/);
+  assert.match(modal, /await writeTaskAttemptCheckpoint\(\{ \.\.\.saved, attemptId: null, pictureOnly: true,\n\s+requestId: `tps-/);
   assert.match(modal, /setRedealt\(true\);\n\s+await handleStartWheel\(\);/);
   assert.match(modal, /redealt \? 'Picture game\. No new Ticket\.'/);
   assert.doesNotMatch(card, /Next try is a picture game/, 'the card no longer says only the next try changes');

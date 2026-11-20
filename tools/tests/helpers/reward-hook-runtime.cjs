@@ -61,7 +61,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
     gpsWatchPolicy: 'src/context/gpsWatchPolicy.ts', positionFilter: 'src/context/positionFilter.ts', useUserIdle: 'src/hooks/useUserIdle.ts', powerPolicy: 'src/power/powerPolicy.ts', appActive: 'src/hooks/appActive.ts',
     matchLink: 'src/services/match/matchLink.ts', useMatchLink: 'src/hooks/useMatchLink.ts', gameMoments: 'src/gamekit/core/gameMoments.ts',
     // The one result input lock (T046 hold-2) runs for real: its timer is the card's arm timer.
-    useResultInputLock: 'src/components/rewards/useResultInputLock.ts' };
+    useResultInputLock: 'src/components/rewards/useResultInputLock.ts',
+    // Fix pass w5 (N04): the kept-board rules are pure and run for real.
+    retryInPlace: 'src/components/rewards/retryInPlace.ts', stageHold: 'src/gamekit/stageHold.ts' };
   // A caller may run more of its own modules for real in the component's realm (options.realModules, by base name).
   Object.assign(realModules, options.realModules ?? {});
   const callerReal = new Set(Object.keys(options.realModules ?? {}));
@@ -81,6 +83,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (Object.hasOwn(imports, name)) return imports[name];
       const base = name.split('/').pop();
       if (name.startsWith('.') && Object.hasOwn(realModules, base)) return loadReal(base);
+      // w5 T036: the ride card's art warm-up decodes images (nothing to decode here).
+      if (base === 'warmRideGames') return { warmRideGameArt: () => Promise.resolve() };
       if (name === 'react') return react;
       if (name === '@react-navigation/native') return { useFocusEffect: fn => react.useEffect(fn, [fn]) };
       if (name === 'react/jsx-runtime') return { jsx, jsxs: jsx };

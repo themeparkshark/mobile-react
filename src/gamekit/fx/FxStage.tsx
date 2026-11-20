@@ -330,6 +330,19 @@ export interface FxStageProps {
   style?: StyleProp<ViewStyle>;
 }
 
+/**
+ * True on the UI thread (fix pass w5, T036 and N04). A derived value's first run happens on the JS thread, and
+ * reading the stage's state there is a synchronous trip to the UI runtime that copies the whole particle pool
+ * back: on device each of these first runs waited 100 to 450 ms on a busy UI thread, 1.8 to 2.9 s in all when
+ * the fly-up text slots mounted with their font, right after a game's board drew (the hand-over froze). The
+ * JS-thread run returns the resting value (nothing drawn); the UI thread computes the real one on its first frame.
+ */
+function onUi(): boolean {
+  'worklet';
+  return (globalThis as { _WORKLET?: boolean })._WORKLET === true;
+}
+const NO_BLOOM = ['rgba(255,255,255,0)', 'rgba(255,255,255,0)'];
+
 const SIZE_SCALE = { sm: 20 / FLY_FONT_PX, md: 26 / FLY_FONT_PX, lg: 30 / FLY_FONT_PX, xl: 40 / FLY_FONT_PX };
 
 export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(function FxStage(
@@ -433,6 +446,7 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
 
   // -- Flash / bloom / vignette ---------------------------------------------
   const flashOpacity = useDerivedValue(() => {
+    if (!onUi()) return 0;
     tick.value;
     const s = state.value;
     const t = s.t - s.flashT;
@@ -442,11 +456,13 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
     return s.flashPeak * (1 - u) * (1 - u);
   });
   const flashColor = useDerivedValue(() => {
+    if (!onUi()) return 'rgba(255,255,255,1)';
     tick.value;
     const c = state.value.flashColor;
     return `rgba(${Math.round(c[0] * 255)},${Math.round(c[1] * 255)},${Math.round(c[2] * 255)},1)`;
   });
   const bloomOpacity = useDerivedValue(() => {
+    if (!onUi()) return 0;
     tick.value;
     const s = state.value;
     const t = s.t - s.bloomT;
@@ -454,19 +470,23 @@ export const FxStage = React.memo(forwardRef<FxStageHandle, FxStageProps>(functi
     return s.bloomPeak * envelope(t, s.bloomDur * 0.15, 0, s.bloomDur * 0.85);
   });
   const bloomCenter = useDerivedValue(() => {
+    if (!onUi()) return vec(0, 0);
     tick.value;
     return vec(state.value.bloomX, state.value.bloomY);
   });
   const bloomR = useDerivedValue(() => {
+    if (!onUi()) return 0;
     tick.value;
     return state.value.bloomR;
   });
   const bloomColors = useDerivedValue(() => {
+    if (!onUi()) return NO_BLOOM;
     tick.value;
     const c = state.value.bloomColor;
     return [c, 'rgba(255,255,255,0)'];
   });
   const vigUniforms = useDerivedValue(() => {
+    if (!onUi()) return { size: [width, height], color: [0, 0, 0, 0], intensity: 0, softness: 0.38 };
     tick.value;
     const s = state.value;
     const k = envelope(s.t - s.vigT, s.vigIn, s.vigHold, s.vigOut);
@@ -589,14 +609,17 @@ function FlyUpSlot({ index, state, tick, font }: {
   font: SkFont | null;
 }) {
   const text = useDerivedValue(() => {
+    if (!onUi()) return '';
     tick.value;
     return state.value.txtAlive[index] === 1 ? state.value.txtStr[index] : '';
   });
   const color = useDerivedValue(() => {
+    if (!onUi()) return '#ffffff';
     tick.value;
     return state.value.txtColor[index] || '#ffffff';
   });
   const opacity = useDerivedValue(() => {
+    if (!onUi()) return 0;
     tick.value;
     const s = state.value;
     if (s.txtAlive[index] !== 1) return 0;
@@ -607,6 +630,7 @@ function FlyUpSlot({ index, state, tick, font }: {
     return t < fadeFrom ? 1 : Math.max(0, 1 - (t - fadeFrom) / 180);
   });
   const transform = useDerivedValue(() => {
+    if (!onUi()) return [{ translateX: 0 }, { translateY: 0 }, { scale: 1 }];
     tick.value;
     const s = state.value;
     const t = s.t - s.txtT[index];

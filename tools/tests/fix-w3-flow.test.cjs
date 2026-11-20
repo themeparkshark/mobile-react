@@ -42,7 +42,7 @@ test('T029 a free retry or a VIP try comes first; at 0 Tickets the way on is the
 
 test('T029 the loss card always shows the map as its small second button and its primary from the plan', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  const lost = modal.slice(modal.indexOf("{flowState === 'lost' && <ChallengeStatusCard"), modal.indexOf('{/* MINIGAME STATE'));
+  const lost = modal.slice(modal.indexOf("{(flowState === 'lost' || replayUnderCard) && <ChallengeStatusCard"), modal.indexOf('{/* MINIGAME STATE'));
   assert.match(lost, /quiet=\{\{ label: BACK_TO_MAP, onPress: handleLostClose \}\}/);
   assert.match(lost, /label: lossPlan\.kind === 'vip_retry'/);
   assert.match(lost, /footnotes=\{lossPlan\.footnotes\}/);
@@ -125,7 +125,9 @@ test('T142 claimed Tickets fly (at most 4 pictures) and count up to the exact to
 test('T047 T062 the coin card has a close X, starts at once when seen before, and its big button takes edge taps', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /accessibilityLabel="Close">\n\s+<GameIcon name="close" size=\{34\} \/>/);
-  assert.match(modal, /if \(!open \|\| !quickStart \|\| quickStarted\.current \|\| flowState !== 'preview'/);
+  // w5 T036: the one-press start runs from the recovery check (no saved try) or, as before, from the preview.
+  assert.match(modal, /if \(!open \|\| !quickStart \|\| quickStarted\.current \|\| !isTaskType \|\| !hasEnoughTickets \|\| !location \|\| previewOnly\) return;/);
+  assert.match(modal, /noSavedAtRef\.current = Date\.now\(\);\n\s+setFlowState\('preview'\);\n\s+quickStartRef\.current\(\);/);
   assert.match(modal, /hitSlop=\{MAIN_BUTTON_HIT_SLOP\}/);
   assert.match(read('src/components/RedeemModal.tsx'), /coinCardSeenNow\(player\?\.id, redeemable\?\.type \?\? '', coin\.id\)/);
 });

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { memo, useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { dealtTriviaRound, type AttemptTrivia } from '../services/task-attempt/coinTrivia';
 import { GameDialog } from '../ui/GameDialog';
 import { ModalLayerContext } from '../ui/modalLayers';
@@ -25,8 +25,9 @@ import { getLinePlayChapter } from '../services/lineplay/chapters';
 import { useHelp } from './help/HelpProvider';
 import GameIntroCard from './help/GameIntroCard';
 import { gameIntroTip } from '../services/help/helpTopics';
-import { StageDrawnContext, StageHoldContext } from '../gamekit/StageHoldContext';
+import { RetryRoundContext, StageDealtContext, StageDrawnContext, StageHoldContext } from '../gamekit/StageHoldContext';
 import { stageHoldFor } from '../gamekit/stageHold';
+import { pressTrace } from '../ui/pressTrace';
 
 const USE_QUEUE_KIT_GAMES = true;
 
@@ -67,6 +68,13 @@ interface Props {
   prewarm?: boolean;
   /** Fix round w4 N04: the held game's stage is drawn (the punch may hand over now). */
   onStageDrawn?: () => void;
+  /**
+   * Fix pass w5 N04: the ride try number on this mount. TRY AGAIN of the same game bumps it and the mounted game
+   * resets in place (RetryRoundContext) instead of mounting a new one.
+   */
+  round?: number;
+  /** w5 N04: false while TRY AGAIN's kept board counts ahead of the server's deal (GO waits for it). */
+  dealt?: boolean;
   onClose: () => void;
   onComplete: (multiplier: number, rewards: { coins: number; xp: number }, proof?: TaskGameProof) => void;
 }
@@ -74,7 +82,7 @@ interface Props {
 // Paid ride attempts use the short GameKit formats; LinePlay keeps its longer
 // rounds. The game shell reports a win only after at least one star.
 
-export default function MiniGameSelector({
+function MiniGameSelector({
   visible,
   taskId,
   taskName,
@@ -89,6 +97,8 @@ export default function MiniGameSelector({
   kid = false,
   prewarm = false,
   onStageDrawn,
+  round = 0,
+  dealt = true,
   onClose,
   onComplete,
 }: Props) {
@@ -112,6 +122,7 @@ export default function MiniGameSelector({
   const stage = stageHoldFor({ visible, prewarm, preferredGame, selectedGame, showIntro });
   const onStage = stage.mounted;
   const stageHeld = stage.held;
+  useEffect(() => { if (onStage && selectedGame) pressTrace('game.mount', () => `${selectedGame} held=${stageHeld}`); }, [onStage, selectedGame]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The quit warning for a paid try (blueprint 5.13): the branded dialog, drawn inside the challenge
   // card's own native sheet (a nested layer), never the system Alert and never a second sibling modal.
@@ -237,7 +248,11 @@ export default function MiniGameSelector({
   // One tree for held and live, so the hand-over never remounts the game (its board stays drawn).
   const held = (game: React.ReactNode) => (
     <StageDrawnContext.Provider value={onStageDrawn ?? null}>
-      <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+      <RetryRoundContext.Provider value={round}>
+        <StageDealtContext.Provider value={dealt}>
+          <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+        </StageDealtContext.Provider>
+      </RetryRoundContext.Provider>
     </StageDrawnContext.Provider>
   );
 
@@ -401,3 +416,10 @@ export default function MiniGameSelector({
       return null;
   }
 }
+
+/**
+ * Fix pass w5 (N04, T036): memoized, so the ride card's own re-renders (its punch, its board-drawn flag, its flow
+ * state) never re-render the whole game under it. A full game re-render re-ran its effects and blocked the JS thread
+ * for 0.4 to 1.7 s right at the hand-over on device. Pass stable callbacks.
+ */
+export default memo(MiniGameSelector);

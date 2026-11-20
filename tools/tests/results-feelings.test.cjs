@@ -704,8 +704,9 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   // Core loop 5.3, one loss card: a ride miss skips the game's own card (the shell hands the try to
   // rideTry.ts) and the ride's loss card is the one card, every time.
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /const handleGameLose = useCallback\(async \(\) => \{\n\s+await resolveAttempt\('loss'\);/);
-  assert.match(modal, /\{flowState === 'lost' && <ChallengeStatusCard/);
+  // w5 N04: a Leave before the kept board's deal waits for it; every other loss resolves at once.
+  assert.match(modal, /const handleGameLose = useCallback\(async \(\) => \{\n\s+if \(!attemptRef\.current && flowStateRef\.current === 'replay'\) \{ lossBeforeDealRef\.current = true; return; \}\n\s+await resolveAttempt\('loss'\);/);
+  assert.match(modal, /\{\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard/);
   assert.doesNotMatch(modal, /skipLostCard|lostFromGameRef/);
   assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame,\n\s+rescueSource: redeemable\?\.rescue_pass_source, nextGame: retryGameName \}\)/);
   const shellSrc = read('src/gamekit/GameShellV2.tsx');

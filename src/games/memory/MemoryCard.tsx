@@ -117,6 +117,8 @@ export interface MemoryCardHandle {
   timeoutReveal: (delay: number) => void;
   gold: (on: boolean, delay: number) => void;
   eye: (on: boolean) => void;
+  /** TRY AGAIN on the kept board (w5 N04): back to a dealt, face-down card in place (no remount). */
+  reset: () => void;
   /** Golden Coin legendary reveal: a gold glow leaks around the back's edges. */
   goldLeak: () => void;
   /** Steal Duel: rival-colour rim while face-up. */
@@ -398,6 +400,15 @@ export const MemoryCard = memo(forwardRef<MemoryCardHandle, Props>(function Memo
     taken() {
       if (rm) return;
       v.wobble.value = withRepeat(withSequence(withTiming(1, { duration: 42 }), withTiming(-1, { duration: 83 }), withTiming(0, { duration: 42 })), 2);
+    },
+    reset() {
+      // Every value back to a freshly dealt, face-down card: nothing from the last try shows (w5 N04).
+      for (const m of [s.flip, s.lift, s.opacity, s.scale, s.rotZ, s.arcY]) cancelAnimation(m);
+      for (const m of Object.values(v)) cancelAnimation(m);
+      s.flip.value = 0; s.lift.value = 1; s.opacity.value = 1; s.scale.value = 1; s.rotZ.value = 0; s.arcY.value = 0;
+      v.press.value = 1; v.pop.value = 1; v.squash.value = 1;
+      for (const k of ['tiltX', 'tiltY', 'slipRim', 'forgot', 'seen', 'flash', 'whiteRim', 'movedRim', 'movedGlow', 'wobble', 'gold', 'eye', 'glint', 'leak', 'rimOn'] as const) v[k].value = 0;
+      setRimColor(MM.blue);
     },
   }), [v, s, rm]);
 

@@ -63,8 +63,9 @@ import { memoryLossBanner, memoryLossCopy } from './lossCopy';
 import { TryCard } from './TryCard';
 import { comboCall } from './comboCallout';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
-import { useStageHold } from '../../gamekit/StageHoldContext';
+import { useStageHold, useRetryRound } from '../../gamekit/StageHoldContext';
 import { noteRideTry } from '../../gamekit/results/rideTry';
+import { pressTrace } from '../../ui/pressTrace';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { MemoryCard, makeCardValues, sharedReady, type CardValues, type MemoryCardHandle, type SharedSheets, type ShimmerState } from './MemoryCard';
 import { deckById, deckIdForRideName, type Deck } from './decks';
@@ -474,6 +475,12 @@ export default function MemoryGame({
   // Off stage under the ticket punch or a first play's how-to card (T036, N04): the board is built and dealt
   // in place (no sound), so it is on screen at the hand-over; the barker and the bot wait for it.
   const stageHeld = useStageHold();
+  // Fix pass w5 (N04): TRY AGAIN on the kept board builds a fresh run in place (the open / rematch effect below).
+  const retryRound = useRetryRound();
+  /** From a TRY AGAIN on the kept board until its GO: every deal lands in place (no second fly-in). */
+  const retryDealRef = useRef(false);
+  const retryRoundSeen = useRef(retryRound);
+  if (retryRoundSeen.current !== retryRound) { retryRoundSeen.current = retryRound; retryDealRef.current = true; }
   const stageHeldRef = useRef(stageHeld);
   stageHeldRef.current = stageHeld;
   const rideChallengeRef = useRef(rideChallenge);
@@ -522,6 +529,8 @@ export default function MemoryGame({
   const runRef = useRef<Run | null>(null);
   const [boardKey, setBoardKey] = useState(0);
   const [shape, setShape] = useState({ cols: 4, rows: 4, pairs: 8 });
+  const shapeRef = useRef(shape);
+  shapeRef.current = shape;
   const [faces, setFaces] = useState<Record<number, number>>({});
   const [wells, setWells] = useState<number[]>([]);
   const [prizes, setPrizes] = useState<(PrizeEntry | null)[]>([]);
@@ -823,6 +832,35 @@ export default function MemoryGame({
   }, [baseSeed, deck.symbols.length, mode]);
 
   const newBoardView = useCallback((cols: number, rows: number, pairs: number) => {
+    // w5 N04: a TRY AGAIN on the kept board (before its GO), or a board still held off stage, with the same shape
+    // resets the mounted cards in place.
+    // Remounting the cards (a new board key) blocked the JS thread 0.5 to 0.9 s on device, once at TRY AGAIN and
+    // again when the server's seed landed, so the count and the first tap waited. Face-down cards all look alike,
+    // so the new seed's layout is only new slot positions and cleared faces.
+    const was = shapeRef.current;
+    const n = cols * rows;
+    const g = geoRef.current;
+    const r = runRef.current;
+    const mounted = cards.current.length >= n && cards.current.slice(0, n).every(Boolean);
+    // T036 (w5): the same holds under PLAY's punch: the game mounts there before the server's seed is known, and the
+    // seed's arrival re-dealt (remounted) the hidden board, about 1 s of JS right before the hand-over.
+    const quietRedeal = retryDealRef.current || stageHeldRef.current;
+    if (quietRedeal && g && r && mounted && was.cols === cols && was.rows === rows && was.pairs === pairs) {
+      for (let slot = 0; slot < n; slot++) {
+        const c = cards.current[r.eng.ids[slot]];
+        c?.reset();
+        const p = slotXY(g, slot);
+        c?.place(p.x, p.y);
+      }
+      setFaces({});
+      setWells([]);
+      setPrizes(Array.from({ length: pairs }, () => null));
+      setPot(null);
+      setSlotIds(Array.from({ length: n }, (_, i) => i));
+      flights.current?.clear();
+      pressTrace('memory.inplace');
+      return;
+    }
     cards.current = [];
     setShape({ cols, rows, pairs });
     setFaces({});
@@ -865,11 +903,14 @@ export default function MemoryGame({
     const t = setTimeout(() => {
       if (dealtKey.current === key) return;
       dealtKey.current = key;
-      // Off stage the cards land in place at once (nobody can see a deal under the punch, N04).
-      const offStage = stageHeldRef.current;
+      // Off stage the cards land in place at once (nobody can see a deal under the punch, N04). So does the
+      // re-deal of a TRY AGAIN on the kept board before its GO (w5): the newly dealt seed lays the same face-down
+      // board again, so it snaps instead of flying in a second time under the count.
+      const offStage = stageHeldRef.current || retryDealRef.current;
       dealCards(offStage);
       const n = geo.cols * geo.rows;
-      later(reducedMotion || offStage ? 60 : n * 38 + 240, () => setStageDealt(true));
+      pressTrace('memory.deal', () => `fast=${offStage}`);
+      later(reducedMotion || offStage ? 60 : n * 38 + 240, () => { pressTrace('memory.dealt'); setStageDealt(true); });
     }, 30);
     return () => clearTimeout(t);
   }, [geo, boardKey, dealCards, later, reducedMotion]);
@@ -953,7 +994,7 @@ export default function MemoryGame({
     })();
     return () => { live = false; clearTimers(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visible, runIndex, baseSeed, mode]);
+  }, [visible, runIndex, baseSeed, mode, retryRound]);
 
   // ---------------------------------------------------------------------------
   // Start, pause, resume
@@ -1015,6 +1056,7 @@ export default function MemoryGame({
   }, [gameNow, later, send]);
 
   const onStart = useCallback(() => {
+    retryDealRef.current = false;
     const r = runRef.current;
     if (!r) return;
     if (r.mode === 'timeAttack' || r.mode === 'race') {
