@@ -85,13 +85,15 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { lossNext } from './rewards/lossNext';
 import { foldHeldXp, holdBroadcasts } from '../api/broadcastFilter';
 import { reconcileDelayMs } from '../services/task-attempt/reconcileDelay';
-import { markWinShown } from '../services/task-attempt/pendingWins';
+import { markWinShown, takeReturnedTry } from '../services/task-attempt/pendingWins';
 import { dealTries, needTicketMain, previewRewardTiles, rangeErrorCleared } from './rewards/coinCardModel';
 import { markCoinCardSeen } from './rewards/coinCardSeen';
 import { NeedTicketOfferSlot } from './rewards/offerSlots';
+import { warmCalmOffer } from './money/CalmOffer';
 import { taskHasLine } from '../services/lineplay/rideLines';
 import { TREATS_PER_TICKET } from '../services/guide/freeTickets';
 import TicketClaimFlight from './rewards/TicketClaimFlight';
+import { holdHud } from './Topbar/hudPulse';
 import { tryAgainLine, tryAgainWith } from '../services/connectionCopy';
 import { coinFaceNote } from '../services/collection/rideFacts';
 import { noteNewestCoin } from '../services/collection/newestCoin';
@@ -283,6 +285,9 @@ export default function RedeemRedeemableModal({
   const [vipLeft, setVipLeft] = useState<number | null>(null);
   const [vipNote, setVipNote] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
+  // SAFETY-shutdown-extra-try: a try here ran out because the app was shut mid game, and what it cost came back. The
+  // card says so once, in one line, the first time it opens after the map found it (pendingWins).
+  const [returnedLine, setReturnedLine] = useState<string | null>(null);
   const [rescueUnavailable, setRescueUnavailable] = useState(false);
   const [proofRejected, setProofRejected] = useState(false);
   // Bumped after each reconcile read that got no answer (T033), so the next one is scheduled.
@@ -362,6 +367,14 @@ export default function RedeemRedeemableModal({
     heldPasses: Number(redeemable?.rescue_passes ?? 0), queueTicketsOn,
   };
   const outOfTickets = isTaskType && !hasEnoughTickets;
+  useEffect(() => {
+    if (!open) { setReturnedLine(null); return; }
+    const line = takeReturnedTry(taskType, taskId);
+    if (line) setReturnedLine(line);
+  }, [open, taskType, taskId]);
+  // W4-SMOKE-3a: a card that opens with no Tickets warms its NEED A TICKET row (record, kid paths, Supplies catalog)
+  // while the coin draws, so the row is known when the panel draws instead of a gap filling seconds later.
+  useEffect(() => { if (open && outOfTickets && !previewOnly) warmCalmOffer(player?.id, 'need_ticket'); }, [open, outOfTickets, previewOnly, player?.id]);
   // Earned Tickets are looked up first, so the button never offers the free try before a claim.
   const stepReady = !outOfTickets || claimable !== null;
   const freeStep = outOfTickets && stepReady ? challengeNextStep(wallet) : null;
@@ -935,6 +948,9 @@ export default function RedeemRedeemableModal({
     if (claiming || !claimable?.length) return;
     setClaiming(true);
     setStartError(null);
+    // W4-SMOKE-3b: the wallet can change before the claim answers (the player read lands first). The header chip, and
+    // the card's line that mirrors it (hudShown), hold the old number until the Tickets fly in, then roll together.
+    holdHud('tickets', CLAIM_HOLD_MS);
     let failed = false;
     for (const source of claimable) {
       if (source.kind !== 'stamp' || typeof source.id !== 'number') continue;
@@ -1341,7 +1357,8 @@ export default function RedeemRedeemableModal({
                     {isTaskType ? (
                       <>
                         {/* Out of Tickets: the free way that plays now, in one short line above the same button. */}
-                        {playsNow && outOfTickets && challengeStepLine(freeStep) && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
+                        {returnedLine && <Text style={styles.stepLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{returnedLine}</Text>}
+                        {!returnedLine && playsNow && outOfTickets && challengeStepLine(freeStep) && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         {freeStep?.kind === 'claim' && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         {/* T039: what a Ticket buys here, before PLAY, as the same shells the try card empties. */}
                         {!needTicket && cardTries && <View style={styles.dealRow} accessible accessibilityLabel={cardTries.label}>
@@ -1478,7 +1495,10 @@ export default function RedeemRedeemableModal({
             message={usedRescuePass
               ? rescueRetryAvailable
                 ? `This ${redeemable?.rescue_pass_source === 'daily' ? 'free' : 'extra'} try timed out. No Ticket was used, and you have one more go here today.`
-                : `This ${redeemable?.rescue_pass_source === 'daily' ? 'free' : 'extra'} try timed out. No Ticket was used.`
+                : attemptRef.current?.rescue_source === 'held'
+                  // The server gave the held pass back (expired_try_back): its retry is the pass itself.
+                  ? 'This extra try timed out, so it came back to you.'
+                  : `This ${redeemable?.rescue_pass_source === 'daily' ? 'free' : 'extra'} try timed out. No Ticket was used.`
               : 'This game was not finished, so your Ticket came back to you.'}
             primary={rescueRetryAvailable ? { label: 'Try Again', onPress: handleProtectedRetry } : { label: BACK_TO_MAP, onPress: handleLostClose }}
             quiet={rescueRetryAvailable ? { label: BACK_TO_MAP, onPress: handleLostClose } : undefined}
@@ -1604,6 +1624,8 @@ export default function RedeemRedeemableModal({
 }
 
 /** The card's big button takes taps a little past its art on every side (T062: a tap on its lower edge was lost). */
+/** How long the Ticket chip waits for a claim's Tickets to fly in (hudPulse caps a hold at 3 s). */
+const CLAIM_HOLD_MS = 3000;
 export const MAIN_BUTTON_HIT_SLOP = { top: 6, bottom: 14, left: 12, right: 12 } as const;
 
 const styles = StyleSheet.create({

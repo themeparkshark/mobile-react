@@ -3,16 +3,20 @@
  * when earned Tickets are claimed in place, a few Tickets arc down from the
  * button into this count and the number counts up to the new total, like the
  * daily chest. UI-thread motion (Reanimated), at most 4 flying pictures, one
- * play per claim. Reduce Motion: the number simply changes.
+ * play per claim. The number is the header chip's own (hudShown, fix pass w5), so both
+ * move together. Reduce Motion: the number simply changes.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { Easing, cancelAnimation, useAnimatedStyle, useSharedValue, withDelay, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import GameIcon from '../../ui/GameIcon';
 import { claimFlightPlan } from './claimFlightModel';
+import { hudShownNow, mirrorShown, subscribeHudShown, type HudShownState } from '../Topbar/hudShown';
 
 const FLY_FROM_Y = -70;
+/** The header chip this line mirrors (ExploreScreen's Ticket pill, flyTarget "tickets"). */
+const TICKETS_TARGET = 'tickets';
 
 function FlyingTicket({ t, index, count }: { readonly t: SharedValue<number>; readonly index: number; readonly count: number }) {
   const spread = (index - (count - 1) / 2) * 26;
@@ -39,33 +43,40 @@ export default function TicketClaimFlight({ tickets, claimed, reduced }: {
 }) {
   const t = useSharedValue(0);
   const bump = useSharedValue(1);
-  // While a claim's Tickets are flying the number counts up on its own; any other time it simply follows the wallet.
+  // Fix pass w5 (W4-SMOKE-3b): the number is the header chip's (hudShown), so the card and the header move together:
+  // both hold while the Tickets fly and change on the frame they land. No JS timer counts it up any more (the
+  // old count-up rewound to 0 after the wallet already said 10, then crawled up on a busy JS thread, 4 s behind).
+  // With no header chip on screen, the line follows the wallet on its own.
+  const [own, setOwn] = useState<HudShownState>({ value: tickets, prev: tickets, stream: null, key: 0 });
+  useEffect(() => {
+    setOwn(cur => (cur.value === tickets ? cur : { value: tickets, prev: cur.value, stream: null, key: cur.key + 1 }));
+  }, [tickets]);
+  const chip = useSyncExternalStore(
+    useCallback((listener: () => void) => subscribeHudShown(TICKETS_TARGET, listener), []),
+    () => hudShownNow(TICKETS_TARGET),
+  );
+  const shown = mirrorShown(chip, own, tickets);
+  // The flying pictures only (UI-thread motion); they are invisible once landed, so a late unmount is never seen.
   const [flying, setFlying] = useState<number | null>(null);
-  const [counted, setCounted] = useState(tickets);
   const played = useRef<number | null>(null);
   const plan = claimed ? claimFlightPlan(claimed.amount) : null;
   useEffect(() => {
     if (!claimed || played.current === claimed.id || !plan || reduced) return undefined;
     played.current = claimed.id;
-    const from = Math.max(0, tickets - claimed.amount);
     setFlying(claimed.id);
-    setCounted(from);
     t.value = 0;
     t.value = withTiming(1, { duration: plan.flightMs, easing: Easing.out(Easing.cubic) });
     bump.value = withDelay(plan.flightMs - 80, withSequence(withTiming(1.25, { duration: 90 }), withSpring(1, { damping: 9, stiffness: 260 })));
-    const timers: ReturnType<typeof setTimeout>[] = [];
-    plan.steps.forEach((share, i) => {
-      timers.push(setTimeout(() => setCounted(from + Math.round(claimed.amount * share)), plan.flightMs - 60 + i * plan.stepMs));
-    });
-    timers.push(setTimeout(() => setFlying(null), plan.flightMs + plan.steps.length * plan.stepMs + 80));
-    return () => { timers.forEach(clearTimeout); cancelAnimation(t); cancelAnimation(bump); setFlying(null); };
+    const done = setTimeout(() => setFlying(null), plan.flightMs + 200);
+    return () => { clearTimeout(done); cancelAnimation(t); cancelAnimation(bump); setFlying(null); };
   }, [claimed?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shown = flying != null ? counted : tickets;
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
-  const n = shown;
+  const n = shown.value;
   return (
     <View style={styles.row} accessible accessibilityLabel={`You have ${tickets} ticket${tickets === 1 ? '' : 's'}`}>
       <Animated.View style={bumpStyle}><GameIcon name="ticket" size={24} /></Animated.View>
+      {/* A plain number, set on the commit the chip starts its roll: an animated digit here would be reset to its
+          first-render digit by every commit of this busy card (commitHeal.ts), the stale "0 Tickets" of the w5 repro. */}
       <Text style={styles.count}>{n} {n === 1 ? 'Ticket' : 'Tickets'}</Text>
       {plan && flying != null && Array.from({ length: plan.pictures }, (_, i) => <FlyingTicket key={`${claimed?.id}-${i}`} t={t} index={i} count={plan.pictures} />)}
     </View>

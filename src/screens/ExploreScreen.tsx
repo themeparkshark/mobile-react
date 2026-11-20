@@ -5,6 +5,7 @@ import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamL
 import Constants from 'expo-constants';
 import * as SecureStore from 'expo-secure-store';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { loadRideList, recallRideList, rememberRideList } from '../services/map/rideListCache';
 import dayjs from 'dayjs';
 import { Image } from 'expo-image';
 import { useCallback, useContext, useMemo, useRef, useState, useEffect, type ReactNode } from 'react';
@@ -885,6 +886,8 @@ export function ExploreScreenBody() {
     if (!park?.id || !player?.id) return Promise.resolve();
     if (mapRequest.current?.context === mapContext) return mapRequest.current.promise;
     const promise = currentRedeemables().then(data => {
+      // T023: kept per player and park, so the next arrival draws its islands and names its next coin at once.
+      rememberRideList(player.id, park.id, data, Date.now());
       if (mapMounted.current && latestMapContext.current === mapContext) { setRedeemables(data); setMapLoadFailed(false); }
     }, error => {
       if (mapMounted.current && latestMapContext.current === mapContext) setMapLoadFailed(true);
@@ -1091,11 +1094,19 @@ export function ExploreScreenBody() {
   }, [adventure, player, redeemables?.tasks, guideTo]);
 
   useEffect(() => {
-    setRedeemables(null);
+    // T023: the park's last ride list draws at once (coin spots never move); the server's answer replaces it when it
+    // lands. Without one, the map waits for the server as before.
+    const kept = recallRideList<RedeemablesType>(player?.id, park?.id);
+    setRedeemables(kept);
     setActiveRedeemable(undefined);
     setCommunityCenter(null);
     if (!park?.id) return;
     let current = true;
+    if (!kept) {
+      void loadRideList<RedeemablesType>(player?.id, park.id).then(saved => {
+        if (current && saved) setRedeemables(prev => prev ?? saved);
+      });
+    }
     void getCommunityCenter(park.id).then(center => {
       if (current) setCommunityCenter(center);
     }).catch(() => undefined);

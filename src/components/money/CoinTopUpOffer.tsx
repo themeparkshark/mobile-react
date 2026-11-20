@@ -19,7 +19,7 @@
  */
 import { useContext, useState } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import Animated from 'react-native-reanimated';
 import type { ShopCurrency } from '../../api/endpoints/me/shop';
 import { AuthContext } from '../../context/AuthProvider';
 import { haptic } from '../../gamekit/Haptics';
@@ -29,7 +29,7 @@ import { buyPack, outcomeMessage, useSupplies } from '../../services/money/suppl
 import { trackImpression } from '../../services/money/track';
 import { storeAvailable } from '../../services/purchases';
 import { BRAND, FONT, GameIcon, gameAlert } from '../../ui';
-import { CARD, GotIt, MAX_FONT, PackArt, PriceBar, currencyIcon, packArtKey, unitWord, type PackArtKey } from './moneyUi';
+import { CARD, GotIt, MAX_FONT, PackArt, PriceBar, currencyIcon, packArtKey, unitWord, useRowEntrance, type PackArtKey } from './moneyUi';
 import { topUpHeadline, type TopUpCurrency, type TopUpReason } from '../../services/money/copy';
 import countText from '../../helpers/countText';
 
@@ -61,6 +61,8 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
   const canBuy = !!player && storeAvailable();
   const { catalog, prices } = useSupplies(canBuy);
   const [busy, setBusy] = useState(false);
+  // A short fade on the UI thread, not an entering layout animation (those stalled inside native sheets, W4-SMOKE-3a).
+  const enter = useRowEntrance(true, 0);
   const [landed, setLanded] = useState<{ grants: Record<string, number>; art: PackArtKey } | null>(null);
   if (!canBuy || need <= 0) return null;
 
@@ -88,7 +90,7 @@ export default function CoinTopUpOffer({ need, reason, onDone, currency = 'coins
   const seeAll = () => RootNavigation.navigate('Store', { store: 'shark-shop', tab: 'supplies', focus: kind === 'tickets' ? 'tickets' : kind === 'coins' ? 'coins' : 'featured' });
 
   return (
-    <Animated.View entering={FadeIn.duration(180)} style={[st.wrap, blue && st.wrapBlue, style]}>
+    <Animated.View style={[st.wrap, blue && st.wrapBlue, style, enter]}>
       {headline && (<View style={st.head}>
         <GameIcon name={currencyIcon(kind)} size={26} />
         <Text maxFontSizeMultiplier={MAX_FONT} style={[st.headline, blue && st.inkBlue]} numberOfLines={2}>{topUpHeadline(need, kind, reason)}</Text>
