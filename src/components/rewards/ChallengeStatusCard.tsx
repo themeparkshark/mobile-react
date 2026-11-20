@@ -64,7 +64,7 @@ export function capsAction<T extends ChallengeStatusAction | undefined>(action: 
   return (action ? { ...action, label: action.label.toUpperCase() } : action) as T;
 }
 
-export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false, ticket, line, ticketFlyTo, pips, footnotes, extraRow, onClose }: {
+export default function ChallengeStatusCard({ title, message, art = 'none', primary: primaryIn, secondary: secondaryIn, quiet: quietIn, guardRetry = false, ticket, line, ticketFlyTo, pips, footnotes, extraRow, onClose, lead, actions }: {
   readonly title: string;
   readonly message: string;
   readonly art?: ChallengeStatusArt;
@@ -95,6 +95,10 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
   readonly extraRow?: ReactNode;
   /** A small X like every other sheet (fix W3 T047); omitted on cards that must be answered. */
   readonly onClose?: () => void;
+  /** The arcade loss card (T4): what the try paid (the Parts into the coin's slot), in place of the ticket row and message. */
+  readonly lead?: ReactNode;
+  /** The arcade loss card (T4): its own buttons in place of primary, secondary and quiet, woken by the same input lock. */
+  readonly actions?: (armed: boolean) => ReactNode;
 }) {
   const primary = capsAction(primaryIn);
   const secondary = capsAction(secondaryIn);
@@ -120,7 +124,7 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
             spoken only; without a picture the short line shows. */}
         {!!line && <Text style={styles.line}>{withNumberFont(line)}</Text>}
         {pips && pips.need > 0 && <TryPips have={pips.have} need={pips.need} />}
-        {ticket ? <View style={styles.ticketRow}>
+        {lead ? lead : ticket ? <View style={styles.ticketRow}>
           <View style={styles.ticket} accessible accessibilityLabel={message}>
             <GameIcon name="ticket" size={30} />
             <Text style={[styles.ticketText, ticket > 0 && styles.ticketBack]}>{ticket > 0 ? `+${ticket}` : `${ticket}`}</Text>
@@ -130,11 +134,12 @@ export default function ChallengeStatusCard({ title, message, art = 'none', prim
         </View> : <Text style={styles.message}>{withNumberFont(message)}</Text>}
         {/* Dimmed while locked, full once the buttons wake (never a silent dead tap). */}
         <Animated.View style={[styles.buttons, dimStyle]}>
-        {primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} note={primary.note} onPress={primary.onPress}
+        {actions ? actions(armed) : null}
+        {!actions && primary && <ResultPrimaryButton label={primary.label} icons={primary.icons} a11yLabel={primary.a11yLabel} note={primary.note} onPress={primary.onPress}
           disabled={primary.disabled || !armed} style={[styles.primary, primary.disabled && styles.dim]} />}
-        {secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled || !armed ? undefined : secondary.onPress}
+        {!actions && secondary && <ResultSecondaryButton label={secondary.label} onPress={secondary.disabled || !armed ? undefined : secondary.onPress}
           style={[styles.secondary, secondary.disabled && styles.dim]} />}
-        {quiet && <ResultSecondaryButton label={quiet.label} onPress={armed ? quiet.onPress : undefined} style={styles.secondary} />}
+        {!actions && quiet && <ResultSecondaryButton label={quiet.label} onPress={armed ? quiet.onPress : undefined} style={styles.secondary} />}
         </Animated.View>
         {extraRow ?? null}
         {footnotes?.map(note => (

@@ -608,12 +608,13 @@ test('the ride try card never claims SO CLOSE!: GOOD TRY! (ONE MORE TRY! with a 
   assert.equal(lost.lostTryCopy({ ...base, lostTicketCost: 1, near: false }).title, 'Good Try!');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.doesNotMatch(modal, /title="So Close!"/);
-  assert.match(modal, /<ChallengeStatusCard title=\{lostCopy\.title\} art="soClose"\n\s+message=\{vipNote \?\? \(vipOutToday \? VIP_TRY_TOMORROW : lostCopy\.message\)\} ticket=\{lostCopy\.ticket\}/);
+  // T4 (arcade plan): the ride's loss card is always "Nice try!" (lossCard.ts), with the Parts it paid as its lead.
+  assert.match(modal, /<ChallengeStatusCard title=\{loss\.title\} art="soClose"\n\s+message=\{loss\.message\}/);
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');
   assert.match(capture, /\{\.\.\.lostTryCopy\(/, 'the capture shows the exact words the modal shows');
   const card = read('src/components/rewards/ChallengeStatusCard.tsx');
   assert.doesNotMatch(card, /YellowButton/, 'the shared gold results button, navy text');
-  assert.ok(card.indexOf('<ResultPrimaryButton') < card.indexOf('{quiet && <ResultSecondaryButton'), 'gold first, the safe action under it');
+  assert.ok(card.indexOf('<ResultPrimaryButton') < card.indexOf('{!actions && quiet && <ResultSecondaryButton'), 'gold first, the safe action under it');
 });
 
 test('Boss hit card: shared chips (two at most, singular 1 PERFECT), shared stars, DONE is a real button, pictures not sentences', () => {
@@ -708,7 +709,8 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   assert.match(modal, /const handleGameLose = useCallback\(async \(\) => \{\n\s+if \(!attemptRef\.current && flowStateRef\.current === 'replay'\) \{ lossBeforeDealRef\.current = true; return; \}\n\s+await resolveAttempt\('loss'\);/);
   assert.match(modal, /\{\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard/);
   assert.doesNotMatch(modal, /skipLostCard|lostFromGameRef/);
-  assert.match(modal, /lostTryCopy\(\{ usedRescuePass, rescueRetryAvailable, firstCoinTicketReturned, lostTicketCost,\n\s+retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame,\n\s+rescueSource: redeemable\?\.rescue_pass_source, nextGame: retryGameName \}\)/);
+  // T4 (arcade plan, Nov 20 2026): the ride's loss card reads lossCardModel: always "Nice try!", never a closeness title.
+  assert.match(modal, /const loss = lossCardModel\(\{ attempt: lossFields \?\? \{ first_coin_ticket_returned: firstCoinTicketReturned,/);
   const shellSrc = read('src/gamekit/GameShellV2.tsx');
   assert.match(shellSrc, /const rideLoss = !!rideChallenge && phase === 'results' && !!effectiveResult && effectiveResult\.stars <= 0 && !wrap;/);
   assert.match(shellSrc, /noteRideTry\(effectiveResult\);\n\s+handleClaimRef\.current\?\.\(\);/);
@@ -718,7 +720,7 @@ test('round 3: one card per ride miss, one surface, one exit word, honest ticks 
   assert.doesNotMatch(duel, />TRY AGAIN!</);
   // A bare 0 ticket pill reads as "you have no Tickets": only a change gets a picture.
   const card = read('src/components/rewards/ChallengeStatusCard.tsx');
-  assert.match(card, /\{ticket \? <View style=\{styles\.ticketRow\}>\n\s+<View style=\{styles\.ticket\}/);
+  assert.match(card, /\{lead \? lead : ticket \? <View style=\{styles\.ticketRow\}>\n\s+<View style=\{styles\.ticket\}/);
   assert.doesNotMatch(card, /: '0'\}/);
   // Banana Basket leaves a 0-star title to the shared feelings rule.
   const banana = read('src/games/banana-basket/BananaBasketGame.tsx');

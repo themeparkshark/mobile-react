@@ -165,8 +165,9 @@ test('no ad ever shows to a player under 13 or of unknown age (today: everyone);
   }
   // Core loop 4.3 rule 4: no offer inside a win or a loss. The ride cards keep only the members' own perks,
   // asked for with vip = true (no ad, no VIP line for anyone else).
+  // T4 (arcade plan, Nov 20 2026): a Ticket is spent win or lose, so the ride cards have no VIP or ad retry at all.
   const challenge = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(challenge, /watchForReward\('retry', attemptId, true\)/);
+  assert.doesNotMatch(challenge, /watchForReward/);
   assert.doesNotMatch(challenge, /adsAvailable/);
   const win = read('src/components/PostWinRewardsModal.tsx');
   assert.match(win, /if \(!visible \|\| !isVip \|\| attemptId == null/);
@@ -214,12 +215,10 @@ test('closing the ad early pays nothing and never claims', async () => {
 
 test('offers live on result and recap screens only, never inside a game or a moving line', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  // "One more try" only on the lost card, after the game resolved.
-  const retryUse = modal.indexOf("watchForReward('retry'");
-  assert.ok(retryUse > 0);
-  // Fix W3: the loss card's one way on comes from lossNext, which offers the VIP try only through canOfferRetry.
-  assert.match(modal, /vipRetry: canOfferRetry/);
-  assert.match(modal, /\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard[\s\S]*?lossPlan/);
+  // T4 (arcade plan): no "one more try" offer anywhere on a ride card; the loss card's ways on are TRY AGAIN at the
+  // price and BACK TO MAP (lossCard.ts), never an ad or a VIP try.
+  assert.ok(modal.indexOf("watchForReward('retry'") < 0);
+  assert.match(modal, /\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard[\s\S]*?<LossActions/);
   // The line snack is passed to the recap only, and only for an ended server session.
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /snackSlot=\{snapshot\.serverSessionId && snapshot\.rewards \? <LineSnackOffer/);
   assert.match(read('src/screens/LinePlay/components/SessionRecap.tsx'), /\{rewardsConfirmed && snackSlot\}/);

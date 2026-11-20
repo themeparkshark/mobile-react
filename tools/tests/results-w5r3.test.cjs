@@ -104,11 +104,9 @@ test('a spent Ticket reads GOOD TRY!; a member\'s retry is a quiet VIP try insid
   // Core loop 5.13: the VIP retry folds into TRY AGAIN for members only; no ad or VIP line for anyone else.
   assert.equal(lost.VIP_RETRY_ACTION.label, 'Try Again');
   assert.equal(lost.VIP_RETRY_ACTION.note, 'VIP try');
+  // T4 (arcade plan, Nov 20 2026): a Ticket is spent win or lose. The ride's loss card has no VIP try and no ad.
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /&& !firstCoinTicketReturned && !rescueRetryAvailable && vip;/);
-  // Fix W3: the loss card's way on (lossNext) carries the VIP try's own words, only when canOfferRetry says so.
-  assert.match(modal, /vipRetry: canOfferRetry/);
-  assert.match(read('src/components/rewards/lossNext.ts'), /kind: 'vip_retry', label: VIP_RETRY_ACTION\.label/);
+  assert.doesNotMatch(modal, /vipRetry|canOfferRetry|VIP_RETRY_ACTION|watchForReward/);
   assert.doesNotMatch(modal, /AD_RETRY_ACTION/);
   assert.doesNotMatch(modal, /Watch Ad: One More Try|'No thanks'/);
   const capture = read('src/screens/LinePlay/QueueResultsCaptureScreen.tsx');

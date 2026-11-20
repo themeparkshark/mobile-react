@@ -20,7 +20,8 @@ const ride = { type: 'task', model: { id: 11, name: 'Space Ride', ticket_cost: 1
 
 test('PLAY! names the ride and its Ticket price', () => {
   const app = load({ redeemable: ride });
-  assert.ok(app.find(n => n.props?.accessibilityLabel === 'Space Ride. Costs 1 Ticket.'));
+  // T3 (arcade plan): the price and the wallet, spoken; the pictures under PLAY! draw them.
+  assert.ok(app.find(n => n.props?.accessibilityLabel === 'Space Ride. Costs 1 Ticket. You have 0.'));
   assert.ok(app.find(n => n.props?.text === 'PLAY!'), 'one word for the one action (core loop 4.5)');
 });
 

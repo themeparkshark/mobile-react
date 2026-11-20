@@ -120,7 +120,8 @@ export function challengeNextStep(wallet: ChallengeWallet): FreeTicketStep | nul
 
 /** The big button's words for each state of the card. */
 export function challengeButtonLabel(step: FreeTicketStep | null, ticketCost: number): string {
-  if (!step) return ticketCost > 1 ? `PLAY! ${ticketCost} Tickets` : 'PLAY!';
+  // T3 (arcade plan): the price rides on PLAY! as Ticket pictures, so the words stay PLAY! at every price.
+  if (!step) return 'PLAY!';
   switch (step.kind) {
     case 'claim': return `Claim ${step.tickets} stamp Ticket${step.tickets === 1 ? '' : 's'}`;
     case 'free_try': return 'PLAY! Free try';

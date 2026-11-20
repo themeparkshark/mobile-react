@@ -54,14 +54,15 @@ export interface RideDeal { readonly game?: string | null; readonly tries_per_ti
 const DEAL_GAME_NAMES: Readonly<Record<string, string>> = { tap: 'Whack-a-Shark', memory: 'Memory Match', trivia: 'Beat the Buzzer' };
 
 /**
- * The tries a Ticket buys, shown on the card before PLAY (fix w4 T039): one shell per try, the same shells
- * the game's own try card empties. Null without a deal from the server (older servers): the card is as today.
+ * What one PLAY! buys, shown on the card before PLAY (fix w4 T039; T9 arcade plan Nov 20 2026): one game,
+ * and for Memory Match its 3 boards (like 9 balls for one Skee-Ball token), one picture per board. Never
+ * "tries" for a Ticket. Null without a deal from the server (older servers): the card is as today.
  */
 export function dealTries(deal: RideDeal | null | undefined): { shells: number; label: string } | null {
   const n = Number(deal?.tries_per_ticket);
   if (!deal || !Number.isFinite(n) || n < 1) return null;
   const shells = Math.min(5, Math.floor(n));
   const game = typeof deal.game === 'string' ? DEAL_GAME_NAMES[deal.game] : undefined;
-  const tries = `${shells} ${shells === 1 ? 'try' : 'tries'}`;
-  return { shells, label: game ? `1 Ticket = ${tries} at ${game}` : `1 Ticket = ${tries}` };
+  const boards = shells > 1 ? `One game, ${shells} boards` : 'One game';
+  return { shells, label: game ? `${boards} of ${game}` : boards };
 }

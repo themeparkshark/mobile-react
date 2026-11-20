@@ -69,8 +69,8 @@ test('the try card shows what the try cost as a ticket picture', () => {
 
 test('every lost or expired card with a retry turns the guard on', () => {
   const src = fs.readFileSync(path.join(__dirname, '../../src/components/RedeemRedeemableModal.tsx'), 'utf8');
-  // Fix W3: every loss card retries now (free, VIP or paid); only the "ways to play" button skips the longer guard.
-  assert.match(src, /guardRetry=\{lossPlan\.kind !== 'ways'\}/);
+  // T4 (arcade plan): TRY AGAIN spends Tickets, so the guard is on; short on Tickets it only opens Get Tickets.
+  assert.match(src, /guardRetry=\{!loss\.short\}/);
   assert.match(src, /guardRetry=\{rescueRetryAvailable\}/);
   const guard = require('node:fs').readFileSync(path.join(__dirname, '../../src/components/rewards/ChallengeStatusCard.tsx'), 'utf8');
   const ms = Number(guard.match(/RETRY_TAP_GUARD_MS = (\d+)/)[1]);

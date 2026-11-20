@@ -192,6 +192,13 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
         rungState: () => ({ open: true, isNew: false }), recordProgress() {} };
       if (/(^|\/)services\/mapFlags$/.test(name)) return { useMapFlags: () => ({ gymSwords: false }), loadMapFlags: async () => ({ gymSwords: false }) };
       if (/(^|\/)guide\/nextCoin$/.test(name)) return { guide: { current: () => null, subscribe: () => () => {}, setTarget() {}, plan: () => null } };
+      // Arcade Tickets (T1 to T10, Nov 20 2026): the pure rules run for real; the server reads as today's (no arcade).
+      if (/(^|\/)tickets\/ticketPipsModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/tickets/ticketPipsModel.ts');
+      if (/(^|\/)tickets\/lossCard$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/tickets/lossCard.ts');
+      if (/(^|\/)tickets\/getTicketsModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/tickets/getTicketsModel.ts');
+      if (/(^|\/)tickets\/coinCardPriceModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/tickets/coinCardPriceModel.ts');
+      if (/(^|\/)tickets\/arcadeMode$/.test(name)) return { useArcadeEconomy: () => false, arcadeEconomyNow: () => false, noteArcadeAnswer() {} };
+      if (/(^|\/)collection\/limitedCoins$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/collection/limitedCoins.ts');
       if (name.includes('assets/')) return name;
       return { default: name };
     },

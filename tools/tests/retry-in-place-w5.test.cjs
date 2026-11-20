@@ -195,7 +195,7 @@ test('w5 T036: PLAY starts from the recovery check and the start skips a second 
 test('w5 N04: the loss card holds under the veiled board until its reset is drawn (no dim map between)', () => {
   assert.match(modal, /const replayUnderCard = flowState === 'replay' && !replayShown;/);
   assert.match(modal, /\(flowState === 'replay' && !replayUnderCard\);/, 'the card keeps its layout (not full-bleed) while it holds');
-  assert.match(modal, /\{\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard title=\{lostCopy\.title\} art="soClose"/);
+  assert.match(modal, /\{\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard title=\{loss\.title\} art="soClose"/);
   // The board is drawn after (above) the card and fills the window, so the held card takes no touch.
   assert.ok(modal.indexOf('replayUnderCard) && <ChallengeStatusCard') < modal.indexOf('<View style={[styles.minigameContainer, boardOutset'));
 });

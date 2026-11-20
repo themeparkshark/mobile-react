@@ -54,6 +54,8 @@ function mapChallenge(initial = task) {
       if (name === './rewards/playPill') return require('./helpers/ts-module.cjs').loadTs('src/components/rewards/playPill.ts');
       if (name === '../ui/pressTrace') return { pressTrace() {} };
       if (name === './rewards/coinCardSeen') return { coinCardSeenNow: () => false, warmCoinCardsSeen() {}, markCoinCardSeen: async () => undefined };
+      // Arcade Tickets T3: the price pictures' pure rule runs for real.
+      if (name === './tickets/ticketPipsModel') return require('./helpers/ts-module.cjs').loadTs('src/components/tickets/ticketPipsModel.ts');
       if (name.includes('assets/')) return 1;
       return { default: name };
     },

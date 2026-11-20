@@ -1,0 +1,115 @@
+// T3, T4, T7, T9 (arcade plan, Nov 20 2026): the coin card, the loss card and Get Tickets, on both servers.
+const assert = require('node:assert/strict');
+const test = require('node:test');
+const { loadTs } = require('./helpers/ts-module.cjs');
+const { read } = require('./helpers/load-ts.cjs');
+
+const loss = loadTs('src/components/tickets/lossCard.ts');
+const ways = loadTs('src/components/tickets/getTicketsModel.ts');
+const price = loadTs('src/components/tickets/coinCardPriceModel.ts');
+const card = loadTs('src/components/rewards/coinCardModel.ts');
+const copy = loadTs('src/components/rewards/challengeCopy.ts');
+
+test('T4 a loss at a 3 Ticket ride: Nice try!, +3 Parts into its slot, no Ticket back, TRY AGAIN at 3', () => {
+  const m = loss.lossCardModel({ attempt: { status: 'lost', ticket_cost: 3, loss_parts: 3, losses_here_today: 1,
+    first_coin_ticket_returned: false, rescue_retry_available: false, loss: { parts: 3, parts_full: false, task_name: 'Space Mountain' } },
+  coinName: 'Space Mountain', price: 3, tickets: 4, practice: true });
+  assert.equal(m.title, 'Nice try!');
+  assert.equal(m.parts.line, '+3 Ride Parts for Space Mountain');
+  assert.equal(m.freeRetry, false);
+  assert.equal(m.price, 3);
+  assert.equal(m.short, false);
+  assert.equal(m.soft, false, 'one loss: TRY AGAIN and BACK TO MAP the same size');
+  assert.equal(m.practiceLink, 'Practice this game free');
+  assert.doesNotMatch(m.message, /came back|So close|Next coin/i);
+});
+
+test('T4 the soft stop after 2 losses here today, and short on Tickets TRY AGAIN shows outlines', () => {
+  const second = loss.lossCardModel({ attempt: { status: 'lost', ticket_cost: 3, loss_parts: 3, losses_here_today: 2 },
+    coinName: 'Space Mountain', price: 3, tickets: 1, practice: false });
+  assert.equal(second.soft, true);
+  assert.equal(second.short, true);
+  assert.equal(second.practiceLink, null);
+});
+
+test('T4 Parts full here today when the 12 cap took them all', () => {
+  const m = loss.lossCardModel({ attempt: { status: 'lost', ticket_cost: 3, loss_parts: 0, loss: { parts: 0, parts_full: true } },
+    coinName: 'Space Mountain', price: 3, tickets: 9, practice: false });
+  assert.deepEqual({ ...m.parts }, { amount: 0, full: true, line: 'Parts full here today' });
+});
+
+test('T4 today\'s server: a Ticket it really gave back still says so (both servers work); a plain loss names the Tickets used', () => {
+  const back = loss.lossCardModel({ attempt: { first_coin_ticket_returned: true, ticket_cost: 1 }, coinName: 'Dumbo', price: 1, tickets: 1, practice: false });
+  assert.equal(back.freeRetry, true);
+  assert.equal(back.price, null, 'no price pictures on a free retry');
+  assert.equal(back.title, 'Nice try!');
+  const plain = loss.lossCardModel({ attempt: { ticket_cost: 2 }, coinName: 'Dumbo', price: 2, tickets: 5, practice: false });
+  assert.equal(plain.parts, null);
+  assert.equal(plain.message, '2 Tickets used.');
+});
+
+test('T4 a began try that timed out counts as played; a never-begun one says its Tickets are back (arcade only)', () => {
+  assert.equal(loss.lossCardModel({ attempt: { status: 'lost', abandoned: true, ticket_cost: 1, loss_parts: 1 }, coinName: 'X', price: 1, tickets: 0, practice: false }).message,
+    'That game timed out. It counts as played.');
+  assert.equal(loss.expiredLine({ status: 'lost', abandoned: true }, true), 'That game timed out. It counts as played.');
+  assert.equal(loss.expiredLine({ status: 'expired' }, true), 'That game never started. Your Tickets are back.');
+  assert.equal(loss.expiredLine({ status: 'expired' }, false), null, 'today\'s server keeps its own words');
+});
+
+test('T4 the ride modal has no VIP try, no ad retry and no next coin line on its loss card', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.doesNotMatch(modal, /vipRetryCase|watchForReward|lossNext\(|Next coin:/);
+  assert.match(modal, /lead=\{loss\.parts \? <LossParts /);
+  const actions = read('src/components/tickets/LossActions.tsx');
+  assert.match(actions, /styles\.half/, 'TRY AGAIN and BACK TO MAP share one row, the same size');
+  assert.match(actions, /<TicketPips price=\{price\} held=\{held\} size="button" \/>/);
+});
+
+test('T3 the coin card: this ride\'s game, Win coin + 4 Parts, Lose 3 Parts, the price, and a leave date', () => {
+  const m = price.coinCardPrice({ game: 'tap', price: 3, winParts: 4, arcade: true, leavesOn: 'Monday, Nov 30' });
+  assert.deepEqual({ ...m.game }, { id: 'tap', name: 'Whack-a-Shark' });
+  assert.equal(m.win.text, 'coin + 4 Parts');
+  assert.equal(m.lose.text, '3 Parts');
+  assert.equal(m.price, 3);
+  assert.equal(m.leaves, 'Leaves Monday, Nov 30');
+  const today = price.coinCardPrice({ game: null, price: undefined, winParts: 1, arcade: false });
+  assert.equal(today.game, null, 'no dealt game: no game row');
+  assert.equal(today.lose, null, 'today\'s server pays nothing on a loss: no lose row');
+  assert.equal(today.price, null, 'no served price: no pictures, never a guessed 1');
+});
+
+test('T3 PLAY! says PLAY! at every price (the pictures carry the price) and no price defaults to 1', () => {
+  assert.equal(copy.challengeButtonLabel(null, 3), 'PLAY!');
+  const modal = read('src/components/RedeemModal.tsx');
+  assert.doesNotMatch(modal, /ticket_cost \?\? 1/);
+  assert.match(modal, /<TicketPips price=\{price\} held=\{ticketsNow\} size="button" \/>/);
+  assert.doesNotMatch(read('src/components/UnfoundCoinModal.tsx'), /free try works/);
+});
+
+test('T7 Get Tickets lists only rows that work now, in order, and ends with tomorrow\'s gift', () => {
+  const base = { price: 3, tickets: 1, stampTickets: 0, rideHasLine: true, queueTicketsOn: true, affordableNear: 14, canPick: true, storeOn: true, arcade: true };
+  const full = ways.getTicketsRows({ ...base, sources: { home: true, queue: true, queue_per_park_day: 3, stamps_waiting_tickets: 13,
+    line_tickets_left_today: 3, trail_box_steps_left: 400 } });
+  assert.deepEqual([...full.rows].map(r => r.kind), ['claim', 'line', 'trail', 'near', 'pick', 'grownups']);
+  assert.equal(full.rows[0].text, 'Stamps waiting: +13');
+  assert.equal(full.rows[1].text, '+1 Ticket and its Ride Parts');
+  assert.equal(full.rows[3].text, '14 coins near you cost what you have');
+  assert.equal(full.have, 'You have 1 of 3');
+  assert.equal(full.footer, 'Tomorrow at any park: +3');
+  const lean = ways.getTicketsRows({ ...base, tickets: 0, rideHasLine: false, canPick: false, storeOn: false,
+    sources: { home: true, queue: true, queue_per_park_day: 3, line_tickets_left_today: 0 } });
+  assert.deepEqual([...lean.rows].map(r => r.kind), [], 'nothing that would not work');
+  const today = ways.getTicketsRows({ ...base, sources: null, arcade: false, affordableNear: null });
+  assert.equal(today.footer, null, 'today\'s server has no park day gift: no promise');
+  assert.equal(today.rows.find(r => r.kind === 'near').text, 'Coins you can play now');
+  for (const row of full.rows) assert.doesNotMatch(row.text + row.a11y, /only today|hurry|minutes left|\$/i);
+});
+
+test('T9 Memory Match is one game of 3 boards, never tries per Ticket', () => {
+  assert.equal(card.dealTries({ game: 'memory', tries_per_ticket: 3 }).label, 'One game, 3 boards of Memory Match');
+  assert.deepEqual({ ...price.coinCardPrice({ game: 'memory', price: 2, winParts: 2, arcade: true, boards: 3 }).boards },
+    { count: 3, text: 'One game, 3 boards' });
+  for (const file of ['src/components/rewards/coinCardModel.ts', 'src/components/tickets/CoinCardPrice.tsx', 'src/games/memory/MemoryGame.tsx']) {
+    assert.doesNotMatch(read(file), /tries per Ticket|1 Ticket = /, file);
+  }
+});
