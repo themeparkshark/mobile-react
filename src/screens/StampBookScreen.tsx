@@ -25,10 +25,6 @@ import { useFocusEffect, useIsFocused, useRoute } from '@react-navigation/native
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import Svg, { Circle } from 'react-native-svg';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
 import * as RootNavigation from '../RootNavigation';
 import { claimStampReward, equipStampTitle, getStamps, titleWornByClaim, type StampClaimAnswer, type StampsResponse } from '../api/endpoints/me/stamps';
 import { AuthContext } from '../context/AuthProvider';
@@ -56,6 +52,7 @@ import {
 import { UpperText } from '../ui/upper';
 import { stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
 import { SEABED_PLATE } from '../constants/backdrops';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 const GAP = 9;
 const SIDE = 12;
@@ -565,12 +562,8 @@ export default function StampBookScreen() {
     [player?.energy, player?.tickets, player?.total_experience, player?.coins]);
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>Stamp Book</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
+    <LookScreen footer header={{ left: <LookBackButton />, title: 'Stamp Book', right: null }}>
+      {() => (<>
 
       <BookFxProvider value={fx}>
         <View style={styles.screen} onTouchStart={fx.poke} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
@@ -658,7 +651,8 @@ export default function StampBookScreen() {
         <ClaimAll stamps={claimAllOpen ?? []} visible={!!claimAllOpen} reducedMotion={reducedMotion} worn={wornTitle}
           onClaimOne={claimOne} onWear={stamp => setTitle(stamp.id, stamp.rewards.title).then(() => undefined, () => undefined)} onClose={closeClaimAll} />
       </BookFxProvider>
-    </Wrapper>
+    </>)}
+    </LookScreen>
   );
 }
 

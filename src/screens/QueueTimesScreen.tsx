@@ -19,10 +19,7 @@ const RETURN_TIME_WORD = 'SKIP LINE';
 const QUEUE_TIMES_REFRESH_MS = 60_000;
 /** The live feed answered with nothing (T026). */
 export const WAIT_FEED_EMPTY_COPY = 'Live wait times are not reaching us right now. Rides still work.';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
+import { FOOTER_CLEARANCE } from '../components/Wrapper';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
 import type { WikiLiveEntry } from '../api/endpoints/parks/queue-times/getWikiTimes';
 import waitFeed from '../services/lineplay/liveStub';
@@ -43,6 +40,7 @@ import { UpperText } from '../ui/upper';
 import EdgeScrollHint, { useEdgeScrollHint } from '../components/EdgeScrollHint';
 import SearchField from './social/SearchField';
 import { HIT_SLOP } from '../ui/tokens';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -442,13 +440,9 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   }, [location?.latitude, location?.longitude]);
 
   return (
-    <Wrapper previewMode={Boolean(previewEntries)}>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>WAIT TIMES</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false}><View style={{ width: 35 }} /></TopbarColumn>
-      </Topbar>
-      <View style={styles.container}>
+    <LookScreen footer={{ previewMode: Boolean(previewEntries) }} legacyPad={{ top: -8, bottom: FOOTER_CLEARANCE }} header={{ left: <LookBackButton />, title: 'WAIT TIMES', right: <View style={{ width: 35 }} /> }}>
+      {pad => (<>
+      <View style={[styles.container, { marginTop: pad.top }]}>
 
       {/* Park Selector */}
       <View style={styles.parkSelectorContainer}>
@@ -541,7 +535,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
             onMakeNextCoin={makeNextCoin} />}
           extraData={`${guidePick.current}-${guidePick.plan}-${coinTasks.size}-${ownedTasks.size}`}
           estimatedItemSize={80}
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={{ ...styles.listContent, paddingBottom: pad.bottom }}
           refreshControl={
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />
           }
@@ -574,7 +568,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
         </View>
       )}
       </View>
-    </Wrapper>
+    </>)}
+    </LookScreen>
   );
 }
 
@@ -582,7 +577,6 @@ export default function QueueTimesScreen({ route }: { route: any }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginTop: -8,
     backgroundColor: '#d9f3ff',
   },
   parkSelectorContainer: {
@@ -719,7 +713,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 16,
-    paddingBottom: FOOTER_CLEARANCE,
   },
   card: {
     flexDirection: 'row',

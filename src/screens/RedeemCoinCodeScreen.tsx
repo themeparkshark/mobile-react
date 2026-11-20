@@ -15,9 +15,6 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import redeemCoinCode from '../api/endpoints/coin-codes/redeemCoinCode';
 import InformationModal from '../components/InformationModal';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
 import { AuthContext } from '../context/AuthProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -32,6 +29,7 @@ import {
   type RedeemErrorView,
   type RewardLine,
 } from './RedeemCoinCode/redeemCodeModel';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 /**
  * Redeem a code: type a coin or Shark Drop code (4 to 20 letters and numbers),
@@ -153,21 +151,11 @@ export default function RedeemCoinCodeScreen() {
 
 
   return (
-    <>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>Redeem</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false}>
-          <InformationModal sheet="redeem" />
-        </TopbarColumn>
-      </Topbar>
+    <LookScreen legacyPad={{ top: -8 }} header={{ left: <LookBackButton />, title: 'Redeem', right: <InformationModal sheet="redeem" /> }}>
+      {pad => (<>
       <ImageBackground
         source={require('../../assets/images/screens/welcome/background.png')}
-        style={styles.background}
+        style={[styles.background, { marginTop: pad.top }]}
         resizeMode="cover"
       >
         <ScrollView
@@ -265,12 +253,13 @@ export default function RedeemCoinCodeScreen() {
           </View>
         </ScrollView>
       </ImageBackground>
-    </>
+      </>)}
+    </LookScreen>
   );
 }
 
 const styles = StyleSheet.create({
-  background: { flex: 1, marginTop: -8 },
+  background: { flex: 1 },
   content: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, paddingTop: 24 },
   slot: { width: '100%', maxWidth: 340, alignItems: 'center', justifyContent: 'flex-end', minHeight: 176 },
   form: { width: '100%', alignItems: 'center' },

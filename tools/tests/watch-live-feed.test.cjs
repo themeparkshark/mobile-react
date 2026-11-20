@@ -130,7 +130,7 @@ test('the player keeps no cookies, limits origins and covers the end screen', ()
 
 test('the Watch page sits on the clean background with a hero and per-video coin chips', () => {
   const screen = read('src/screens/WatchScreen.tsx');
-  assert.match(screen, /<CleanScreenBackground underTopbar>/);
+  assert.match(screen, /<CleanScreenBackground underTopbar(=\{!pad\.sticker\}[^>]*)?>/);
   assert.match(screen, /<SocialPost socialPost=\{featuredVideo\} featured newest=/);
   assert.match(screen, /All caught up!/);
   const card = read('src/components/SocialPost.tsx');

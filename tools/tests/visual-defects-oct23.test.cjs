@@ -300,7 +300,9 @@ test('Ride Detail wears the Ride Tracker header: no web gradients, game buttons,
   assert.match(src, /<RideTrackerFrame title=\{headerTitle\} style=\{s\.container\}>\s*\{loadError/, 'loading uses the same frame');
   assert.match(src, /<GameButton label="Log this ride"/);
   assert.match(src, /paddingBottom: FOOTER_CLEARANCE/);
-  assert.match(read('src/screens/RideTracker/RideTrackerFrame.tsx'), /<TopbarColumn stretch=\{false\}>\{right\}<\/TopbarColumn>/);
+  // Step 2a: the frame hands `right` to LookScreen, whose today bar draws it in the right column.
+  assert.match(read('src/screens/RideTracker/RideTrackerFrame.tsx'), /header=\{\{ left: <LookBackButton \/>, title, right \}\}/);
+  assert.match(read('src/ui/sticker/LookScreen.tsx'), /<TopbarColumn stretch=\{false\}>\{right\}<\/TopbarColumn>/);
 });
 
 test('the map loading cover is light sky blue, never the dark underwater scene', () => {

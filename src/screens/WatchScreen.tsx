@@ -13,14 +13,11 @@ import CleanScreenBackground, { CLEAN, CLEAN_SCREEN_ACCENT, CLEAN_SCREEN_INK, CL
 import youtube from '../api/endpoints/social-posts/youtube';
 import { bankResult, earnedView, EMPTY_BANK, nextBankDialog, type RewardBank, sortNewestFirst, upNextFor, videoIdOf, viewFailureKind } from '../components/watch/watchFeed';
 import SocialPost, { COIN_ART, COIN_REWARD } from '../components/SocialPost';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
 import { SocialPostType } from '../models/social-post-type';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { UpperText } from '../ui/upper';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 export default function WatchScreen() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -271,17 +268,9 @@ export default function WatchScreen() {
   const toEarn = videos.length - watchedCount;
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>Watch</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
-      <CleanScreenBackground underTopbar>
+    <LookScreen footer legacyPad={{ top: -8 }} header={{ left: <LookBackButton />, title: 'Watch', right: null }}>
+      {pad => (<>
+      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? { marginTop: pad.top } : undefined}>
         {loading ? (
           <View style={styles.loader}>
             <SharkLoader />
@@ -380,7 +369,8 @@ export default function WatchScreen() {
           else deliverSoon(); // 'Later' releases the hero and meter too
         }}
       />
-    </Wrapper>
+    </>)}
+    </LookScreen>
   );
 }
 

@@ -11,16 +11,13 @@ import * as RootNavigation from '../RootNavigation';
 import { Image } from 'expo-image';
 import { useRoute } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
 import { getFriendStamps, type FriendBook, type FriendStamp } from '../api/endpoints/me/stamps';
 import GameIcon from '../ui/GameIcon';
 import { stampRarity } from './stampbook/rarity';
 import { INK, MUTED_INK, PAPER, SLOT, SLOT_EDGE, tiltFor } from './stampbook/StampTile';
 import { UpperText } from '../ui/upper';
 import { SEABED_PLATE } from '../constants/backdrops';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 /** Last friend books this session: a reopen draws at once and refreshes behind (friends-only data, memory only). */
 const friendBooks = new Map<number, FriendBook>();
@@ -70,12 +67,8 @@ export default function FriendStampBookScreen() {
   const tile = Math.floor((width - 24 - 16 - 30 - 18) / 4);
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>Stamp Book</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
+    <LookScreen footer header={{ left: <LookBackButton />, title: 'Stamp Book', right: null }}>
+      {() => (<>
       <View style={styles.screen}>
         <Image source={BACKGROUND} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
         {state !== 'ready' || !book ? (
@@ -149,7 +142,8 @@ export default function FriendStampBookScreen() {
           </ScrollView>
         )}
       </View>
-    </Wrapper>
+    </>)}
+    </LookScreen>
   );
 }
 

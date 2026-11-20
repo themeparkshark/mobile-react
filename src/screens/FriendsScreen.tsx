@@ -19,9 +19,6 @@ import { Pressable, RefreshControl, Share, StyleSheet, Text, View } from 'react-
 import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import type { ParamListBase } from '@react-navigation/native';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
 import { useTutorialWhenReady } from '../components/Tutorial';
 import { AuthContext } from '../context/AuthProvider';
 import { getFriendsPage, searchFriends } from '../api/endpoints/me/friends';
@@ -45,6 +42,7 @@ import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 import { UpperText } from '../ui/upper';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 // The shark-and-envelope cut off its square tile (same art as the bell's request badge), so it sits in the tab like the heart.
@@ -88,13 +86,9 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
   }, [player?.screen_name]);
 
   return (
-    <>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>Friends</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
-      </Topbar>
-      <CleanScreenBackground underTopbar>
+    <LookScreen legacyPad={{ top: -8 }} header={{ left: <LookBackButton />, title: 'Friends', right: <View style={{ width: 44 }} /> }}>
+      {pad => (<>
+      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? { marginTop: pad.top } : undefined}>
         <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <InviteCard ref={inviteRef} inventory={player?.inventory} />
         </View>
@@ -113,7 +107,8 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
           </View>
         </View>
       </CleanScreenBackground>
-    </>
+      </>)}
+    </LookScreen>
   );
 }
 

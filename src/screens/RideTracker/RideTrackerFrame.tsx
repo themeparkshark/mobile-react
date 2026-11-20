@@ -1,12 +1,9 @@
 import type { ReactNode } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import Topbar, { BackButton } from '../../components/Topbar';
-import TopbarColumn from '../../components/Topbar/TopbarColumn';
-import TopbarText from '../../components/Topbar/TopbarText';
-import Wrapper from '../../components/Wrapper';
+import LookScreen, { LookBackButton } from '../../ui/sticker/LookScreen';
 
 /**
- * The app's own chrome for every Ride Tracker page: the water header with its wave edge and
+ * The app's own chrome for every Ride Tracker page (on LookScreen since step 2a): the water header with its wave edge and
  * the red back button (it sits under the Dynamic Island inset), plus the 5-icon footer.
  * Replaces the old web-style sky-to-navy gradient headers, so the tracker looks like the
  * rest of the game (Settings, Ride Journal, the Ride Tracker hub).
@@ -19,13 +16,8 @@ export default function RideTrackerFrame({ title, right, style, children }: {
   readonly children?: ReactNode;
 }) {
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>{title}</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false}>{right}</TopbarColumn>
-      </Topbar>
-      <View style={[{ flex: 1 }, style]}>{children}</View>
-    </Wrapper>
+    <LookScreen footer header={{ left: <LookBackButton />, title, right }}>
+      {pad => <View style={[pad.sticker ? { flex: 1, marginTop: pad.top } : { flex: 1 }, style]}>{children}</View>}
+    </LookScreen>
   );
 }

@@ -26,10 +26,7 @@ import getPrepItemSets, {
 import { getHomeHuntDex, getHomeHuntDexSet } from '../api/endpoints/me/homeHuntDex';
 import equipInventoryItem from '../api/endpoints/me/inventory/update-inventory';
 import { invalidateMenuRewardBadge } from '../components/QuickAccessMenu';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper, { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
+import { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import { playSfx } from '../gamekit/SFX';
@@ -57,6 +54,7 @@ import {
 } from './SetCollection/dexModel';
 import { ClaimResultCard, MilestonePickSheet } from './SetCollection/SetHuntSections';
 import { claimOutcome, wearNavigationParams, type ClaimOutcome, type MilestoneView } from './SetCollection/setHuntModel';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 type Detail = PrepItemSetDetailResponse['data'];
 
@@ -537,18 +535,10 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
   const data: (FindRow | number)[] = rows ?? (detailError ? [] : [0, 1, 2]);
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>Collections</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
+    <LookScreen footer legacyPad={{ top: -8, bottom: CTA_CLEARANCE }} header={{ left: <LookBackButton />, title: 'Collections', right: null }}>
+      {pad => (<>
 
-      <View style={styles.page}>
+      <View style={[styles.page, { marginTop: pad.top }]}>
         <Image source={BOOK_BG} style={StyleSheet.absoluteFill} contentFit="cover" priority="high" cachePolicy="memory" transition={0} />
         {/* Cream under the lower half, so a bounce past the last row never shows the water. */}
         <View pointerEvents="none" style={styles.sheetBack} />
@@ -575,7 +565,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
             ListHeaderComponent={header}
             onScroll={event => onListScroll(event.nativeEvent.contentOffset.y)}
             scrollEventThrottle={32}
-            ListFooterComponent={<View style={{ height: CTA_CLEARANCE, backgroundColor: SHEET }} />}
+            ListFooterComponent={<View style={{ height: pad.bottom, backgroundColor: SHEET }} />}
             extraData={tile}
             showsVerticalScrollIndicator={false}
             renderItem={({ item: entry, index }) => (
@@ -647,7 +637,8 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
       <MilestonePickSheet view={picking && set ? pickView(picking, set.found) : null} busy={busy != null}
         overlay={claimWaiting ? buildUp : null}
         onConfirm={itemId => { if (picking) void claim(picking, itemId); }} onClose={() => setPicking(null)} />
-    </Wrapper>
+    </>)}
+    </LookScreen>
   );
 }
 
@@ -824,7 +815,7 @@ const styles = StyleSheet.create({
   stickyName: { flex: 1, fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
   stickyCount: { fontFamily: 'Shark', fontSize: 17, color: BRAND.navy },
   // The water art's own average color, so the push never shows a plain blue frame while it decodes.
-  page: { flex: 1, marginTop: -8, backgroundColor: '#5cc3f2' },
+  page: { flex: 1, backgroundColor: '#5cc3f2' },
   sheetBack: { position: 'absolute', left: 0, right: 0, top: '55%', bottom: 0, backgroundColor: SHEET },
   shelf: { paddingHorizontal: SIDE, paddingTop: 14, paddingBottom: 10 },
   // The cream sheet under the shelf: the page for this set (Standings cream, a white rim on top).

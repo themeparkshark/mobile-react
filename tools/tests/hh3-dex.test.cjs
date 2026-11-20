@@ -403,7 +403,9 @@ test('round 3: swap story, recycled tiles, focus refresh, light ticks, small pho
   assert.match(look, /const box = Math\.ceil\(\(gem \+ 4\) \* 1\.45\)/);
   // The last row clears the compass.
   assert.match(screen, /CTA_CLEARANCE = BOTTOM_BAR_OVERHANG \+ 84/);
-  assert.match(screen, /ListFooterComponent=\{<View style=\{\{ height: CTA_CLEARANCE/);
+  // Step 2a: LookScreen owns the number (CTA_CLEARANCE with the look off).
+  assert.match(screen, /legacyPad=\{\{ top: -8, bottom: CTA_CLEARANCE \}\}/);
+  assert.match(screen, /ListFooterComponent=\{<View style=\{\{ height: pad\.bottom/);
   // Rare-or-better never says "Anytime, anywhere".
   assert.equal(dex.rarityHint('Anytime, anywhere', 4), 'Very hard to find. Keep looking!');
   assert.equal(dex.rarityHint('Anytime, anywhere', 1), 'Anytime, anywhere');

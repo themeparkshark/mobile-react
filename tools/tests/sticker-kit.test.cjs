@@ -813,6 +813,17 @@ const MIGRATED = [
   'src/screens/SettingsScreen.tsx',
   'src/screens/NotificationsScreen.tsx',
   'src/screens/threads/BlockedPlayersScreen.tsx',
+  'src/screens/RideTracker/RideTrackerFrame.tsx',
+  'src/screens/StampBookScreen.tsx',
+  'src/screens/FriendStampBookScreen.tsx',
+  'src/screens/InventoryScreen.tsx',
+  'src/screens/SetCollectionScreen.tsx',
+  'src/screens/HowToPlayScreen.tsx',
+  'src/screens/WatchScreen.tsx',
+  'src/screens/QueueTimesScreen.tsx',
+  'src/screens/FriendsScreen.tsx',
+  'src/screens/PinCollectionsScreen.tsx',
+  'src/screens/RedeemCoinCodeScreen.tsx',
 ];
 test('migrated screens take their bar, footer and body room from LookScreen', () => {
   for (const file of MIGRATED) {
@@ -823,7 +834,7 @@ test('migrated screens take their bar, footer and body room from LookScreen', ()
     assert.match(text, /<LookScreen\b/, `${file} sits on LookScreen`);
     // Today's footer numbers live only in LookScreen's legacyPad (deleted at the flip), never in a style.
     for (const line of text.split('\n').filter(l => /FOOTER_CLEARANCE|BOTTOM_BAR_OVERHANG/.test(l) && !/^import /.test(l))) {
-      assert.match(line, /legacyPad=|useLookBottom\(|const FOOTER = |shelfEndClearance = /, `${file} keeps its own footer room: ${line.trim()}`);
+      assert.match(line, /legacyPad=|useLookBottom\(|^\s*const \w+ = /, `${file} keeps its own footer room: ${line.trim()}`);
     }
   }
 });

@@ -21,10 +21,7 @@ import HapticPatterns from '../helpers/hapticPatterns';
 import Loading from '../components/Loading';
 import Playercard from '../components/Playercard';
 import { LookShareButton } from '../share/LookShareButton';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
+import { FOOTER_CLEARANCE } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { MusicContext } from '../context/MusicProvider';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
@@ -40,6 +37,7 @@ import { quietRetry } from '../api/quietRetry';
 import { tryAgainLine } from '../services/connectionCopy';
 import { explainMemberLock } from '../components/MemberLookHost';
 import { MEMBER_WEAR_COPY, memberWearLocked, refreshMemberLook, useMemberWearLock } from '../services/memberLook';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 /** What the player reads when a save does not go through (dressing-room.md 7.10). */
 export function lookNoticeCopy(notice: LookNotice): string {
@@ -233,16 +231,8 @@ export default function InventoryScreen() {
   }, [currentItemType?.id, page, itemLoadAttempt]);
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>Closet</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
+    <LookScreen footer legacyPad={{ top: -8, bottom: FOOTER_CLEARANCE }} header={{ left: <LookBackButton />, title: 'Closet', right: null }}>
+      {pad => (<>
       {loading && <Loading />}
       {/* T180: his shark with one button, never a plain text line. */}
       {!loading && !currentItemType && loadError && (
@@ -267,7 +257,7 @@ export default function InventoryScreen() {
             source={require('../../assets/images/screens/park/background-new.png')}
             resizeMode="stretch"
             style={{
-              marginTop: -8,
+              marginTop: pad.top,
               height: 400,
               overflow: 'hidden',
               position: 'relative',
@@ -428,7 +418,7 @@ export default function InventoryScreen() {
                   estimatedItemSize={compact ? 116 : 150}
                   keyExtractor={(item) => item.id.toString()}
                   numColumns={3}
-                  contentContainerStyle={{ paddingBottom: FOOTER_CLEARANCE }}
+                  contentContainerStyle={{ paddingBottom: pad.bottom }}
                   onEndReached={() => {
                     if (!hasMore || itemsLoading || loadError) return;
                     setItemsLoading(true);
@@ -440,6 +430,7 @@ export default function InventoryScreen() {
           </ImageBackground>
         </>
       )}
-    </Wrapper>
+    </>)}
+    </LookScreen>
   );
 }

@@ -17,10 +17,7 @@ import Animated, {
   interpolate, interpolateColor, runOnJS, withDelay, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withSequence,
   withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper, { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
+import { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
 import { AuthContext } from '../context/AuthProvider';
 import { playSfx } from '../gamekit/SFX';
 import * as Haptics from '../helpers/haptics';
@@ -32,6 +29,7 @@ import useUiReducedMotion from '../ui/useUiReducedMotion';
 import HowToDemo from './HowToPlay/HowToDemos';
 import HowToPlayMore from './HowToPlay/HowToPlayMore';
 import { StarBurst } from './SetCollection/DexParts';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 
 const VOICE: Readonly<Record<HowToArtKey, number>> = {
   find: require('../../assets/sounds/howto/vo-find.mp3'),
@@ -166,18 +164,10 @@ export default function HowToPlayScreen() {
   };
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton onPress={more && focus == null ? () => setMore(false) : undefined} />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>{more ? 'More help' : 'How to Play'}</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
+    <LookScreen footer legacyPad={{ top: -8, bottom: BOTTOM_BAR_OVERHANG }} header={{ left: <LookBackButton onPress={more && focus == null ? () => setMore(false) : undefined} />, title: more ? 'More help' : 'How to Play', right: null }}>
+      {pad => (<>
       {more ? <HowToPlayMore focus={moreFocus} /> : (
-        <View style={styles.body}>
+        <View style={[styles.body, { marginTop: pad.top }]}>
           <Animated.ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}
             snapToInterval={interval} decelerationRate="fast" disableIntervalMomentum
             contentContainerStyle={{ paddingHorizontal: SIDE, gap: GAP }}
@@ -198,7 +188,7 @@ export default function HowToPlayScreen() {
             ))}
           </View>
 
-          <View style={[styles.footer, { paddingBottom: BOTTOM_BAR_OVERHANG }]}>
+          <View style={[styles.footer, { paddingBottom: pad.bottom }]}>
             <Pressable accessibilityRole="button" accessibilityLabel="Learn more" onPress={() => openMore(HOW_TO_CARDS[page]?.topic ?? null)}
               style={({ pressed }) => [styles.morePill, pressed && { transform: [{ scale: 0.96 }] }]} hitSlop={6}>
               <GameIcon name="info" size={24} />
@@ -211,7 +201,8 @@ export default function HowToPlayScreen() {
           </View>
         </View>
       )}
-    </Wrapper>
+    </>)}
+    </LookScreen>
   );
 }
 
@@ -293,7 +284,7 @@ function Dot({ index, interval, scrollX, color, onPress }: {
 }
 
 const styles = StyleSheet.create({
-  body: { flex: 1, marginTop: -8, backgroundColor: '#e3f3ff' },
+  body: { flex: 1, backgroundColor: '#e3f3ff' },
   card: {
     marginVertical: 14, borderRadius: 30, overflow: 'hidden', borderWidth: 4, borderColor: BRAND.white,
     shadowColor: BRAND.shadow, shadowOpacity: 0.25, shadowRadius: 12, shadowOffset: { width: 0, height: 6 },
