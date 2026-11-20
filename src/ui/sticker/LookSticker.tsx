@@ -6,7 +6,7 @@
  * today's sound, runs the screen's onPress, then goes back.
  */
 import { useContext, useRef, type ReactNode } from 'react';
-import type { ImageSourcePropType } from 'react-native';
+import { View, useWindowDimensions, type ImageSourcePropType } from 'react-native';
 import Broadcasts from '../../components/Broadcasts';
 import { useFooterTabs } from '../../components/Wrapper';
 import { ThemeContext } from '../../context/ThemeProvider';
@@ -15,12 +15,19 @@ import * as RootNavigation from '../../RootNavigation';
 import RoundButton from './RoundButton';
 import Header, { type HeaderProps } from './Header';
 import Screen, { screenBodyPadding } from './Screen';
-import { HEADER } from './tokens';
+import { footerBand } from './layout';
+import { FOOTER, HEADER } from './tokens';
 import type { LookFooter, LookHeader } from './LookScreen';
 
-/** The kit's body room: the gap under the bar, the footer's box and its gap at the bottom. */
+/**
+ * The kit's body room on a moved screen. The body ends where the footer's band starts (its wave
+ * crest), as today's body ends at today's bar, so a list's last row and a docked card (the
+ * Standings "you" card) never sit under the band; only the room for the hump and the raised Map
+ * icon (FOOTER.rise) and the standard gap are left to the body's own padding.
+ */
 export function stickerPad(hasHeader: boolean, hasFooter: boolean, insetTop: number, insetBottom: number, width: number) {
-  return screenBodyPadding(hasHeader, hasFooter ? 'footer' : 'none', insetTop, insetBottom, width);
+  const kit = screenBodyPadding(hasHeader, hasFooter ? 'footer' : 'none', insetTop, insetBottom, width);
+  return hasFooter ? { top: kit.top, bottom: FOOTER.rise + HEADER.gap } : kit;
 }
 
 /** The kit Header's props for a LookHeader (the theme's bar art, the purple and night bars, Broadcasts). */
@@ -49,6 +56,7 @@ export function StickerLookScreen({ header, footer, testID, children }: {
   const tabs = useFooterTabs({ previewMode: nav.previewMode, onNavigate: nav.onNavigate });
   const kitHeader = useKitHeader(header);
   const footArt = theme?.bottom_bar_url ? { uri: theme.bottom_bar_url } : undefined;
+  const { width } = useWindowDimensions();
   const items = tabs.items.map(item => ({
     key: item.screen,
     label: item.text,
@@ -65,13 +73,13 @@ export function StickerLookScreen({ header, footer, testID, children }: {
     <Screen testID={testID} scroll={false} list
       header={kitHeader}
       footer={footer ? { items, picked: tabs.topRoute, onPick, art: footArt } : undefined}>
-      {children}
+      {footer ? <View style={{ flex: 1, marginBottom: footerBand(width) }}>{children}</View> : children}
     </Screen>
   );
 }
 
 /** Alex's blue arrow disc with today's back press (sound, the screen's onPress, then back). */
-export function StickerBack({ onPress }: { readonly onPress?: () => void | Promise<void> }) {
+export function StickerBack({ onPress }: { readonly onPress?: () => unknown }) {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const busy = useRef(false);
   const press = async () => {

@@ -19,10 +19,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ImageBackground, InteractionManager, Keyboard, Pressable, RefreshControl, Text, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import * as RootNavigation from '../RootNavigation';
-import Topbar from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper, { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
+import { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
+import LookScreen from '../ui/sticker/LookScreen';
 import { openExternal } from '../services/external';
 import { BRAND, GameIcon, RADIUS, SHADOW, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
@@ -383,13 +381,9 @@ export default function NewsScreen() {
   const emptyTitle = search ? `No stories for "${search}" yet` : state.failed ? "News didn't load" : `No ${filterByKey(filter).label} stories yet`;
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch>
-          <TopbarText>Latest News</TopbarText>
-        </TopbarColumn>
-      </Topbar>
-      <View style={{ marginTop: -8, flex: 1 }}>
+    <LookScreen footer legacyPad={{ top: -8, bottom: BOTTOM_BAR_OVERHANG + 24 }} header={{ title: 'Latest News' }}>
+      {pad => (
+      <View style={{ marginTop: pad.top, flex: 1 }}>
         <ImageBackground style={{ flex: 1 }} source={SEABED_PLATE}>
           <View onLayout={e => setTopPillTop(e.nativeEvent.layout.height + 6)}>
           <NewsFilterBar filter={filter} park={park} searching={searching} query={query} endInset={showTop ? 60 : 0}
@@ -436,7 +430,7 @@ export default function NewsScreen() {
                 if (far !== showTopRef.current) { showTopRef.current = far; setShowTop(far); }
               }}
               refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={onRefresh} />}
-              ListFooterComponent={FOOTER}
+              ListFooterComponent={pad.sticker ? <View style={{ height: pad.bottom, backgroundColor: BRAND.cream }} /> : FOOTER}
             />
           )}
           {showTop && !toast && (
@@ -462,6 +456,7 @@ export default function NewsScreen() {
           )}
         </ImageBackground>
       </View>
-    </Wrapper>
+      )}
+    </LookScreen>
   );
 }

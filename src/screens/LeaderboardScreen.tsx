@@ -5,10 +5,7 @@ import { ImageBackground, Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import InformationModal from '../components/InformationModal';
 import { InformationModalEnums } from '../models/information-modal-enums';
-import Topbar from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper from '../components/Wrapper';
+import LookScreen from '../ui/sticker/LookScreen';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import Experience from './LeaderboardsScreen/Experience';
 import ParkCoins from './LeaderboardsScreen/ParkCoins';
@@ -127,24 +124,20 @@ export default function LeaderboardScreen() {
   return <StandingsV2 meId={player.id} onMissing={() => setV2Missing(true)} />;
 }
 
+/** The Standings bar: no left button, the title, the "?". */
+const STANDINGS_HEADER = { left: null, title: 'Standings', right: <InformationModal id={InformationModalEnums.LeaderboardScreen} /> } as const;
+
 function StandingsShell({ children }: { readonly children: React.ReactNode }) {
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false} />
-        <TopbarColumn>
-          <TopbarText>Standings</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false}>
-          <InformationModal id={InformationModalEnums.LeaderboardScreen} />
-        </TopbarColumn>
-      </Topbar>
-      <View style={{ marginTop: -8, flex: 1 }}>
+    <LookScreen footer legacyPad={{ top: -8 }} header={STANDINGS_HEADER}>
+      {pad => (
+      <View style={{ marginTop: pad.top, flex: 1 }}>
         <ImageBackground style={{ flex: 1 }} source={STANDINGS_PLATE}>
           {children}
         </ImageBackground>
       </View>
-    </Wrapper>
+      )}
+    </LookScreen>
   );
 }
 
@@ -247,19 +240,11 @@ function LegacyStandings() {
   useEffect(() => { if (activeTab >= tabs.length) setActiveTab(0); }, [tabs.length, activeTab]);
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false} />
-        <TopbarColumn>
-          <TopbarText>Standings</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false}>
-          <InformationModal id={InformationModalEnums.LeaderboardScreen} />
-        </TopbarColumn>
-      </Topbar>
+    <LookScreen footer legacyPad={{ top: -8 }} header={STANDINGS_HEADER}>
+      {pad => (
       <View
         style={{
-          marginTop: -8,
+          marginTop: pad.top,
           flex: 1,
         }}
       >
@@ -281,6 +266,7 @@ function LegacyStandings() {
           </View>
         </ImageBackground>
       </View>
-    </Wrapper>
+      )}
+    </LookScreen>
   );
 }

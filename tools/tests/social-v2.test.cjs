@@ -129,7 +129,8 @@ test('every notification badge is bundled, centred art on an even ring (no serve
 test('Notifications and Friends sit on the shared clean background, not the water art', () => {
   for (const file of ['src/screens/NotificationsScreen.tsx', 'src/screens/FriendsScreen.tsx']) {
     const src = read(file);
-    assert.match(src, /<CleanScreenBackground underTopbar>/, file);
+    // Step 2a: a screen on LookScreen tucks under today's bar only with the look off.
+    assert.match(src, /<CleanScreenBackground underTopbar(=\{!pad\.sticker\}[^>]*)?>/, file);
     assert.doesNotMatch(src, /shark_background|SocialBackdrop|tone="onBlue"/, file);
   }
   assert.match(read('src/components/CleanScreenBackground.tsx'), /CLEAN_SCREEN_BG = '#EAF3FB'/);

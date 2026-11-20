@@ -17,10 +17,8 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFeed, fetchPinned } from '../api/endpoints/social';
 import Avatar from '../components/Avatar';
-import Topbar from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
+import { FOOTER_CLEARANCE } from '../components/Wrapper';
+import LookScreen from '../ui/sticker/LookScreen';
 import { isTeam, TEAMS, type TeamId } from '../constants/teams';
 import TeamBadge from '../components/TeamBadge';
 import { outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
@@ -295,18 +293,18 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
   );
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <ChestButton open={shortcuts} onPress={() => { afterShortcutsHide.current = null; setTileClosed(false); setShortcuts(true); }} label="More" accessibilityLabel="More"
-            quietClose={tileClosed}
-            accessibilityHint={!player || !player.is_subscribed ? 'Pin Trading, Coin Codes, Merch, VIP and Watch' : 'Pin Trading, Coin Codes, Merch and Watch'} />
-        </TopbarColumn>
-        <TopbarColumn><TopbarText>Social</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false}><SocialHelp /></TopbarColumn>
-      </Topbar>
+    <LookScreen footer legacyPad={{ bottom: FOOTER_CLEARANCE }} header={{
+      left: (
+        <ChestButton open={shortcuts} onPress={() => { afterShortcutsHide.current = null; setTileClosed(false); setShortcuts(true); }} label="More" accessibilityLabel="More"
+          quietClose={tileClosed}
+          accessibilityHint={!player || !player.is_subscribed ? 'Pin Trading, Coin Codes, Merch, VIP and Watch' : 'Pin Trading, Coin Codes, Merch and Watch'} />
+      ),
+      title: 'Social',
+      right: <SocialHelp />,
+    }}>
+      {pad => (<>
 
-      <CleanScreenBackground style={styles.body}>
+      <CleanScreenBackground style={pad.sticker ? [styles.body, { marginTop: pad.top }] : styles.body}>
         <FlashList
           ref={listRef}
           data={status === 'ready' ? items : []}
@@ -316,7 +314,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
           estimatedItemSize={260}
           ListHeaderComponent={header}
           ListEmptyComponent={empty}
-          ListFooterComponent={loadingMore ? <SharkLoader compact tone="onLight" style={{ marginVertical: 12 }} /> : <View style={{ height: FOOTER_CLEARANCE }} /> /* scrolls WRITE A POST clear of the MAP compass */}
+          ListFooterComponent={loadingMore ? <SharkLoader compact tone="onLight" style={{ marginVertical: 12 }} /> : <View style={{ height: pad.bottom }} /> /* scrolls WRITE A POST clear of the MAP compass */}
           onEndReached={onEndReached}
           onEndReachedThreshold={0.6}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={BRAND.navySoft} colors={[BRAND.blueBright]} />}
@@ -402,7 +400,8 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
           />
         </View>
       </SocialSheet>
-    </Wrapper>
+      </>)}
+    </LookScreen>
   );
 }
 

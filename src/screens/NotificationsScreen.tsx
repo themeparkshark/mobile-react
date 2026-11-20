@@ -21,9 +21,7 @@ import markAllAsRead from '../api/endpoints/me/notifications/markAllAsRead';
 import markAsRead from '../api/endpoints/me/notifications/markAsRead';
 import deleteNotification from '../api/endpoints/me/notifications/deleteNotification';
 import Notification, { NOTIFICATION_ROW_HEIGHT } from '../components/Notification';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 import { NotificationContext } from '../context/NotificationProvider';
 import { useToast } from '../components/Toast';
 import { haptic } from '../gamekit/Haptics';
@@ -233,14 +231,10 @@ export default function NotificationsScreen() {
   }, [open, clear, answered, reduced, readAll, markingAll, firstHeader, dropActor]);
 
   return (
-    <>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>Notifications</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false}><View style={{ width: 44 }} /></TopbarColumn>
-      </Topbar>
+    <LookScreen legacyPad={{ top: -8 }} header={{ left: <LookBackButton />, title: 'Notifications', right: <View style={{ width: 44 }} /> }}>
+      {pad => (<>
       <SurfaceContext.Provider value="bell">
-      <CleanScreenBackground underTopbar>
+      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? { marginTop: pad.top } : undefined}>
         {load === 'loading' && <SharkLoader state="loading" title="Checking your bell" />}
         {load === 'error' && (
           <SocialError title="Notifications didn't load"
@@ -271,7 +265,8 @@ export default function NotificationsScreen() {
         )}
       </CleanScreenBackground>
       </SurfaceContext.Provider>
-    </>
+      </>)}
+    </LookScreen>
   );
 }
 

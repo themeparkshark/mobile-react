@@ -807,6 +807,12 @@ const MIGRATED = [
   'src/screens/CoinShelfScreen.tsx',
   'src/screens/ParkScreen.tsx',
   'src/screens/StoreScreen.tsx',
+  'src/screens/LeaderboardScreen.tsx',
+  'src/screens/NewsScreen.tsx',
+  'src/screens/SocialScreen.tsx',
+  'src/screens/SettingsScreen.tsx',
+  'src/screens/NotificationsScreen.tsx',
+  'src/screens/threads/BlockedPlayersScreen.tsx',
 ];
 test('migrated screens take their bar, footer and body room from LookScreen', () => {
   for (const file of MIGRATED) {
@@ -815,7 +821,10 @@ test('migrated screens take their bar, footer and body room from LookScreen', ()
     assert.doesNotMatch(text, /import Wrapper\b/, `${file} imports today's footer`);
     assert.doesNotMatch(text, /<(Topbar|Wrapper|BackButton)\b/, `${file} draws chrome by hand`);
     assert.match(text, /<LookScreen\b/, `${file} sits on LookScreen`);
-    assert.doesNotMatch(text, /FOOTER_CLEARANCE/, `${file} keeps its own footer room`);
+    // Today's footer numbers live only in LookScreen's legacyPad (deleted at the flip), never in a style.
+    for (const line of text.split('\n').filter(l => /FOOTER_CLEARANCE|BOTTOM_BAR_OVERHANG/.test(l) && !/^import /.test(l))) {
+      assert.match(line, /legacyPad=|useLookBottom\(|const FOOTER = |shelfEndClearance = /, `${file} keeps its own footer room: ${line.trim()}`);
+    }
   }
 });
 

@@ -160,7 +160,7 @@ export function LookBar({ header }: { readonly header: LookHeader }) {
  * The back arrow. Today's look: today's red arrow (BackButton), untouched. The Sticker Book look:
  * Alex's blue arrow disc with today's press: the button sound, the screen's own onPress, then back.
  */
-export function LookBackButton({ onPress }: { readonly onPress?: () => void | Promise<void> }) {
+export function LookBackButton({ onPress }: { readonly onPress?: () => unknown }) {
   const on = useStickerLook();
   if (!on) return <BackButton onPress={onPress as (() => void) | undefined} />;
   const { StickerBack } = sticker();

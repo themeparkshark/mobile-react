@@ -459,7 +459,7 @@ test('Clean Social: shared clean background, no topic chips, badges or picker, M
   assert.match(bg, /CLEAN_SCREEN_BG = '#EAF3FB'/);
   assert.match(bg, /bg: CLEAN_SCREEN_BG/);
   const social = read('src/screens/SocialScreen.tsx');
-  assert.match(social, /<CleanScreenBackground style=\{styles\.body\}>/);
+  assert.match(social, /<CleanScreenBackground style=\{pad\.sticker \? \[styles\.body, \{ marginTop: pad\.top \}\] : styles\.body\}>/);
   assert.doesNotMatch(social, /WATER|accessibilityLabel="Topics"|All topics|TOPICS\.map|topicChip/);
   // Merch sells for real money: it leaves the app through the grown-up gate (services/external) after the sheet hides.
   assert.match(social, /runAfterShortcuts\(\(\) => \{ void openExternal\(urls\.shop\); \}\)/);

@@ -16,10 +16,8 @@ import { showToast } from '../utils/toast';
 import updatePlayer from '../api/endpoints/me/update-player';
 import FindOriginalAccount from '../components/FindOriginalAccount';
 import { openFeedbackReport } from '../components/Feedback/FeedbackHost';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
-import Wrapper, { FOOTER_CLEARANCE } from '../components/Wrapper';
+import { FOOTER_CLEARANCE } from '../components/Wrapper';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationStatusContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -303,19 +301,12 @@ export default function SettingsScreen() {
   }
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton onPress={async () => await refreshPlayer()} />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>Settings</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
+    <LookScreen footer legacyPad={{ top: -8, bottom: FOOTER_CLEARANCE }}
+      header={{ left: <LookBackButton onPress={async () => await refreshPlayer()} />, title: 'Settings', right: null }}>
+      {pad => (<>
       <ScrollView
-        style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        style={[styles.scroll, { marginTop: pad.top }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: pad.bottom }]}
         showsVerticalScrollIndicator={false}
       >
         <Section title="General" index={0}>
@@ -500,7 +491,8 @@ export default function SettingsScreen() {
           </View>
         </Animated.View>
       )}
-    </Wrapper>
+      </>)}
+    </LookScreen>
   );
 }
 
@@ -510,13 +502,11 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
-    marginTop: -8,
     backgroundColor: '#e3f3ff',
   },
   scrollContent: {
     padding: 16,
     paddingTop: 12,
-    paddingBottom: FOOTER_CLEARANCE,
   },
   sectionHeader: {
     fontFamily: 'Shark',

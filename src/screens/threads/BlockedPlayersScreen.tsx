@@ -9,9 +9,7 @@ import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { fetchBlocked, unblockPlayer } from '../../api/endpoints/social';
 import Avatar from '../../components/Avatar';
 import { useToast } from '../../components/Toast';
-import Topbar, { BackButton } from '../../components/Topbar';
-import TopbarColumn from '../../components/Topbar/TopbarColumn';
-import TopbarText from '../../components/Topbar/TopbarText';
+import LookScreen, { LookBackButton } from '../../ui/sticker/LookScreen';
 import type { PlayerType } from '../../models/player-type';
 import { BRAND, SharkLoader, confirmGame } from '../../ui';
 import { PressScale, WATER, card } from './socialLook';
@@ -57,12 +55,9 @@ export default function BlockedPlayersScreen() {
 
   return (
     <View style={styles.root}>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>Blocked</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false} />
-      </Topbar>
-      <View style={{ flex: 1 }}>
+      <LookScreen header={{ left: <LookBackButton />, title: 'Blocked', right: null }}>
+      {pad => (
+      <View style={pad.sticker ? { flex: 1, marginTop: pad.top } : { flex: 1 }}>
         <Image source={WATER} style={StyleSheet.absoluteFill} contentFit="cover" />
         {players === null ? (
           <SharkLoader state={error ? 'error' : 'loading'} tone="onBlue" onRetry={load} style={{ marginTop: 80 }} />
@@ -91,6 +86,8 @@ export default function BlockedPlayersScreen() {
           />
         )}
       </View>
+      )}
+      </LookScreen>
     </View>
   );
 }
