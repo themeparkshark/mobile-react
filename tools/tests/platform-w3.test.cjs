@@ -89,7 +89,7 @@ test('T179: small header, profile, pin and wait-time targets reach 44 pt', () =>
   assert.match(read('src/components/Topbar/Currency.tsx'), /hitSlop=\{PILL_HIT_SLOP\}/);
   assert.match(read('src/components/Topbar/Currency.tsx'), /PILL_HIT_SLOP = \{ top: 8, bottom: 8/);
   assert.match(read('src/components/Topbar.tsx'), /accessibilityLabel="Back"\n\s*\/\/ T179[^\n]*\n\s*hitSlop=\{8\}/);
-  assert.match(read('src/screens/QueueTimesScreen.tsx'), /my next coin`\} hitSlop=\{HIT_SLOP\}/);
+  assert.match(read('src/screens/QueueTimesScreen.tsx'), /my pick`\} hitSlop=\{HIT_SLOP\}/);
   assert.match(read('src/screens/pins/Lanyard.tsx'), /hitSlop=\{Math\.max\(6, Math\.ceil\(\(48 - pinSize\) \/ 2\)\)\}/);
 });
 

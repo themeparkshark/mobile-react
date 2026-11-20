@@ -6,7 +6,7 @@
 export const LATER_TIP = /\blevel up\b|\bRide Parts?\b|\bEnergy\b|\bcollection set\b|\bLinePlay\b|\bTap GO\b|\bSecret coins\b/i;
 export const FIRST_MINUTE_TIPS: readonly string[] = [
   'Every ride has a coin. Pick any one, walk there, tap PLAY!',
-  'Bigger rides cost more Tickets. Win or lose, you get Ride Parts.',
+  'Bigger rides cost more Tickets. Every coin is yours to pick.',
 ];
 
 /** The tips this player can use now: first-minute ones until the first coin win. */

@@ -36,13 +36,13 @@ interface Props {
 }
 
 /**
- * Named, scannable companion to the shelf. Collapsed by default: it shows only
- * the one suggested coin (goal or nearest) and opens to the full searchable
+ * Named, scannable companion to the shelf. Collapsed by default: only its search
+ * button (never one suggested coin), and it opens to the full searchable A to Z
  * list: every coin, limited coins with their rotation, and every cataloged ride
  * without a coin as a Line Play row, so no ride is a dead end.
  */
 export default function ParkRideDirectory({ rides, limited = [], catalogRides = [], parkId, completed, isOwnPark = true,
-  goalTaskId, nearbyRideId, nearbyRideReportedOpen = false, savedGoalReportedDown = false, rideTaskIds, rideOnly = false,
+  goalTaskId, savedGoalReportedDown = false, rideTaskIds, rideOnly = false,
   onRideOnlyChange, onChooseGoal, onShowOnMap, onPlayInLine, onPlayRideInLine, shelfCount }: Props) {
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState('');
@@ -57,22 +57,20 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
     const shown = new Set([...filtered, ...limited].map(task => task.id));
     return all.filter(row => row.kind === 'line' || shown.has(row.task.id));
   }, [rides, filtered, limited, catalogRides, parkId]);
+  // A to Z among coins to find, then owned coins, coins out of rotation and Line Play rides. No top pick (Dustin,
+  // Nov 20: "it might make them think one ride is more important than another").
   const ordered = useMemo(() => [...rows].sort((a, b) => {
-    // Goal, nearest, coins to find, owned coins, limited coins out of rotation, then Line Play rides.
-    const rank = (row: CoinGuideRow) => row.kind === 'line' ? 5 : row.task.id === goalTaskId
-      ? 0 : row.task.id === nearbyRideId && !ownedIds.has(row.task.id) ? 1 : ownedIds.has(row.task.id) ? 3
-      : outOfRotation(row.task) ? 4 : 2;
+    const rank = (row: CoinGuideRow) => row.kind === 'line' ? 5 : ownedIds.has(row.task.id) ? 3 : outOfRotation(row.task) ? 4 : 2;
     return rank(a) - rank(b) || a.name.localeCompare(b.name);
-  }), [rows, ownedIds, goalTaskId, nearbyRideId]);
+  }), [rows, ownedIds]);
   useEffect(() => { if (rideOnly) { setExpanded(true); setQuery(''); } }, [rideOnly]);
   if (!rows.length) return null;
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matching = normalizedQuery
     ? ordered.filter(row => row.search.includes(normalizedQuery))
     : ordered;
-  const suggested = ordered.filter(row => row.kind === 'coin' &&
-    (row.task.id === goalTaskId || (row.task.id === nearbyRideId && !ownedIds.has(row.task.id))));
-  const visible = expanded ? matching : suggested.slice(0, 1);
+  // Collapsed: the search button only, never one suggested row.
+  const visible = expanded ? matching : [];
 
   return <View style={styles.wrap}>
     <View style={styles.headingRow}>
@@ -121,10 +119,9 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
       const task = guideRow.task;
       const owned = ownedIds.has(task.id);
       const goal = task.id === goalTaskId;
-      const nearby = !owned && !goal && task.id === nearbyRideId;
       const badge = limitedLabel(task.limited);
       const resting = !owned && outOfRotation(task);
-      const row = <View style={[styles.row, (goal || nearby) && styles.goalRow]}>
+      const row = <View style={styles.row}>
         {owned
           ? <ShelfCoin coinUrl={task.coin_url} size={42}
               level={completed.find(coin => coin.id === task.id)?.coin_level ?? null} />
@@ -134,11 +131,9 @@ export default function ParkRideDirectory({ rides, limited = [], catalogRides = 
           {badge && <View style={styles.limitedBadge}>
             <Text style={styles.limitedText} numberOfLines={1}>{badge.toUpperCase()}</Text>
           </View>}
-          <Text style={[styles.status, (goal || nearby) && styles.goalStatus]} numberOfLines={1}>{owned
+          <Text style={styles.status} numberOfLines={1}>{owned
             ? !isOwnPark ? 'IN THIS COLLECTION' : goal ? 'ON YOUR SHELF · LEVEL UP GOAL' : 'ON YOUR SHELF'
-            : !isOwnPark ? 'NOT YET COLLECTED' : resting ? 'NOT IN PLAY RIGHT NOW' : goal ? 'YOUR NEXT COIN' : nearby
-              ? nearbyRideReportedOpen ? 'REPORTED OPEN NEARBY' : 'NEAREST COIN AREA'
-              : 'READY TO DISCOVER'}</Text>
+            : !isOwnPark ? 'NOT YET COLLECTED' : resting ? 'NOT IN PLAY RIGHT NOW' : goal ? 'YOUR PICK' : 'READY TO DISCOVER'}</Text>
         </View>
         <Text style={styles.chevron}>›</Text>
       </View>;

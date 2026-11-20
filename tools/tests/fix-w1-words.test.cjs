@@ -129,7 +129,8 @@ test('item 17: the shelf\'s trophies stand in size order and the coin guide name
     { goalTaskId: 9, nearbyRideId: 12, nearbyReportedOpen: true }, 'a goal reported down names the open ride beside it, as the card does');
   assert.deepEqual({ ...model.directoryNextCoin({ ...base, nearbyId: 41, nearbyReportedOpen: true }) },
     { goalTaskId: undefined, nearbyRideId: 41, nearbyReportedOpen: true });
-  assert.match(park, /goalTaskId=\{directoryNext\.goalTaskId\}\n\s+nearbyRideId=\{directoryNext\.nearbyRideId\}/);
+  // Arcade plan (Nov 20): the Coin Guide shows only the player's goal, never a nearest-coin row.
+  assert.match(park, /goalTaskId=\{directoryNext\.goalTaskId\}\n\s+savedGoalReportedDown=/);
 });
 
 test('item 17: at home the guide says which coin can level up now, and LEVEL UP opens it', () => {

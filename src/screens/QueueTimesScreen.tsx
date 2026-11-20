@@ -32,7 +32,7 @@ import {
 } from '../constants/parkWaitTimes';
 import { LocationContext } from '../context/LocationProvider';
 import { coinTasksByRideName, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
-import { guide } from '../services/guide/nextCoin';
+import { guide, playerChose } from '../services/guide/nextCoin';
 import getRideCoins from '../api/endpoints/me/ride-coins';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
 import { badgeFontSize, compareQueueWaits, postedStandbyWait, searchKey } from '../services/lineplay/queueWaitPresentation';
@@ -134,7 +134,7 @@ const RideCard = ({
   isNextCoin?: boolean;
   /** Kept as the player's plan (guide.plan()) while the guide points elsewhere, e.g. another park. */
   isPlanned?: boolean;
-  /** Plan the next coin: the guide's one pointer (guide.setTarget). */
+  /** Make this ride the player's pick: the guide's one pointer (guide.setTarget). */
   onMakeNextCoin?: (taskId: number, name: string) => void;
 }) => {
   const badge = getBadgeInfo(entry);
@@ -176,20 +176,20 @@ const RideCard = ({
                 ? 'PLAY WHILE YOU WAIT' : 'PLAY IN LINE'}</Text>
             </Pressable>
           )}
-          {/* Wait Times plans the next coin (core loop 5.5): one tap makes this ride the guide's target. */}
+          {/* Wait Times: one tap makes this ride the player's pick (core loop 5.5). */}
           {coinTaskId != null && onMakeNextCoin && entry.status === 'OPERATING' && (
             isNextCoin || isPlanned ? (
               <View style={styles.nextCoinDone} accessible
-                accessibilityLabel={isNextCoin ? `${entry.name} is your next coin` : `${entry.name} is in your plan`}>
+                accessibilityLabel={`${entry.name} is your pick`}>
                 <GameIcon name="check" size={16} />
-                <Text style={styles.nextCoinDoneText}>{isNextCoin ? 'Your next coin' : 'In your plan'}</Text>
+                <Text style={styles.nextCoinDoneText}>Your pick</Text>
               </View>
             ) : (
               <Pressable onPress={() => onMakeNextCoin(coinTaskId, entry.name)} accessibilityRole="button"
-                accessibilityLabel={`Make ${entry.name} my next coin`} hitSlop={HIT_SLOP}
+                accessibilityLabel={`Make ${entry.name} my pick`} hitSlop={HIT_SLOP}
                 style={({ pressed }) => [styles.nextCoinBtn, pressed && styles.sessionBtnPressed]}>
                 <GameIcon name="coin" size={16} />
-                <Text style={styles.nextCoinBtnText}>Make this my next coin</Text>
+                <Text style={styles.nextCoinBtnText}>Make this my pick</Text>
               </Pressable>
             )
           )}
@@ -349,13 +349,15 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     fetchData(false);
   }, [fetchData]);
 
-  // Each row's coin task (for "Make this my next coin") and the coin the guide points at now.
+  // Each row's coin task (for "Make this my pick") and the player's pick now.
   const [coinTasks, setCoinTasks] = useState<Map<string, number>>(new Map());
-  // The chip follows the guide store: "Your next coin" only once the guide really points there, "In your
+  // The chip follows the guide store: "Your pick" only for the player's own pick (it was "In your
   // plan" while the pick is kept as the plan (another park, or the map has not resolved yet).
-  const [guidePick, setGuidePick] = useState(() => ({ current: guide.current()?.taskId ?? null, plan: guide.plan() }));
-  useEffect(() => guide.subscribe(() => setGuidePick({ current: guide.current()?.taskId ?? null, plan: guide.plan() })), []);
-  // Coins already on the shelf never get "Make this my next coin": the guide never points at an owned coin.
+  // Only the player's own pick wears the chip (a coin they stand at or a line they stand in is not a pick).
+  const pickedNow = () => { const held = guide.current(); return held && playerChose(held) ? held.taskId : null; };
+  const [guidePick, setGuidePick] = useState(() => ({ current: pickedNow(), plan: guide.plan() }));
+  useEffect(() => guide.subscribe(() => setGuidePick({ current: pickedNow(), plan: guide.plan() })), []);
+  // Coins already on the shelf never get "Make this my pick": the guide never points at an owned coin.
   const [ownedTasks, setOwnedTasks] = useState<ReadonlySet<number>>(new Set());
   useEffect(() => {
     if (previewEntries) return;

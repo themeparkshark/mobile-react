@@ -308,3 +308,23 @@ test('C6: the LinePlay recap keeps GO for the line just waited in, else the shel
   assert.doesNotMatch(success, /NEXT COIN/);
   assert.doesNotMatch(read('src/screens/RideTracker/RideLogScreen.tsx'), /setTarget|ride_logged/);
 });
+
+test('C7: shelves name no ride the app chose: park header, Coin Guide, all-parks shelf and Wait Times', () => {
+  const header = read('src/screens/ParkCollectionHeader.tsx');
+  assert.match(header, /eyebrow: 'PICK ANY COIN', name: 'Tap any empty slot'/);
+  assert.match(header, /testID="shelf-gift-line"/);
+  assert.equal(C.shelfGiftHeaderLine(C.shelfBarFor({ won: 9, total: 40, arcade: true })), '1 more: +3 Tickets');
+  assert.equal(C.shelfGiftHeaderLine(C.shelfBarFor({ won: 9, total: 40, arcade: false })), null, 'today\'s server: no gift line');
+  const park = read('src/screens/ParkScreen.tsx');
+  assert.match(park, /const guideTarget = guideHeld && playerChose\(guideHeld\) \? guideHeld : null;/);
+  assert.doesNotMatch(park, /nearbyRideId=|shelfNearbyPick|nearbyUncollectedRide/);
+  const directory = read('src/screens/ParkRideDirectory.tsx');
+  assert.match(directory, /const visible = expanded \? matching : \[\];/, 'collapsed: never one suggested row');
+  assert.doesNotMatch(directory, /REPORTED OPEN NEARBY|NEAREST COIN AREA|YOUR NEXT COIN|goalRow\]/);
+  const all = read('src/screens/CoinShelfScreen.tsx');
+  assert.doesNotMatch(all, /missing\[0\]|PICK YOUR NEXT COIN/);
+  assert.match(all, /Tap any empty slot to pick/);
+  const waits = read('src/screens/QueueTimesScreen.tsx');
+  assert.match(waits, /const pickedNow = \(\) => \{ const held = guide\.current\(\); return held && playerChose\(held\) \? held\.taskId : null; \};/);
+  assert.doesNotMatch(waits, /Your next coin/);
+});

@@ -97,6 +97,11 @@ export function shelfBarFor(input: {
     tickets: num(served?.tickets) ?? SHELF_GIFT_TICKETS };
 }
 
+/** The park shelf header's gift line: "1 more: +3 Tickets", or null when no gift is served. */
+export function shelfGiftHeaderLine(bar: ShelfBar | null | undefined): string | null {
+  return bar && bar.nextAt != null ? `${bar.nextAt - bar.won} more: +${bar.tickets} Tickets` : null;
+}
+
 /** "9 of 40 coins · 1 more: +3 Tickets", or "9 of 40 coins". */
 export function shelfBarLine(bar: ShelfBar | null | undefined): string | null {
   if (!bar) return null;
