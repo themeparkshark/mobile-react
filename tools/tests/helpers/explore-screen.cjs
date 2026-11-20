@@ -156,7 +156,10 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../ui/modalLayers': { modalLayers: { pressClear: () => true } },
     '../components/guide/useWelcomeBack': { default: () => options.welcome ?? { daysAway: null, done: false, finish: () => undefined } },
     '../services/guide/nextCoin': { guide: { setTarget: (taskId, source) => guidePicks.push([taskId, source]),
-      skipLineStory: () => guidePicks.push(['skip']), forPlayer: () => undefined, current: () => null, subscribe: () => () => undefined } },
+      skipLineStory: () => guidePicks.push(['skip']), clearPick: () => guidePicks.push(['clear']), forPlayer: () => undefined,
+      current: () => null, subscribe: () => () => undefined },
+      // The real rule (Dustin, Nov 20): only a coin the player chose wears the map's pointer.
+      playerChose: target => !!target && target.source !== 'guide' && !['win_card', 'lineplay_recap', 'ride_logged'].includes(target.source) },
     '../services/guide/freeTickets': freeTickets,
     // The Rewards button stays a stub component; its pure NEW rule is real (it decides what a tap marks seen).
     '../components/map/RewardsButton': stubModule('../components/map/RewardsButton', { rewardsNewRungs: rewardsNew.rewardsNewRungs }),

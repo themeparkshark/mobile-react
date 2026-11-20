@@ -167,6 +167,8 @@ test('the gate reads the guide store: a walker closing in on the target is not a
   let now = 9_000_000;
   Date.now = () => now;
   try {
+    // The player picked it (the guide never picks a ride by itself, Dustin, Nov 20).
+    guide.setTarget(41, 'callout');
     guide.resolve({ mode: 'park', parkId: 8, location: { latitude: 33.8100, longitude: -117.9192 }, coins: [coin], live: { 41: 'open' } });
     now += 40_000;
     guide.resolve({ mode: 'park', parkId: 8, location: { latitude: 33.8106, longitude: -117.9196 }, coins: [coin], live: { 41: 'open' } });

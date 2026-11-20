@@ -18,7 +18,8 @@ import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon, SHADOW } from '../../ui';
 import { AMBIENT, BEZIER } from '../../ui/motion';
 import { usePowerBudget } from '../../power';
-import { cardKicker, type GuideAction, type GuideButton, type GuideCardCopy } from '../../services/guide/guideCopy';
+import { cardKicker, SHELF_GIFT_EVERY, type GuideAction, type GuideButton, type GuideCardCopy, type ShelfBar } from '../../services/guide/guideCopy';
+import TicketPips from '../tickets/TicketPips';
 import type { GuideState } from '../../services/guide/nextCoin';
 import CoinTipPicture from '../help/CoinTipPicture';
 import { StampDot } from '../../screens/ExploreScreen/AdventureTicketCard';
@@ -104,6 +105,34 @@ function AdventureTab({ stamps, onPress }: { stamps: readonly [boolean, boolean,
   </Pressable>;
 }
 
+/**
+ * The shelf gift on the card (arcade plan, section 6): five little coins for the coins won toward the next gift, then
+ * the Ticket and "+3". A 7-year-old reads "fill the coins, get Tickets" with no words. Static art, no motion.
+ */
+function ShelfGiftBar({ bar }: { bar: ShelfBar }) {
+  if (bar.nextAt == null) return null;
+  const filled = SHELF_GIFT_EVERY - Math.max(0, Math.min(SHELF_GIFT_EVERY, bar.nextAt - bar.won));
+  return <View testID="shelf-gift-bar" style={styles.giftRow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    {Array.from({ length: SHELF_GIFT_EVERY }, (_, index) => <View key={index} style={index < filled ? null : styles.giftEmpty}>
+      <GameIcon name="coin" size={13} />
+    </View>)}
+    <GameIcon name="arrow" size={11} />
+    <GameIcon name="ticket" size={15} />
+    <Text style={styles.giftText} maxFontSizeMultiplier={CARD_TEXT_MAX}>+{bar.tickets}</Text>
+  </View>;
+}
+
+/** The arrive card's three pictures with no reading: tap a coin, walk there (the shark), PLAY!. */
+function HowToPictures() {
+  return <View testID="arrive-how-to" style={styles.howTo} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+    <GameIcon name="coin" size={20} />
+    <GameIcon name="arrow" size={12} />
+    <GameIcon name="shark" size={20} />
+    <GameIcon name="arrow" size={12} />
+    <GameIcon name="play" size={20} />
+  </View>;
+}
+
 export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAction, onCardPress, onDotsPress, teachPlay = false,
   slam = NO_SLAM, onSlamDone, adventureTab = null, testID = 'next-coin-card', lineOffer = null, art: artOverride = null, loading = false, onHeight }: {
   readonly copy: GuideCardCopy;
@@ -186,7 +215,11 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
           : <Dots dots={copy.dots} slam={slam} reduced={reduced} onSlamDone={onSlamDone}
             coin={coinUrl ? { uri: coinUrl } : COIN_FALLBACK} />)}
         {copy.pointsAtPlay && teachPlay && <View style={styles.teach}><CoinTipPicture /></View>}
+        {copy.pips && <TicketPips testID="guide-card-pips" price={copy.pips.price} held={copy.pips.held} size="island" showNumber tone="onDark"
+          style={styles.pips} />}
         {!!copy.line && <Text style={styles.line} numberOfLines={3} maxFontSizeMultiplier={CARD_TEXT_MAX}>{copy.line}</Text>}
+        {copy.shelfBar && <ShelfGiftBar bar={copy.shelfBar} />}
+        {copy.howTo && <HowToPictures />}
         {(copy.button || copy.secondary) && <View style={styles.actions}>
           {copy.button && <CardButton button={copy.button} onPress={onAction} />}
           {copy.secondary && <CardButton button={copy.secondary} onPress={onAction} quiet />}
@@ -196,9 +229,15 @@ export default function NextCoinCard({ copy, state, coinUrl, parkName, top, onAc
           <LineButton title={lineOffer.title} label={lineOffer.label} onPress={() => onAction(lineOffer.action ?? 'lineplay_here')} />
         </View>}
       </View>
-      {state === 'walk' && <View style={styles.walkArrow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      {state === 'walk' && !copy.clear && <View style={styles.walkArrow} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         <GameIcon name="arrow" size={22} />
       </View>}
+      {/* YOUR PICK: the X clears the player's own pick (the path, arrow and bob go with it). */}
+      {copy.clear && <Pressable testID="guide-clear-pick" accessibilityRole="button" accessibilityLabel={copy.clear.label}
+        hitSlop={CLEAR_SLOP} onPress={() => { haptic('tapLight'); onAction(copy.clear!.action); }}
+        style={({ pressed }) => [styles.clear, pressed && styles.pressed]}>
+        <GameIcon name="close" size={16} />
+      </Pressable>}
     </Pressable>
   </Animated.View>;
 }
@@ -213,6 +252,8 @@ export const CARD_TEXT_MAX = 1.3;
 export const TAB_DOT = 8;
 /** The in-card ticket tab is 20 pt tall: 13 pt of slop above and below makes its 46 pt tap target. */
 const TAB_SLOP = { top: 13, bottom: 13, left: 6, right: 6 } as const;
+/** The X is 26 pt: 9 pt of slop on every side makes its 44 pt tap target. */
+const CLEAR_SLOP = { top: 9, bottom: 9, left: 9, right: 9 } as const;
 
 const styles = StyleSheet.create({
   slot: { position: 'absolute', left: 12, right: GUIDE_CARD_RIGHT, zIndex: 21 },
@@ -249,5 +290,12 @@ const styles = StyleSheet.create({
   quiet: { paddingVertical: 4, paddingHorizontal: 6, minHeight: 30, justifyContent: 'center' },
   quietText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 12, textDecorationLine: 'underline' },
   walkArrow: { alignSelf: 'center' },
+  clear: { alignSelf: 'flex-start', width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white },
+  pips: { marginTop: 2 },
+  giftRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 3 },
+  giftEmpty: { opacity: 0.35 },
+  giftText: { color: '#ffdc61', fontFamily: 'Shark', fontSize: 13, marginLeft: 1 },
+  howTo: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   teach: { marginTop: 4, alignSelf: 'flex-start' },
 });

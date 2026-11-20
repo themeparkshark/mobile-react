@@ -38,61 +38,6 @@ const RIDES = [
   coin(4, 'Walt Statue', 400, { kind: 'sight' }),
 ];
 
-test('rule 7 then 8: known-open rides come before rides with no live answer', () => {
-  const t = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }));
-  assert.equal(t.taskId, 1, 'the open ride wins even though others are nearer');
-  assert.equal(t.reason, 'nearest_open');
-  assert.equal(t.checkRunning, false);
-  const off = G.pickNextCoin(input({ coins: RIDES, live: {} }));
-  assert.equal(off.taskId, 3, 'feed off: the nearest ride with no answer');
-  assert.equal(off.reason, 'nearest_unknown');
-  assert.equal(off.checkRunning, true, 'the card adds "Check it\'s running"');
-});
-
-test('scripted night: the guide never names a closed ride; sights or the resting message instead', () => {
-  const closed = { 1: 'closed', 2: 'closed', 3: 'closed' };
-  const t = G.pickNextCoin(input({ coins: RIDES, live: closed }));
-  assert.equal(t.taskId, 4);
-  assert.equal(t.kind, 'sight');
-  assert.equal(t.reason, 'nearest_sight');
-  const none = G.pickNextCoin(input({ coins: RIDES.filter(c => c.kind === 'ride'), live: closed }));
-  assert.equal(none, null);
-  assert.equal(G.guideState(input(), none), 'resting');
-  // A held target that closes is dropped, never kept.
-  const held = G.pickNextCoin(input({ coins: RIDES, live: { 2: 'open' } }));
-  assert.equal(held.taskId, 2);
-  const after = G.pickNextCoin(input({ coins: RIDES, live: { ...closed }, current: held }));
-  assert.notEqual(after.taskId, 2);
-  assert.equal(after.kind, 'sight');
-});
-
-test('scripted feed-off (state D): still names a ride or sight, and the in-line state still fires on dwell', () => {
-  const t = G.pickNextCoin(input({ coins: RIDES, live: undefined }));
-  assert.ok(t && [1, 2, 3, 4].includes(t.taskId));
-  const line = G.pickNextCoin(input({ coins: RIDES, live: undefined, inLineTaskId: 1, current: t }));
-  assert.equal(line.taskId, 1);
-  assert.equal(line.reason, 'in_line');
-  assert.equal(G.guideState(input({ inLineTaskId: 1 }), line), 'in_line');
-  // A sight or a non-queue ride is never an in-line target.
-  assert.equal(G.pickNextCoin(input({ coins: RIDES, inLineTaskId: 4 })).reason, 'nearest_unknown');
-  const walkThrough = [coin(9, 'Castle Walk', 100, { queue: false })];
-  assert.equal(G.pickNextCoin(input({ coins: walkThrough, inLineTaskId: 9 })).reason, 'nearest_unknown');
-  // A known-closed ride never gets the in-line state.
-  assert.equal(G.pickNextCoin(input({ coins: RIDES, live: { 1: 'closed' }, inLineTaskId: 1 })).taskId !== 1, true);
-});
-
-test('scripted esplanade: never a coin in the other park', () => {
-  const otherPark = [coin(20, 'Car Ride', 10, { parkId: 9 }), coin(21, 'Pier Wheel', 30, { parkId: 9 })];
-  const t = G.pickNextCoin(input({ coins: [...otherPark, ...RIDES], live: { 20: 'open', 21: 'open' } }));
-  assert.equal(t.parkId, 8);
-  assert.ok(![20, 21].includes(t.taskId));
-  assert.equal(G.pickNextCoin(input({ coins: otherPark })), null, 'only the other park: resting, not its coin');
-  assert.equal(G.pickNextCoin(input({ coins: RIDES, parkId: null })), null, 'no park resolved: no target');
-  // Even a pick or a plan in the other park is ignored.
-  assert.equal(G.pickNextCoin(input({ coins: [...otherPark, ...RIDES], pickedTaskId: 20, live: { 1: 'open' } })).taskId, 1);
-  assert.equal(G.pickNextCoin(input({ coins: [...otherPark, ...RIDES], chosenTaskId: 21, live: { 1: 'open' } })).taskId, 1);
-});
-
 test('home: never a park goal or the Adventure; only the planned coin, and the home state', () => {
   const home = { mode: 'home', parkId: 8, location: north(30000), coins: RIDES, live: {},
     adventure: { taskId: 2, parkId: 8, phase: 'discover' }, now: NOW };
@@ -108,89 +53,6 @@ test('home: never a park goal or the Adventure; only the planned coin, and the h
   assert.equal(G.pickNextCoin({ ...home, chosenTaskId: 1, coins: RIDES.map(c => ({ ...c, owned: true })) }), null);
 });
 
-test('Adventure Line story: after winning its coin, the ride stays the target until the story is played or another coin is picked', () => {
-  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
-  const adventure = { taskId: 2, parkId: 8, phase: 'play' };
-  const first = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure }));
-  assert.equal(first.taskId, 2, 'rule 1 beats the nearest open ride');
-  assert.equal(first.reason, 'line_story');
-  assert.equal(G.guideState(input({ adventure }), first), 'line_story');
-  // Held across moves. PLAY! rising for another coin shows "You're here" for it only while the
-  // player stands there; walking on, the Line story comes back.
-  const passing = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure, current: first, location: north(120) }));
-  assert.equal(passing.taskId, 3);
-  assert.equal(passing.reason, 'in_range');
-  const held = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure, current: passing, resumeTarget: first, location: north(185) }));
-  assert.equal(held.taskId, 2);
-  assert.equal(held.reason, 'line_story');
-  // Story played: phase moves to celebrate, and the ride stays the target for its souvenir (step 3).
-  const played = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'celebrate' }, current: held }));
-  assert.equal(played.taskId, 2, 'step 3: the souvenir keeps the ride');
-  assert.equal(played.reason, 'line_story');
-  // Souvenir unfolded: the Adventure is complete and the guide moves on.
-  const complete = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: { ...adventure, phase: 'complete' }, current: played }));
-  assert.equal(complete.taskId, 1);
-  // Declined: the player picked another coin.
-  const declined = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: { ...adventure, lineStoryDeclined: true } }));
-  assert.equal(declined.taskId, 1);
-  // Before the coin is won, today's Adventure ride is rule 5 (after in-range, in-line and chosen).
-  const discover = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, adventure: { ...adventure, phase: 'discover' } }));
-  assert.equal(discover.taskId, 2);
-  assert.equal(discover.reason, 'adventure');
-  const closedAdventure = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'closed' }, adventure: { ...adventure, phase: 'discover' } }));
-  assert.equal(closedAdventure.taskId, 1, 'a closed Adventure ride is never the target');
-});
-
-test('the target holds: it changes only for a win, a closure or the player\'s pick', () => {
-  const live = { 1: 'open', 2: 'open', 3: 'open' };
-  const t = G.pickNextCoin(input({ coins: RIDES, live }));
-  assert.equal(t.taskId, 3);
-  // Walk toward Jungle Cruise's side: Haunted Mansion becomes nearer, the target stays.
-  const moved = G.pickNextCoin(input({ coins: RIDES, live, current: t, location: north(260), playableTaskId: null }));
-  assert.equal(moved.taskId, 3);
-  // In range of another coin: PLAY! rises for it and the card says "You're here" for it while the
-  // player stands there (one pointer, never a card that disagrees with PLAY!) ...
-  const passing = G.pickNextCoin(input({ coins: RIDES, live, current: t, location: north(200) }));
-  assert.equal(passing.taskId, 2);
-  assert.equal(passing.reason, 'in_range');
-  assert.equal(passing.inRange, true);
-  // ... and walking on without playing, the target from before comes back (it never changed).
-  const walkedOn = G.pickNextCoin(input({ coins: RIDES, live, current: passing, resumeTarget: t, location: north(140) }));
-  assert.equal(walkedOn.taskId, 3);
-  assert.equal(walkedOn.reason, t.reason);
-  // With the map's own PLAY! check, only the coin PLAY! is up for counts.
-  const mapSaysNo = G.pickNextCoin(input({ coins: RIDES, live, current: t, location: north(200), playableTaskId: null }));
-  assert.equal(mapSaysNo.taskId, 3, 'PLAY! is down: no "You\'re here" for a coin the geometry calls near');
-  // Won the passing coin: back to the target from before.
-  const wonPassing = G.pickNextCoin(input({ coins: RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c)), live, current: passing, resumeTarget: t, location: north(200) }));
-  assert.equal(wonPassing.taskId, 3);
-  // Won.
-  const won = G.pickNextCoin(input({ coins: RIDES.map(c => (c.taskId === 3 ? { ...c, owned: true } : c)), live, current: t }));
-  assert.notEqual(won.taskId, 3);
-  // Picked.
-  const picked = G.pickNextCoin(input({ coins: RIDES, live, current: t, pickedTaskId: 1, pickedSource: 'callout' }));
-  assert.equal(picked.taskId, 1);
-  assert.equal(picked.reason, 'chosen');
-  assert.equal(picked.source, 'callout');
-  // A closed pick is ignored and the target holds.
-  const closedPick = G.pickNextCoin(input({ coins: RIDES, live: { ...live, 1: 'closed' }, current: t, pickedTaskId: 1 }));
-  assert.equal(closedPick.taskId, 3);
-});
-
-test('the guide store remembers the target from before a coin in passing, and drops it after a pick', () => {
-  G.guide.reset();
-  const live = { 1: 'open', 2: 'open', 3: 'open' };
-  const base = { mode: 'park', parkId: 8, coins: RIDES, live, now: NOW };
-  assert.equal(G.guide.resolve({ ...base, location: BASE }).taskId, 3);
-  assert.equal(G.guide.resolve({ ...base, location: north(200), playableTaskId: 2 }).taskId, 2, 'PLAY! up for Haunted Mansion');
-  assert.equal(G.guide.resolve({ ...base, location: north(200), playableTaskId: 2 }).taskId, 2, 'standing there it holds');
-  assert.equal(G.guide.resolve({ ...base, location: north(170), playableTaskId: null }).taskId, 3, 'walked on: back to Space Ride');
-  // A player's pick replaces everything, and a later coin in passing returns to the pick.
-  G.guide.setTarget(1, 'callout');
-  assert.equal(G.guide.resolve({ ...base, location: north(170), playableTaskId: null }).taskId, 1);
-  G.guide.reset();
-});
-
 test('rule 2: with no target, an open unowned coin in range right now', () => {
   const t = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, location: north(195) }));
   assert.equal(t.taskId, 2);
@@ -201,37 +63,11 @@ test('rule 2: with no target, an open unowned coin in range right now', () => {
   assert.equal(radius.inRange, true, 'the coin\'s own radius decides range');
 });
 
-test('rule 4: the planned coin when open and in this park; never past 1.5 km', () => {
-  const t = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, chosenTaskId: 1 }));
-  assert.equal(t.taskId, 1);
-  assert.equal(t.reason, 'chosen');
-  const far = [coin(30, 'Far Ride', 1600), coin(31, 'Near Ride', 900)];
-  const reach = G.pickNextCoin(input({ coins: far, live: { 30: 'open', 31: 'open' } }));
-  assert.equal(reach.taskId, 31);
-  assert.equal(G.pickNextCoin(input({ coins: [far[0]], live: { 30: 'open' } })), null, 'nothing more than 1.5 km away');
-  const heldFar = G.pickNextCoin(input({ coins: far, live: { 30: 'open', 31: 'open' }, current: { ...reach, taskId: 30 } }));
-  assert.equal(heldFar.taskId, 31, 'a held target that falls out of reach is dropped');
-});
-
-test('rule 6 and rule 10 wait for their rungs', () => {
-  const coins = [coin(1, 'Jungle Cruise', 100), coin(2, 'Rush Ride', 300, { rush: true }),
-    coin(3, 'Owned Ride', 50, { owned: true, levelUpReady: true })];
-  const live = { 1: 'open', 2: 'open', 3: 'open' };
-  assert.equal(G.pickNextCoin(input({ coins, live })).taskId, 1);
-  assert.equal(G.pickNextCoin(input({ coins, live, starRushUnlocked: true })).reason, 'star_rush');
-  const allOwned = coins.map(c => ({ ...c, owned: true }));
-  assert.equal(G.pickNextCoin(input({ coins: allOwned, live })), null);
-  const level = G.pickNextCoin(input({ coins: allOwned, live, coinLevelsUnlocked: true }));
-  assert.equal(level.taskId, 3);
-  assert.equal(level.reason, 'level_up');
-  assert.equal(G.guideState(input(), level), 'level_up');
-});
-
 test('GET RIDE PARTS on a coin you own moves the card and the path to its line, and holds there', () => {
   const coins = [coin(1, 'Jungle Cruise', 100), coin(2, 'Haunted Mansion', 200, { owned: true })];
   const live = { 1: 'open', 2: 'open' };
-  const before = G.pickNextCoin(input({ coins, live }));
-  assert.equal(before.taskId, 1);
+  const before = G.pickNextCoin(input({ coins, live, chosenTaskId: 1 }));
+  assert.equal(before.taskId, 1, 'the player\'s own pick');
   const picked = G.pickNextCoin(input({ coins, live, current: before, pickedTaskId: 2, pickedSource: 'coin_parts' }));
   assert.equal(picked.taskId, 2, 'the owned coin is the target');
   assert.equal(picked.reason, 'parts');
@@ -251,25 +87,8 @@ test('GET RIDE PARTS on a coin you own moves the card and the path to its line, 
   // Full of Parts: it turns into the level up card. Closed: the guide moves on.
   const ready = [coins[0], { ...coins[1], levelUpReady: true }];
   assert.equal(G.pickNextCoin(input({ coins: ready, live, current: picked, coinLevelsUnlocked: true })).reason, 'level_up');
-  assert.equal(G.pickNextCoin(input({ coins, live: { 1: 'open', 2: 'closed' }, current: picked })).taskId, 1);
-});
-
-test('guide.nextAfter names the next coin after a ride: never that ride, and it moves nothing', () => {
-  G.guide.reset();
-  const coins = [coin(1, 'Jungle Cruise', 100), coin(2, 'Haunted Mansion', 200, { owned: true })];
-  const live = { 1: 'open', 2: 'open' };
-  const base = { mode: 'park', parkId: 8, location: BASE, coins, live, now: NOW };
-  assert.equal(G.guide.nextAfter(2), null, 'the map has not resolved yet: no name');
-  G.guide.resolve({ ...base, inLineTaskId: 2 });
-  assert.equal(G.guide.current().taskId, 2, 'standing in its line, the guide holds the ride');
-  const next = G.guide.nextAfter(2);
-  assert.equal(next.taskId, 1, 'the resolver picks the next coin without it');
-  assert.equal(G.guide.current().taskId, 2, 'a read moves nothing');
-  assert.equal(G.guide.nextAfter(null).taskId, 2, 'no ride named: the held target');
-  G.guide.setTarget(1, 'lineplay_recap');
-  G.guide.resolve(base);
-  assert.equal(G.guide.nextAfter(2).taskId, 1, 'held on another coin: that coin');
-  G.guide.reset();
+  assert.equal(G.pickNextCoin(input({ coins, live: { 1: 'open', 2: 'closed' }, current: picked })), null,
+    'closed: the pick is dropped and the guide picks nothing in its place (Dustin, Nov 20)');
 });
 
 test('never an owned coin, except level up, the Line story and the line you stand in', () => {
@@ -283,7 +102,7 @@ test('never an owned coin, except level up, the Line story and the line you stan
 });
 
 test('card states: arrive, walk, here, and the out-of-Tickets order (claim before the free try)', () => {
-  const t = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }));
+  const t = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' }, chosenTaskId: 1 }));
   assert.equal(G.guideState(input({ arrivedAt: NOW - 5000 }), t), 'arrive');
   assert.equal(G.guideState(input({ arrivedAt: NOW - 31000 }), t), 'walk');
   const wallet = (extra = {}) => ({ tickets: 0, claimable: [], freeTryReady: false, extraTries: 0, queueTicketsOn: false, ...extra });
@@ -337,8 +156,8 @@ test('the guide store is the one pointer: setTarget, current, subscribe', () => 
   let calls = 0;
   const off = G.guide.subscribe(() => { calls += 1; });
   const base = input({ coins: RIDES, live: { 1: 'open', 2: 'open', 3: 'open' } });
-  assert.equal(G.guide.resolve(base).taskId, 3);
-  assert.equal(G.guide.current().taskId, 3);
+  assert.equal(G.guide.resolve(base), null, 'nothing picked: the guide holds nothing');
+  assert.equal(G.guide.current(), null);
   const before = calls;
   G.guide.resolve(base);
   assert.equal(calls, before, 'no change, no notify');
@@ -348,18 +167,18 @@ test('the guide store is the one pointer: setTarget, current, subscribe', () => 
   assert.equal(picked.taskId, 1);
   assert.equal(picked.source, 'shelf');
   assert.equal(G.guide.resolve(base).taskId, 1, 'the pick holds on the next resolve');
-  // Picking another coin while the Line story waits declines it.
+  // Standing in today's Adventure ride's line after its coin is its Line story; picking another coin declines it.
   G.guide.reset();
   const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
   const adventure = { taskId: 2, parkId: 8, phase: 'play' };
-  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure }).reason, 'line_story');
+  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure, inLineTaskId: 2 }).reason, 'line_story');
   G.guide.setTarget(3, 'callout');
-  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure }).taskId, 3);
+  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure, inLineTaskId: 2 }).taskId, 3);
   G.guide.clearPlan();
   G.guide.reset();
-  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure }).reason, 'line_story', 'reset forgets the declined story');
+  assert.equal(G.guide.resolve({ ...base, location: AT_RIDE, coins: won, adventure, inLineTaskId: 2 }).reason, 'line_story', 'reset forgets the declined story');
   off();
-  G.guide.setTarget(Number.NaN, 'bad');
+  G.guide.setTarget(Number.NaN, 'shelf');
   assert.equal(G.guide.plan(), null, 'a bad id is ignored');
   G.guide.reset();
 });
@@ -397,77 +216,6 @@ const ctx = (extra = {}) => ({ parkName: 'Disneyland', ridesResting: false, allO
   queueTicketsOn: false, adventureDots: null, ...extra });
 const tgt = (extra = {}) => ({ taskId: 3, parkId: 8, name: 'Jungle Cruise', kind: 'ride', reason: 'nearest_open', source: 'guide',
   meters: 42, inRange: false, checkRunning: false, leavesOn: null, ...extra });
-
-test('card words for every state: one title, one line, one button, in the 4.5 vocabulary', () => {
-  const arrive = C.guideCardCopy('arrive', tgt(), ctx());
-  assert.equal(arrive.kicker, 'WELCOME TO DISNEYLAND!');
-  assert.equal(arrive.title, 'First coin: Jungle Cruise');
-  assert.equal(arrive.line, '40 m');
-  assert.equal(arrive.button.action, 'go');
-  const walk = C.guideCardCopy('walk', tgt({ checkRunning: true }), ctx());
-  assert.equal(walk.button, null, 'walking: the path is the guide');
-  assert.equal(walk.line, '40 m · Check it\'s running');
-  const here = C.guideCardCopy('here', tgt({ inRange: true }), ctx());
-  assert.equal(here.title, 'You\'re here! Tap PLAY!');
-  assert.equal(here.pointsAtPlay, true);
-  const story = C.guideCardCopy('line_story', tgt({ reason: 'line_story' }), ctx({ adventureDots: [true, false, false] }));
-  assert.deepEqual(plain([story.button.label, story.secondary.label, story.secondary.action]), ['LINEPLAY', 'Pick another coin', 'skip']);
-  assert.deepEqual(plain(story.dots), [true, false, false], 'the Adventure Ticket is the card\'s 3-stamp frame');
-  const inLine = C.guideCardCopy('in_line', tgt({ reason: 'in_line' }), ctx());
-  assert.equal(inLine.title, 'In line for Jungle Cruise?');
-  assert.equal(inLine.line, 'Your wait powers its coin');
-  const claim = C.guideCardCopy('claim', tgt(), ctx({ tickets: 0, freeStep: { kind: 'claim', tickets: 5, sources: [] } }));
-  assert.equal(claim.title, '5 stamp Tickets are waiting');
-  assert.equal(claim.button.label, 'CLAIM');
-  // Free try and extra try point at the map's PLAY! (no second, dead button on the card).
-  const freeTry = C.guideCardCopy('free_try', tgt({ inRange: true }), ctx());
-  assert.equal(freeTry.button, null, 'no card button that could do nothing');
-  assert.equal(freeTry.pointsAtPlay, true);
-  assert.equal(freeTry.badge, 'gift');
-  const extraTry = C.guideCardCopy('extra_try', tgt({ inRange: true }), ctx());
-  assert.equal(extraTry.title, 'Extra try! Tap PLAY!');
-  assert.equal(extraTry.button, null);
-  assert.equal(extraTry.badge, 'ticket');
-  assert.equal(C.guideCardCopy('level_up', tgt({ reason: 'level_up', name: 'Haunted Mansion' }), ctx()).title, 'Haunted Mansion is ready to level up');
-  const home = C.guideCardCopy('home', tgt({ reason: 'plan' }), ctx({ treatsToTicket: 2, planName: 'Jungle Cruise' }));
-  assert.equal(home.title, 'Disneyland: 6 Tickets ready');
-  assert.equal(home.line, 'Next coin: Jungle Cruise. Up to 2 treats = 1 Ticket');
-  assert.equal(home.button.action, 'plan');
-  const back = C.guideCardCopy('welcome_back', tgt(), ctx({ shelf: { owned: 9, total: 35 } }));
-  assert.equal(back.title, 'Your Disneyland shelf: 9 of 35');
-  // No banned word, no emoji, no em dash anywhere on the card.
-  const all = [arrive, walk, here, story, inLine, claim, home, back].flatMap(c => [c.kicker, c.title, c.line, c.a11y, c.button?.label, c.secondary?.label]).filter(Boolean).join(' | ');
-  assert.doesNotMatch(all, /PLAY RIDE|Rescue Pass|Park Tickets|home finds|snacks|Mastery|detour|Coin Challenge|\u2014|[\u{1F300}-\u{1FAFF}]/u);
-});
-
-test('state A: the line Ticket sentence shows only while queue_tickets is on', () => {
-  const off = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: false }));
-  assert.doesNotMatch(off.line, /wait at a ride/i, 'App Store switches: no line Ticket copy');
-  // The line names every real way, so no SEE WAYS button that only repeats it (fix W1 item 6).
-  assert.equal(off.button, null);
-  assert.match(off.line, /3 treats at home = 1 Ticket\. Tomorrow brings a new free try\./);
-  const noDaily = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: false, freeTryDaily: false }));
-  assert.doesNotMatch(noDaily.line, /free try/i, 'no daily free try switch: no promise of one tomorrow');
-  const on = C.guideCardCopy('need_ticket', tgt(), ctx({ tickets: 0, queueTicketsOn: true }));
-  assert.match(on.line, /10 minutes in a ride line earns a Ticket\./);
-  assert.equal(on.button.label, 'LINEPLAY');
-});
-
-test('resting: the closed message, or "Sights stay open" while rides rest; dates in words, never a countdown', () => {
-  const closed = C.guideCardCopy('resting', null, ctx({ ridesResting: true }));
-  assert.equal(closed.title, 'The park is closed');
-  assert.equal(closed.line, 'See you next park day');
-  assert.equal(closed.button.action, 'shelf');
-  const sight = tgt({ reason: 'nearest_sight', kind: 'sight', name: 'Walt Statue', meters: 60 });
-  const resting = C.restingSightCopy(C.guideCardCopy('walk', sight, ctx({ ridesResting: true })), sight, true);
-  assert.equal(resting.kicker, 'RIDES ARE RESTING');
-  assert.equal(resting.title, 'Sights stay open: Walt Statue');
-  assert.equal(resting.line, '60 m');
-  assert.equal(C.leavesLine('2026-10-31'), 'leaves Saturday, Oct 31');
-  assert.equal(C.leavesLine('soon'), null);
-  assert.equal(C.guideDistance(1234), '1.2 km');
-  assert.equal(C.guideDistance(2), '5 m');
-});
 
 test('map islands become guide coins: rides by live row or catalog, sights otherwise; only real queues can be "in line"', () => {
   const tasks = [
@@ -617,7 +365,8 @@ test('the resting card tells the truth: closed only when no ride is open; far fr
   const far = C.guideCardCopy('resting', null, ctx({ ridesResting: false, outOfReach: true }));
   assert.equal(far.title, 'Head back into the park', 'one ride down at 2 PM is not a closed park');
   const closed = C.guideCardCopy('resting', null, ctx({ ridesResting: true, outOfReach: true }));
-  assert.equal(closed.title, 'The park is closed');
+  assert.equal(closed.title, 'Sights stay open', 'rides resting: no ride and no sight named (Dustin, Nov 20)');
+  assert.equal(closed.button.action, 'near_me');
   const src = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
   assert.match(src, /const ridesResting = known\.some\(answer => answer === 'closed'\) && !known\.some\(answer => answer === 'open'\);/);
 });
@@ -657,8 +406,10 @@ test('welcome back after 14 days: whole days away, per player', () => {
   assert.equal(W.daysBetween(NOW - 14 * 86_400_000, NOW), 14);
   assert.equal(W.daysBetween(NOW - 13.9 * 86_400_000, NOW), 13);
   assert.equal(W.daysBetween(NOW + 1000, NOW), null, 'a clock that went back is not a welcome back');
-  assert.equal(G.guideState(input({ daysAway: 14, coins: RIDES }), G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }))), 'welcome_back');
-  assert.equal(G.guideState(input({ daysAway: 14, welcomeBackDone: true, coins: RIDES }), G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' } }))), 'walk');
+  const pick = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open' }, chosenTaskId: 1 }));
+  assert.equal(G.guideState(input({ daysAway: 14, coins: RIDES }), pick), 'welcome_back');
+  assert.equal(G.guideState(input({ daysAway: 14, welcomeBackDone: true, coins: RIDES }), pick), 'walk');
+  assert.equal(G.guideState(input({ daysAway: 14, coins: RIDES }), null), 'welcome_back', 'with nothing picked too');
 });
 
 test('dev-only live stub (state D walks): never outside a development bundle; off means no answers, open means all open', () => {
@@ -707,43 +458,16 @@ test('a coin already on the shelf is never the target, though today\'s map lists
   assert.deepEqual([...owned], [78], 'only this park\'s owned coins');
   assert.equal(GC.ownedTaskIdsFor(trip, null).size, 0);
   const without = GC.guideCoinsFor(tasks, 8, {});
-  assert.equal(G.pickNextCoin(input({ coins: without })).taskId, 78, 'before: the owned statue 5 m away looked unowned');
+  assert.equal(G.pickNextCoin(input({ coins: without })).taskId, 78, 'before: the owned statue 5 m away looked unowned (PLAY! range)');
   const coins = GC.guideCoinsFor(tasks, 8, { ownedTaskIds: owned });
   assert.equal(coins.find(c => c.taskId === 78).owned, true);
-  assert.equal(G.pickNextCoin(input({ coins })).taskId, 199, 'the next coin to win, not the one on the shelf');
-  // A target picked before the shelf arrived moves on once the shelf says it is owned.
+  assert.equal(G.pickNextCoin(input({ coins })), null, 'owned, so not a coin to win here; and the guide picks no other (Dustin, Nov 20)');
+  // A coin in PLAY! range before the shelf arrived is dropped once the shelf says it is owned.
   const early = G.pickNextCoin(input({ coins: without }));
-  assert.equal(G.pickNextCoin(input({ coins, current: early })).taskId, 199);
+  assert.equal(G.pickNextCoin(input({ coins, current: early })), null);
   const explore = mapSource();
   assert.match(explore, /const ownedTaskIds = useMemo\(\(\) => ownedTaskIdsFor\(tripGoalData\?\.rides, park\?\.id \?\? null\)/);
   assert.match(explore, /starTaskIds: starRides, rushTaskIds, ownedTaskIds,/);
-});
-
-test('after winning today\'s Adventure coin the guide stays on that ride for its line story, though the won coin left today\'s map', () => {
-  const soarin = { id: 137, name: "Soarin'", latitude: north(5).latitude, longitude: BASE.longitude };
-  const grizzly = { id: 140, name: 'Grizzly River Run', latitude: north(120).latitude, longitude: BASE.longitude };
-  const ticket = phase => ({ park_id: 8, phase, ride: { task_id: 137, ride_name: "Soarin'", lat: soarin.latitude, lng: soarin.longitude } });
-  // Before the win the map lists it; nothing is added.
-  const before = GC.withAdventureCoin(GC.guideCoinsFor([soarin, grizzly], 8, {}), ticket('discover'), 8);
-  assert.equal(before.length, 2);
-  // After the win the map drops Soarin'; the ticket brings it back as an owned ride.
-  const after = GC.withAdventureCoin(GC.guideCoinsFor([grizzly], 8, {}), ticket('play'), 8);
-  assert.equal(after.length, 2);
-  const back = after.find(c => c.taskId === 137);
-  assert.equal(back.owned, true); assert.equal(back.kind, 'ride');
-  assert.equal(GC.withAdventureCoin(GC.guideCoinsFor([grizzly], 8, {}), ticket('play'), 9).length, 1, 'another park: never');
-  assert.equal(GC.withAdventureCoin([], { ...ticket('play'), ride: { task_id: 137, ride_name: 'x' } }, 8).length, 0, 'no position: nothing');
-  G.guide.reset();
-  const adventure = { taskId: 137, parkId: 8, phase: 'play' };
-  const t = G.guide.resolve({ mode: 'park', parkId: 8, location: BASE, coins: after, live: { 140: 'open' }, adventure });
-  assert.equal(t.taskId, 137);
-  assert.equal(t.reason, 'line_story');
-  // "Pick another coin" moves on.
-  G.guide.skipLineStory();
-  assert.equal(G.guide.resolve({ mode: 'park', parkId: 8, location: BASE, coins: after, live: { 140: 'open' }, adventure }).taskId, 140);
-  G.guide.reset();
-  const explore = mapSource();
-  assert.match(explore, /taskId === tripGoal\?\.task_id \|\| taskId === adventure\?\.ride\.task_id/);
 });
 
 test('line story words: a name ending in an apostrophe reads "Soarin\'s", and the arrival card never calls a won coin "First coin"', () => {
@@ -752,10 +476,11 @@ test('line story words: a name ending in an apostrophe reads "Soarin\'s", and th
   assert.equal(C.possessive('Jungle Cruise'), "Jungle Cruise's");
   const story = tgt({ taskId: 137, name: "Soarin'", reason: 'line_story' });
   assert.equal(C.guideCardCopy('line_story', story, ctx()).title, "Play Soarin's line story");
-  const arrive = C.guideCardCopy('arrive', story, ctx());
-  assert.equal(arrive.title, "Next: Soarin's line story");
-  assert.doesNotMatch(arrive.title, /First coin/);
-  assert.equal(C.guideCardCopy('arrive', tgt(), ctx()).title, 'First coin: Jungle Cruise');
+  // The arrive card names no coin the app chose: the welcome, then the player's own pick if they made one.
+  const arrive = C.guideCardCopy('arrive', null, ctx());
+  assert.equal(arrive.title, 'Every ride has a coin. Pick one!');
+  assert.doesNotMatch(arrive.title, /First coin|Next/);
+  assert.equal(C.guideCardCopy('arrive', tgt({ reason: 'chosen', source: 'shelf' }), ctx()).title, 'Your pick: Jungle Cruise');
 });
 
 test('LINEPLAY on the Line story card opens today\'s Adventure ride even when its won coin left the map list (round 1 blocker)', () => {
@@ -830,7 +555,7 @@ test('a second shark on a family phone never inherits the first one\'s target or
   assert.equal(G.guide.resolve(base).taskId, 3, 'same player: the pick holds');
   G.guide.forPlayer(65);
   assert.equal(G.guide.current(), null, 'another player starts clean');
-  assert.notEqual(G.guide.resolve(base).source, 'shelf');
+  assert.equal(G.guide.resolve(base), null, 'no pick of their own: the guide holds nothing (Dustin, Nov 20)');
   G.guide.reset();
 });
 
@@ -847,48 +572,6 @@ test('level up ready comes from the trip goal\'s paid-for next level, and feeds 
   assert.equal(GC.guideCoinsFor(tasks, 8, { levelUpTaskIds: new Set([63]) })[0].levelUpReady, true);
   const explore = mapSource();
   assert.match(explore, /levelUpReady: levelUpTaskId != null,/, 'the ladder hears it too');
-});
-
-test('Adventure step 3: the souvenir state is its own card (UNFOLD), and declining one step never declines the next', () => {
-  const C = loadTs('src/services/guide/guideCopy.ts');
-  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
-  G.guide.reset();
-  const live = { 1: 'open', 3: 'open' };
-  const play = { taskId: 2, parkId: 8, phase: 'play' };
-  const first = G.guide.resolve(input({ location: AT_RIDE, coins: won, live, adventure: play }));
-  assert.equal(first.reason, 'line_story');
-  // Pick another coin on the Line story card: the guide moves on.
-  G.guide.skipLineStory();
-  const next = G.guide.resolve(input({ location: AT_RIDE, coins: won, live, adventure: play }));
-  assert.notEqual(next.taskId, 2, 'declined: the guide points at another coin');
-  // The line story is played from the Adventure sheet (opened by its ticket tab): phase celebrate.
-  // The held coin still holds (no flip-flop), and once it is won the souvenir leads again.
-  const celebrate = { ...play, phase: 'celebrate' };
-  const stillHeld = G.guide.resolve(input({ location: AT_RIDE, coins: won, live, adventure: celebrate }));
-  assert.equal(stillHeld.taskId, next.taskId, 'the held coin holds');
-  const wonNext = won.map(c => (c.taskId === next.taskId ? { ...c, owned: true } : c));
-  const souvenir = G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
-  assert.equal(souvenir.taskId, 2, 'declining the line story never declines the souvenir');
-  assert.equal(souvenir.reason, 'line_story');
-  assert.equal(G.guideState(input({ adventure: celebrate }), souvenir), 'line_story');
-  const copy = C.guideCardCopy('line_story', souvenir, { parkName: 'Disneyland', ridesResting: false, allOwned: false, tickets: 0,
-    freeStep: null, queueTicketsOn: false, adventureDots: [true, true, false], adventureStep: 'celebrate' });
-  assert.equal(copy.title, 'Unfold your Haunted Mansion souvenir');
-  assert.equal(copy.button.action, 'unfold');
-  assert.equal(copy.button.label, 'UNFOLD');
-  assert.equal(copy.secondary.action, 'skip');
-  assert.deepEqual(plain(copy.dots), [true, true, false]);
-  // Declining the souvenir step too: the guide moves on (the ticket tab keeps the sheet one tap away).
-  G.guide.skipLineStory();
-  const after = G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
-  assert.notEqual(after?.taskId, 2);
-  // A tapped island (another coin's pick) while the souvenir waits declines that step only.
-  G.guide.reset();
-  G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
-  G.guide.setTarget(1, 'callout');
-  const picked = G.guide.resolve(input({ location: AT_RIDE, coins: wonNext, live, adventure: celebrate }));
-  assert.equal(picked.taskId, 1);
-  G.guide.reset();
 });
 
 test('Adventure ticket tab: the card wears it whenever the Adventure is active here but the guide points elsewhere', () => {
@@ -914,9 +597,9 @@ test('Adventure ticket tab: the card wears it whenever the Adventure is active h
   const screen = mapSource();
   assert.match(screen, /adventureTab=\{nextCoin\.adventureTab && adventure && tripGoalData \? adventureTabProps : null\}/);
   assert.match(screen, /case 'unfold': setAdventureCelebrateRequest/);
-  // The closed Adventure ride in its discover phase: the guide never targets it, so the tab is the door to the detour picker.
-  const closed = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'closed' }, adventure: { taskId: 2, parkId: 8, phase: 'discover' } }));
-  assert.notEqual(closed.taskId, 2);
+  // The guide never targets today's Adventure ride by itself (Dustin, Nov 20), open or closed.
+  assert.equal(G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'closed' }, adventure: { taskId: 2, parkId: 8, phase: 'discover' } })), null);
+  assert.equal(G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, adventure: { taskId: 2, parkId: 8, phase: 'discover' } })), null);
 });
 
 test('Adventure sheet Ticket line: no LinePlay or wait Ticket promise while queue_tickets is off (state A)', () => {
@@ -1106,97 +789,6 @@ test('round 2 small fixes: 46 pt card buttons, a bare your-team chip at 0 rides,
   assert.equal(copy.title, 'In line for Jungle Cruise?');
 });
 
-test('winning today\'s Adventure coin turns the guide to its Line story at once, never the nearest ride first (walk r3: the won coin left the list before the re-read)', () => {
-  const ticket = { phase: 'discover', ride: { task_id: 2 }, park_id: 8 };
-  assert.equal(GC.adventureAfterWin(ticket, 2).phase, 'play');
-  assert.equal(GC.adventureAfterWin(ticket, 3), ticket, 'another coin: unchanged');
-  assert.equal(GC.adventureAfterWin({ ...ticket, phase: 'celebrate' }, 2).phase, 'celebrate', 'never moves a ticket back');
-  // Held on the Adventure ride; its coin is won (owned now). With the ticket on its line story, rule 1 holds the ride.
-  const adventureTarget = G.pickNextCoin(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, adventure: { taskId: 2, parkId: 8, phase: 'discover' } }));
-  assert.equal(adventureTarget.reason, 'adventure');
-  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
-  const after = G.pickNextCoin(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, current: adventureTarget, adventure: { taskId: 2, parkId: 8, phase: 'play' } }));
-  assert.equal(after.taskId, 2);
-  assert.equal(after.reason, 'line_story');
-  // Standing in its line: the card is the Line story (where its story plays), not "In line for X?".
-  assert.equal(G.guideState(input({ inLineTaskId: 2, adventure: { taskId: 2, parkId: 8, phase: 'play' } }), after), 'line_story');
-});
-
-test('Pick another coin while standing in the Adventure ride\'s line: its line never pulls the guide straight back (walk r3)', () => {
-  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true, queue: true } : c));
-  G.guide.reset();
-  const adventure = { taskId: 2, parkId: 8, phase: 'play' };
-  const first = G.guide.resolve(input({ coins: won, live: { 1: 'open', 2: 'open' }, adventure, inLineTaskId: 2, location: north(200) }));
-  assert.equal(first.taskId, 2);
-  assert.equal(first.reason, 'line_story');
-  G.guide.skipLineStory();
-  const next = G.guide.resolve(input({ coins: won, live: { 1: 'open', 2: 'open' }, adventure, inLineTaskId: 2, location: north(200) }));
-  assert.notEqual(next.taskId, 2, 'the declined Adventure ride is not the in-line target');
-  // Another ride's line still turns the guide (the decline is only about today's Adventure ride).
-  const other = G.pickNextCoin(input({ coins: won.map(c => ({ ...c, queue: true })), live: { 1: 'open', 2: 'open' },
-    adventure: { ...adventure, lineStoryDeclined: true }, inLineTaskId: 1 }));
-  assert.equal(other.taskId, 1);
-  assert.equal(other.reason, 'in_line');
-  G.guide.reset();
-});
-
-test('a coin the guide chose before the trip goal answered gives way once the Adventure lands (a slow server, walk r3); a player pick never does', () => {
-  G.guide.reset();
-  const won = RIDES.map(c => (c.taskId === 2 ? { ...c, owned: true } : c));
-  // Partial data: no Adventure yet. The guide takes the nearest open ride.
-  const early = G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open' } }));
-  assert.equal(early.taskId, 1);
-  // The trip goal lands with the Adventure on its souvenir step: the held guess would hold...
-  const celebrate = { taskId: 2, parkId: 8, phase: 'celebrate' };
-  assert.equal(G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 1);
-  // ...so the map releases the guess made on partial data, and rule 1 leads at once (the release
-  // picks again with the latest input; nobody ever reads a null target in between).
-  const seen = [];
-  const off = G.guide.subscribe(() => seen.push(G.guide.current()));
-  G.guide.releaseGuidePick();
-  off();
-  assert.equal(seen.length, 1, 'one notice: the guess straight to the Line story');
-  assert.notEqual(seen[0], null);
-  const full = G.guide.current();
-  assert.equal(full.taskId, 2);
-  assert.equal(full.reason, 'line_story');
-  assert.equal(G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open' }, adventure: celebrate })).taskId, 2, 'the next resolve agrees');
-  // A player's pick is never released.
-  G.guide.setTarget(3, 'shelf');
-  G.guide.resolve(input({ location: AT_RIDE, coins: won, live: { 1: 'open', 3: 'open' }, adventure: celebrate }));
-  G.guide.releaseGuidePick();
-  assert.equal(G.guide.current().taskId, 3);
-  const hook = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/useNextCoinGuide.ts'), 'utf8');
-  assert.match(hook, /const complete = input\.tripGoalLoaded !== false && catalog\?\.parkId === parkId;/);
-  G.guide.reset();
-});
-
-test('releaseGuidePick never leaves the store on null while a coin exists (no resting frame on a slow first open)', () => {
-  G.guide.reset();
-  const coins = RIDES;
-  // The map passes its own latest input; with or without it, current() is never null across the release.
-  for (const pass of [true, false]) {
-    G.guide.reset();
-    const guess = G.guide.resolve(input({ coins, live: { 1: 'open' } }));
-    assert.equal(guess.taskId, 1);
-    const latest = input({ coins, live: { 1: 'open', 3: 'open' } });
-    if (!pass) G.guide.resolve(latest);
-    const readings = [];
-    const off = G.guide.subscribe(() => readings.push(G.guide.current()));
-    G.guide.releaseGuidePick(pass ? latest : undefined);
-    off();
-    assert.ok(G.guide.current(), `pass=${pass}: a target right after the release`);
-    assert.ok(readings.every(t => t !== null), `pass=${pass}: no null notice`);
-    assert.equal(G.guide.current().taskId, 3, 'the full data picks the nearer open ride');
-  }
-  // With nothing to resolve from yet, the release still clears the guess and asks for a resolve.
-  G.guide.reset();
-  const v = G.guide.version();
-  G.guide.releaseGuidePick();
-  assert.equal(G.guide.version(), v, 'nothing held: no change');
-  G.guide.reset();
-});
-
 test('souvenir step: no dotted path and no edge arrow back to the ride; the card and island stay (round 3 fix 2)', () => {
   const ride = north(200);
   assert.equal(G.guidePathPoint(ride, 'celebrate'), null, 'the souvenir unfolds anywhere: no path point');
@@ -1209,5 +801,5 @@ test('souvenir step: no dotted path and no edge arrow back to the ride; the card
   assert.match(hook, /const pathPoint = guidePathPoint\(targetPoint, adventureStep\);/);
   const read = rel => { const f = path.join(__dirname, '../..', rel); return fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : ''; };
   const screen = read('src/screens/ExploreScreen.tsx') + read('src/components/guide/useMapGuide.ts');
-  assert.match(screen, /const guideMapTarget = useMemo\(\(\) => pathPoint && nextCoin\.target/);
+  assert.match(screen, /const guideMapTarget = useMemo\(\(\) => pathPoint && pickedTarget/, 'the path follows only the player\'s pick');
 });

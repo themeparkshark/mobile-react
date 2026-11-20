@@ -10,7 +10,7 @@
 import type { GuideState, GuideTarget } from './nextCoin';
 import { shortParkName } from '../../helpers/parkName';
 import { plainRideName } from '../../helpers/plainRideName';
-import { TREATS_PER_TICKET, treatMeterLine, type FreeTicketStep } from './freeTickets';
+import { treatMeterLine, type FreeTicketStep } from './freeTickets';
 
 /** What the card's one button does. */
 export type GuideAction =
@@ -24,7 +24,11 @@ export type GuideAction =
   | 'plan'          // home: open the shelf to plan the next park day
   | 'unfold'        // Today's Adventure souvenir: open its sheet and unfold the souvenir
   | 'skip'          // Line story or souvenir: pick another coin (the guide moves on to the next one)
-  | 'story';        // Goodbye: the shelf of the park you just left, with today's park story on top
+  | 'story'         // Goodbye: the shelf of the park you just left, with today's park story on top
+  | 'near_me'       // NEAR ME: every coin not yet won, one identical row each (the player picks)
+  | 'get_tickets'   // the Get Tickets sheet (free ways first)
+  | 'clear'         // the X on YOUR PICK: clear the player's own pick
+  | 'ok';           // the arrive card's OK: the welcome is read
 
 export interface GuideButton {
   readonly label: string;
@@ -50,6 +54,55 @@ export interface GuideCardCopy {
   readonly badge?: 'gift' | 'ticket' | null;
   /** The screen-reader sentence for the whole card. */
   readonly a11y: string;
+  /** YOUR PICK: the X that clears the player's own pick. */
+  readonly clear?: GuideButton | null;
+  /** The target's served price as Ticket pictures (filled up to the wallet); null hides them. */
+  readonly pips?: { readonly price: number; readonly held: number | null } | null;
+  /** The park's shelf and the next shelf gift ("9 of 40 · 1 more: +3 Tickets"); the bar only when the gift is served. */
+  readonly shelfBar?: ShelfBar | null;
+  /** The arrive card's three pictures: tap a coin, walk there, PLAY!. */
+  readonly howTo?: boolean;
+}
+
+/** The park's shelf for the card: coins won of coins here, and the next shelf gift when the arcade server pays one. */
+export interface ShelfBar {
+  readonly won: number;
+  readonly total: number;
+  /** The next gift step (a multiple of 5), or null when no shelf gift is served (today's server). */
+  readonly nextAt: number | null;
+  readonly tickets: number;
+}
+
+/** Every 5th coin won at a park pays 3 Tickets on the arcade server (PLAN section 4). */
+export const SHELF_GIFT_EVERY = 5;
+export const SHELF_GIFT_TICKETS = 3;
+
+/**
+ * The shelf bar from what is known: the server's own shelf_gift when an answer carried one, else the count on the
+ * map, with the next step worked out only while the arcade economy is on (today's server pays no shelf gift). Pure.
+ */
+export function shelfBarFor(input: {
+  readonly won: number; readonly total: number; readonly arcade: boolean;
+  readonly served?: { readonly won?: unknown; readonly total?: unknown; readonly next_at?: unknown; readonly tickets?: unknown } | null;
+}): ShelfBar | null {
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? Math.floor(v) : null);
+  const served = input.served;
+  const won = num(served?.won) ?? Math.max(0, Math.floor(input.won));
+  const total = num(served?.total) ?? Math.max(0, Math.floor(input.total));
+  if (!(total > 0)) return null;
+  const servedNext = num(served?.next_at);
+  const nextAt = servedNext != null && servedNext > won ? servedNext
+    : input.arcade || servedNext != null ? (Math.floor(won / SHELF_GIFT_EVERY) + 1) * SHELF_GIFT_EVERY : null;
+  return { won: Math.min(won, total), total, nextAt: nextAt != null && nextAt <= total ? nextAt : null,
+    tickets: num(served?.tickets) ?? SHELF_GIFT_TICKETS };
+}
+
+/** "9 of 40 coins · 1 more: +3 Tickets", or "9 of 40 coins". */
+export function shelfBarLine(bar: ShelfBar | null | undefined): string | null {
+  if (!bar) return null;
+  const count = `${bar.won} of ${bar.total} ${bar.total === 1 ? 'coin' : 'coins'}`;
+  if (bar.nextAt == null) return count;
+  return `${count} · ${bar.nextAt - bar.won} more: +${bar.tickets} Tickets`;
 }
 
 export interface GuideCopyContext {
@@ -86,7 +139,7 @@ export interface GuideCopyContext {
   readonly adventureStep?: 'play' | 'celebrate' | null;
   /** This park was already welcomed today: the arrive window never says "Welcome to ..." again (fix W1 item 10). */
   readonly welcomed?: boolean;
-  /** Coins the player already owns in this park: a veteran never reads "First coin". */
+  /** Coins the player already owns in this park: a veteran is never told it is their first. */
   readonly ownedHere?: number;
   /**
    * PLAY! is up on the map right now. PLAY! is the one gold button then: the card's own button steps down to a
@@ -101,6 +154,14 @@ export interface GuideCopyContext {
   readonly thenName?: string | null;
   /** The guide moved on because the coin it held closed (T008): that coin's name, said in one line while it stays closed. */
   readonly replacedName?: string | null;
+  /** The park's shelf and next shelf gift (shelfBarFor), for the "pick any coin" and welcome back cards. */
+  readonly shelfBar?: ShelfBar | null;
+  /** Tickets the park day gift paid at this check-in (the arcade server's welcome_tickets_granted), else null. */
+  readonly parkGiftTickets?: number | null;
+  /** The target coin's served price (task.ticket_cost), or null when the server sends none. */
+  readonly targetPrice?: number | null;
+  /** The arcade server is on (flags.arcade_economy): it pays the park day gift every day, so the card may say so. */
+  readonly arcade?: boolean;
 }
 
 /** Within this many meters of its coin, PLAY! is about to rise: the card says "Almost there" (T009), never a number. */
@@ -188,15 +249,19 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
   const name = target?.name ?? '';
   const far = guideDistance(target?.meters ?? null);
   const running = target?.checkRunning ? 'Check it\'s running' : null;
-  const leaving = target?.reason === 'leaves_soon' ? leavesLine(target.leavesOn) : null;
+  const leaving = target?.leavesOn ? leavesLine(target.leavesOn) : null;
   const base = { secondary: null, dots: ctx.adventureDots, pointsAtPlay: false } as const;
   // One title per state on every phone (T004): TODAY'S ADVENTURE only on today's Adventure ride, always with its stamp
   // dots, whatever set the pointer there (the guide, the ticket's FIND THIS COIN, a Wait Times pick).
+  // Every target is the player's own (Dustin, Nov 20): YOUR PICK, or where they stand. never a coin the app chose.
   const kickerFor = () => ctx.adventureDots ? 'TODAY\'S ADVENTURE'
-    : target?.reason === 'chosen' ? 'YOUR NEXT COIN'
-      : target?.reason === 'star_rush' ? 'SHORT WAIT'
-        : target?.reason === 'leaves_soon' ? 'LIMITED COIN'
-          : target?.reason === 'parts' ? 'GET RIDE PARTS' : 'NEXT COIN';
+    : target?.reason === 'parts' ? 'GET RIDE PARTS'
+      : target?.reason === 'in_range' || target?.reason === 'in_line' ? 'READY TO PLAY' : 'YOUR PICK';
+  const price = typeof ctx.targetPrice === 'number' && Number.isFinite(ctx.targetPrice) && ctx.targetPrice > 0 ? Math.floor(ctx.targetPrice) : null;
+  const pips = target && price != null ? { price, held: Number.isFinite(ctx.tickets) ? ctx.tickets : null } : null;
+  const clear: GuideButton | null = target && target.source !== 'guide' && target.reason !== 'in_range' && target.reason !== 'in_line'
+    && target.reason !== 'line_story' ? { label: 'Clear my pick', action: 'clear' } : null;
+  const shelfLine = shelfBarLine(ctx.shelfBar);
   const card = (copy: Omit<GuideCardCopy, 'secondary' | 'dots' | 'pointsAtPlay' | 'a11y'> & Partial<GuideCardCopy>): GuideCardCopy => {
     const out = { ...base, ...copy } as GuideCardCopy;
     // Joined into sentences without doubling a stop ("PARK!. " or "U.S.A.. ").
@@ -225,7 +290,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         kicker: 'NEXT PARK DAY',
         title: ctx.parkName ? `${ctx.parkName}: ${tickets(ctx.tickets)} ready` : `${tickets(ctx.tickets)} ready`,
         // PLAN plans (T016): with no coin planned yet the line says what the button does.
-        line: ctx.planName ? `Next coin: ${ctx.planName}. ${meter}` : `Pick your next coin. ${meter}`,
+        line: ctx.planName ? `Your pick: ${ctx.planName}. ${meter}` : `Tap your shelf to pick a coin. ${meter}`,
         button: { label: 'PLAN', action: 'plan' },
         dots: null,
       });
@@ -236,23 +301,25 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         kicker: 'WELCOME BACK!',
         title: shelf && shelf.total > 0 ? `Your ${park} shelf: ${shelf.owned} of ${shelf.total}` : `Your ${park} shelf is waiting`,
         line: `${tickets(ctx.tickets)} ready`,
-        button: target ? { label: 'GO', action: 'go' } : { label: 'PLAN', action: 'plan' },
+        // The shelf is the player's own place to pick from: never GO to a coin the app holds.
+        button: { label: 'SHELF', action: 'shelf' },
         dots: null,
       });
     }
-    case 'arrive':
+    case 'arrive': {
+      // The park day gift and how to play (tap any coin, walk there, PLAY!): the app names no ride (Dustin, Nov 20).
+      const gift = typeof ctx.parkGiftTickets === 'number' && ctx.parkGiftTickets > 0 ? Math.floor(ctx.parkGiftTickets) : null;
       return card({
         // One welcome per visit: a relaunch or a return to the same park today just names the park.
         kicker: ctx.welcomed ? shortParkName(ctx.parkName).toUpperCase() : `WELCOME TO ${shortParkName(ctx.parkName).toUpperCase()}!`,
-        // A coin you already won (today's Adventure ride, for its line story) is never "First coin", and a
-        // player with coins here already is never told "First coin" either.
-        title: target ? (target.reason === 'line_story' ? `Next: ${possessive(name)} line story`
-          : target.reason === 'parts' ? `Next: ${possessive(name)} Ride Parts`
-            : (ctx.ownedHere ?? 0) > 0 || ctx.welcomed ? `Next coin: ${name}` : `First coin: ${name}`)
-          : ctx.welcomed ? 'Finding your next coin' : 'Every ride has a coin',
-        line: [far, running].filter(Boolean).join(' · ') || null,
-        button: target ? { label: 'GO', action: 'go' } : null,
+        title: gift ? `+${tickets(gift)}: your park day gift` : target ? `Your pick: ${name}` : 'Every ride has a coin. Pick one!',
+        line: gift && target ? `Your pick: ${name}` : null,
+        button: { label: 'OK', action: 'ok' },
+        howTo: true,
+        pips: gift ? null : pips,
+        dots: null,
       });
+    }
     case 'goodbye': {
       const n = Math.max(0, ctx.leaving?.coins ?? 0);
       const left = shortParkName(ctx.leaving?.parkName ?? ctx.parkName);
@@ -267,24 +334,27 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
     case 'walk': {
       // A few steps out, PLAY! is about to rise: "Almost there", never "5 m" with no button (T009).
       const almost = target?.meters != null && target.meters <= ALMOST_THERE_METERS ? 'Almost there' : null;
-      // Why the coin changed by itself, in one line (T008).
-      const why = ctx.replacedName ? `${ctx.replacedName} is closed now` : null;
+      // YOUR PICK: the coin the player chose, how far, its price as Ticket pictures, and X to clear it.
       return card({
         kicker: kickerFor(),
         title: name,
-        line: [almost ?? far, leaving, why ?? running].filter(Boolean).join(' · ') || null,
+        line: [almost ?? far, leaving, running].filter(Boolean).join(' · ') || null,
         button: null,
+        clear,
+        pips,
       });
     }
     case 'here':
       // Standing at the coin, PLAY! is the answer even with no live word yet: a small "Check it's running" (T014).
       // A coin in passing says where the card goes next, so the change back is never a surprise (T003, T008).
+      // No line about a later coin: the card never names where to go after this coin (Dustin, Nov 20).
       return card({
         kicker: kickerFor(),
-        title: 'You\'re here! Tap PLAY!',
-        line: [name, running, ctx.thenName && ctx.thenName !== name ? `Then: ${ctx.thenName}` : null].filter(Boolean).join(' · ') || null,
+        title: `You're at ${name}`,
+        line: ['Tap PLAY!', running].filter(Boolean).join(' · '),
         button: null,
         pointsAtPlay: true,
+        pips,
       });
     case 'line_story': {
       // Step 3: the line story is played, so the souvenir waits. It unfolds anywhere (no walk).
@@ -311,7 +381,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
       return card({
         kicker: 'YOUR WAIT',
         title: `In line for ${name}?`,
-        line: 'Your wait powers its coin',
+        line: ctx.queueTicketsOn ? 'Your wait earns its Parts and 1 Ticket' : 'Your wait earns its Ride Parts',
         button: { label: 'LINEPLAY', action: 'lineplay' },
       });
     case 'claim': {
@@ -320,7 +390,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         // Fix w3 T126: earned Tickets come from stamps, and say so in one word everywhere ("stamp Tickets").
         kicker: 'STAMP TICKETS',
         title: `${n} stamp ${n === 1 ? 'Ticket is' : 'Tickets are'} waiting`,
-        line: name ? `Then win ${name}` : null,
+        line: null,
         button: { label: 'CLAIM', action: 'claim' },
       });
     }
@@ -344,15 +414,15 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         badge: 'ticket',
       });
     case 'need_ticket': {
-      const lines = [`${TREATS_PER_TICKET} treats at home = 1 Ticket.`];
-      if (ctx.freeTryDaily !== false) lines.push('Tomorrow brings a new free try.');
-      if (ctx.queueTicketsOn) lines.push('10 minutes in a ride line earns a Ticket.');
+      // An empty wallet names no ride: "0 Tickets" and the one sheet of free ways (Get Tickets).
+      const ways = [ctx.queueTicketsOn ? '10 minutes in a ride line earns a Ticket.' : null, 'Treats at home earn Tickets.',
+        ctx.arcade ? 'Tomorrow at any park: +3.' : null].filter(Boolean).join(' ');
       return card({
-        kicker: 'NEED A TICKET',
-        title: name ? `Next coin: ${name}` : 'Out of Tickets',
-        // The line names every real way, so there is no SEE WAYS that only repeats it (fix W1 item 6).
-        line: lines.join(' '),
-        button: ctx.queueTicketsOn ? { label: 'LINEPLAY', action: 'lineplay' } : null,
+        kicker: 'TICKETS',
+        title: '0 Tickets',
+        line: ways,
+        button: { label: 'GET TICKETS', action: 'get_tickets' },
+        dots: null,
       });
     }
     case 'level_up':
@@ -363,6 +433,7 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         button: { label: 'LEVEL UP', action: 'level_up' },
         dots: null,
       });
+    case 'pick':
     case 'resting':
     default:
       if (ctx.allOwned) {
@@ -373,33 +444,32 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         return card({ kicker: park.toUpperCase(), title: 'Head back into the park', line: 'The coins wait by the rides',
           button: { label: 'SHELF', action: 'shelf' }, dots: null });
       }
+      // Rides resting for the night: no ride and no sight named; NEAR ME lists what is open (sights always are).
+      if (ctx.ridesResting) {
+        return card({ kicker: 'RIDES ARE RESTING', title: 'Sights stay open', line: shelfLine,
+          button: { label: 'NEAR ME', action: 'near_me' }, dots: null, shelfBar: ctx.shelfBar ?? null });
+      }
+      // Nothing picked: one goal that names no ride, the park's count, and NEAR ME (Dustin, Nov 20).
       return card({
-        kicker: ctx.ridesResting ? 'RIDES ARE RESTING' : park.toUpperCase(),
-        title: ctx.ridesResting ? 'The park is closed' : 'Nothing to win right here',
-        line: 'See you next park day',
-        button: { label: 'SHELF', action: 'shelf' },
+        kicker: park.toUpperCase(),
+        title: 'Win any ride coin',
+        line: shelfLine ?? 'Tap any coin to pick it',
+        button: { label: 'NEAR ME', action: 'near_me' },
         dots: null,
+        shelfBar: ctx.shelfBar ?? null,
       });
   }
 }
 
-/**
- * The resting message when the target is a sight while rides rest: "Rides are resting. Sights stay
- * open: Walt Statue, 60 m". The card keeps its walk or here state; only the words change.
- */
+/** Retired (Nov 20): the resting card names no sight. Returns the card unchanged. */
 export function restingSightCopy(copy: GuideCardCopy, target: GuideTarget | null, ridesResting: boolean): GuideCardCopy {
-  if (!target || target.reason !== 'nearest_sight' || !ridesResting) return copy;
-  const far = guideDistance(target.meters);
-  return {
-    ...copy,
-    kicker: 'RIDES ARE RESTING',
-    title: `Sights stay open: ${target.name}`,
-    line: target.inRange ? 'You\'re here! Tap PLAY!' : far,
-    a11y: `Rides are resting. Sights stay open: ${target.name}${far ? `, ${far}` : ''}.`,
-  };
+  // The guide never picks a sight any more (Dustin, Nov 20), so a sight target is always the player's own pick:
+  // its card stays as it is. Kept so older callers compile; it changes nothing.
+  void target; void ridesResting;
+  return copy;
 }
 
-/** The card's kicker with the park's name on the same line ("NEXT COIN · DISNEYLAND"); home and arrive keep theirs. Pure. */
+/** The card's kicker with the park's name on the same line ("YOUR PICK · DISNEYLAND"); home and arrive keep theirs. Pure. */
 export function cardKicker(kicker: string, parkName: string | null, state: GuideState): string {
   if (!parkName || state === 'arrive') return kicker;
   const park = parkName.toUpperCase();
