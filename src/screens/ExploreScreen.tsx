@@ -156,7 +156,8 @@ import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
-import { retireRungTag, useLadderCounters, useLadderVeteran, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
+import { currentAppOpen, retireRungTag, useLadderCounters, useLadderVeteran, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
+import { mapTipAllowed, markMapTipShown } from '../components/map/mapChrome';
 import { linePlayRoute } from '../components/guide/guideCoins';
 import { guide } from '../services/guide/nextCoin';
 import type { GuideAction } from '../services/guide/guideCopy';
@@ -1472,8 +1473,10 @@ export function ExploreScreenBody() {
     if (rewardsNewKey.includes('trail')) trailRung.markSeen();
     openRewards();
   }, [rewardsNewKey, dailyRung, trailRung, openRewards]);
+  // The home card names a reward to claim: the rail chest drops its number (one cue per reward).
+  const [homeRewardCard, setHomeRewardCard] = useState(false);
   const mapControls = mapControlsCount > 0 ? <TrailReadyPulse pulseKey={trailPulse}>
-    <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} />
+    <RewardsButton model={rewardsModel} onPress={onRewardsPress} isNew={rewardsNew} cardHasIt={homeRewardCard && !atParkNow} />
   </TrailReadyPulse> : null;
   const homeIntroQueue = {
     homeConfirmed: homeLocationConfirmed, onboardingDone: isReady && hasCompleted('onboarding'),
@@ -1487,13 +1490,17 @@ export function ExploreScreenBody() {
     ? null : parkTipFor({ inPark: atParkNow, arrivalLessonDone: isReady && hasCompleted('park_arrival'),
       // The guide card's "Tap PLAY!" picture replaces Finn's one-time coin card (one card at a time, core loop 4.1).
       rideCoinInRange: false, playUp: playableTaskId != null || playRideShown });
-  const parkTipReady = !mapCovered && mapCalm && mapTipReady({
+  // The park guide card's measured height: the compass hint tucks under the real card (a long name wraps).
+  const [guideCardHeight, setGuideCardHeight] = useState(GUIDE_CARD_HEIGHT);
+  // One map tip per app open (mapChrome rule b): the park tip, the compass hint and the home tip share it.
+  const parkTipReady = !mapCovered && mapCalm && (!parkTip || mapTipAllowed(currentAppOpen(), parkTip)) && mapTipReady({
     mapFocused, finnActive: isActive, rideOpen: redeemFlowOpen, findOpen: showPrepItemModal || !!pendingFind,
     dialogOpen: showTooFarModal || showCommunityCenterModal || homeIntroOpen || !!frightEngine.tutorial,
     bossOrChest: bossOpen || bossOccluded || dailyGiftOccluded || (!!bossMap.moment && bossMap.moment.phase !== 'settled'),
     adventureOpen: adventureOccluded, coinFlying: !!pendingCollect || !!collectFlight,
   });
   useEffect(() => { setParkTipShowing(!!player && !!parkTip && parkTipReady); }, [player, parkTip, parkTipReady]);
+  useEffect(() => { if (parkTip && activeTip === parkTip) markMapTipShown(currentAppOpen(), parkTip); }, [parkTip, activeTip]);
   // Park help page 1 ("Win ride coins") opens by itself once, on the first park arrival on this build,
   // only for an account that never had Finn's park lesson here (core loop 4.3 and 5.11). New players see
   // the same picture inside Finn's hand-off, so the guide card is the next thing on their screen.
@@ -1908,7 +1915,7 @@ export function ExploreScreenBody() {
           onCatchUnavailable={onHomeCatchUnavailable}
           refreshVersion={homeCollectionVersion} homeLocationConfirmed={homeLocationConfirmed}
           introAllowed={mapOnScreen && homeIntroAllowed} introEligible={mapFocused && homeIntroEligible}
-          onIntroOpenChange={setHomeIntroOpen} onIntroOwedChange={setHomeIntroOwed} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
+          onIntroOpenChange={setHomeIntroOpen} onIntroOwedChange={setHomeIntroOwed} onRewardCardChange={setHomeRewardCard} chestButton={mapControls} chestButtonCount={mapControlsCount} compassHintReady={parkTipReady} highlightNearestFind={highlightNearestFind}
           parkStory={activeParkProject && !finnOwnsMap ? { title: activeParkProject.title, points: activeParkProject.total_points,
             goal: activeParkProject.goal_points, onPress: openParkStory } : null}
           eventChip={liveEvt.event?.include_home && !finnOwnsMap ? <EventHomeChip event={liveEvt.event} onPress={() => setEventOpen(true)} /> : null}
@@ -2153,7 +2160,7 @@ export function ExploreScreenBody() {
           style={{ position: 'absolute', top: slotTop, left: 0, right: GUIDE_CARD_RIGHT, height: GUIDE_CARD_HEIGHT + 8, zIndex: 40 }} />}
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ? parkLabel(park) : null}
-          coinUrl={guideCoinUrl} top={slotTop} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
+          coinUrl={guideCoinUrl} top={slotTop} onHeight={setGuideCardHeight} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
           loading={nextCoin.state === 'arrive' && !nextCoin.target}
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
@@ -2187,6 +2194,7 @@ export function ExploreScreenBody() {
         <Map onPress={() => { setSelectedTask(null); setFocusedFromChecklist(null); setMapFocusRequest(null); setClusterFan(null); }}
           coverHost="screen"
           hintReady={parkTipReady && !parkTipShowing}
+          tipCard={guideShown ? { rect: { x: 12, y: slotTop, w: WINDOW_WIDTH - GUIDE_CARD_RIGHT - 12, h: guideCardHeight }, key: String(guideTargetId ?? 'guide') } : null}
           sharkCheer={openRedeemable?.type === 'task' || openRedeemable?.type === 'secret_task'}
           underShark={underShark}
           onUserPan={() => setClusterFan(null)}

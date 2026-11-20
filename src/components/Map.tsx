@@ -64,6 +64,8 @@ import { chromeHeal, touchHeal, useCommitHeal } from './map/alive/commitHeal';
 import { MOTION_PROBE, MotionProbeFrames, probeCamera, probeCount } from '../dev/motionProbe';
 import { useTrail } from '../services/trail/TrailProvider';
 import { mapTrailOf } from './map/mapTrail';
+import { mapTipAllowed, mapTipGate, markMapTipShown, tipSpot, TIP_CARD_SETTLE_MS, type Rect as ChromeRect } from './map/mapChrome';
+import { currentAppOpen } from '../services/reveal/revealLadder';
 
 type LatLng = { latitude: number; longitude: number };
 
@@ -155,7 +157,7 @@ export function railColumnHeight(buttons: number): number {
   return buttons <= 0 ? 0 : buttons * RAIL_BUTTON + (buttons - 1) * RAIL_GAP;
 }
 
-export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, guideSticky = false, returnAfterMs = null, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false, underShark = null }: {
+export default function Map({ children, onPress, focusCoordinate, controlsTop = 72, hintReady = false, sharkCheer = false, sharkLook = 0, sharkHop = 0, trail = null, onZoomChange, guideTarget, guideSticky = false, returnAfterMs = null, ambientPaused = false, ambientFrozen = false, crowdHaze = null, sunOverride, projector, snapshotter, extraControls, extraControlsCount, railFloor = 0, chromeHidden = false, fright = null, onUserPan, declutter = null, coverHost = 'self', trailHidden = false, underShark = null, tipCard = null, tipObstacles }: {
   readonly children: ReactNode;
   readonly onPress?: () => void;
   /** Move the camera here; `zoom` defaults to the ride focus zoom. */
@@ -201,6 +203,13 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   readonly onUserPan?: () => void;
   /** The screen says the player is free (no dialog, chest, lesson or game): the compass may show its one-time hint. */
   readonly hintReady?: boolean;
+  /**
+   * The top slot's card on this map (its rect and a key that changes when a new card arrives): the compass hint
+   * never covers it and waits while it slides in (mapChrome rule b).
+   */
+  readonly tipCard?: { readonly rect: ChromeRect; readonly key: string } | null;
+  /** What else the hint must not cover: markers, edge arrows, chips (map container points). */
+  readonly tipObstacles?: readonly ChromeRect[];
   /** Who draws the loading cover: the map itself, or the screen above its HUD (MapLaunchCover). */
   readonly coverHost?: 'self' | 'screen';
   /** Something to catch right here (a ride coin in range): the shark perks up and cheers now and then. */
@@ -885,12 +894,38 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
   }, [liveTrail?.readyCount, react]);
 
   // One-time hint on the compass, once the map is up and calm (useOneTimeTip: one tip at a time).
-  const compassTip = useOneTimeTip('map_compass', hintReady && screenFocused && appActive && focusedOnPlayer && !covered && !chromeHidden);
+  // The hint fits or waits (mapChrome rule b): beside the compass, else tucked under the top card, never over a
+  // card, a marker, an edge arrow or the shark; never while the card is arriving; one map tip per app open.
+  const cardKey = tipCard?.key ?? null;
+  const [cardChangedAt, setCardChangedAt] = useState<number | null>(null);
+  const [settleTick, setSettleTick] = useState(0);
+  useEffect(() => {
+    if (cardKey == null) { setCardChangedAt(null); return; }
+    setCardChangedAt(Date.now());
+    const timer = setTimeout(() => setSettleTick(n => n + 1), TIP_CARD_SETTLE_MS + 50);
+    return () => clearTimeout(timer);
+  }, [cardKey]);
+  const compassSpot = useMemo(() => {
+    if (!viewSize) return null;
+    const anchor = { x: viewSize.width - 16 - 54, y: controlsTop, w: 54, h: 54 };
+    // The shark sits at the camera's centre while the map follows it.
+    const shark = { x: viewSize.width / 2 - 50, y: viewSize.height / 2 - 60, w: 100, h: 110 };
+    return tipSpot(anchor, [...(tipObstacles ?? []), ...(tipCard ? [tipCard.rect] : []), shark], viewSize, tipCard?.rect ?? null);
+  }, [viewSize, controlsTop, tipObstacles, tipCard]);
+  const compassGate = mapTipGate({ free: hintReady, now: Date.now(), cardChangedAt, allowedThisOpen: mapTipAllowed(currentAppOpen(), 'map_compass'),
+    spot: compassSpot });
+  void settleTick;
+  const compassTip = useOneTimeTip('map_compass', !!compassGate && screenFocused && appActive && focusedOnPlayer && !covered && !chromeHidden);
   // Development captures (EXPO_PUBLIC_DEV_COMPASS_HINT=1): show the hint every launch.
   const [devHint, setDevHint] = useState(__DEV__ && process.env.EXPO_PUBLIC_DEV_COMPASS_HINT === '1');
-  const compassHint = devHint ? { visible: !covered, dismiss: () => setDevHint(false) } : compassTip;
+  const compassHint = devHint ? { visible: !covered && !!compassGate, dismiss: () => setDevHint(false) } : compassTip;
   const compassHintRef = useRef<(() => void) | null>(null);
   compassHintRef.current = compassHint.visible ? compassHint.dismiss : null;
+  useEffect(() => { if (compassTip.visible) markMapTipShown(currentAppOpen(), 'map_compass'); }, [compassTip.visible]);
+  // The spot the hint was claimed in stays put while it shows (no jump if a marker drifts in later).
+  const hintDropRef = useRef<number | null>(null);
+  if (!compassHint.visible) hintDropRef.current = null;
+  else if (hintDropRef.current == null) hintDropRef.current = compassGate?.drop ?? 0;
   const chromeOff = chromeHidden ? 1 : 0;
   // Round 5: every Map commit re-sends the rail's style for a moment (commitHeal), so it never shows a stale frame.
   useCommitHeal(chromeHeal);
@@ -946,7 +981,7 @@ export default function Map({ children, onPress, focusCoordinate, controlsTop = 
         {/* The compass: how the map turns (with you, or north up); panned away, back to the shark. */}
         <FollowButton state={focusedOnPlayer || followHold ? shownMode : 'away'} bearing={cam.bearing} onPress={onFollowButton}
           compassAvailable={haveHeading}
-          reducedMotion={reducedMotion} hint={compassHint.visible && haveHeading} onHintDone={compassHint.dismiss}
+          reducedMotion={reducedMotion} hint={compassHint.visible && (haveHeading || devHint)} hintDrop={hintDropRef.current ?? 0} onHintDone={compassHint.dismiss}
           noCompassFlash={noCompassFlash}
           awayArt={hasDressedShark(lookInventory) ? <View style={styles.awaySharkScale}><MapSharkLook inventory={lookInventory} t={fxClock} kick={fxKick} animate={false} playing={false} /></View> : undefined} />
         {/* The extras always sit in this one wrapper (beside the compass on a short phone, under it

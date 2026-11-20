@@ -34,7 +34,8 @@ import { catchStyleFor } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen, catchDim, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
-import { bannerCovers, clusterFinds, edgeArrowPlacement, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
+import { bannerCovers, findFootprint, labelFinds, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
+import { EDGE_TOKEN, edgesAtRest, edgeTokens, mapChrome, offMap, underChrome } from '../../components/map/mapChrome';
 import type { FingerSide } from './PrepItem';
 import { mapStatusLine, peekLine, screenBearing } from './findPresentation';
 import { isStaleHighlight, nearestFind } from './nearestFind';
@@ -73,7 +74,6 @@ const HOME_ART: Record<HomeArt, number | null> = {
 // there are no finds, otherwise at most one slim chip, and the catch badge.
 const EDGE = 16;
 const TOP = 12;
-const LIVE_BAR_ROW = 58; // bar (50) + gap
 const BOTTOM_SLOT = 100 + 76 + 14;
 /** A tapped find's one-line peek stays this long, then leaves on its own. */
 const PEEK_TTL_MS = 5000;
@@ -143,6 +143,8 @@ interface Props {
    * lessons go first, so the daily chest waits for it (core loop 4.3 rule 1).
    */
   onIntroOwedChange?: (owed: boolean) => void;
+  /** The home card names a reward to claim (the rail chest then drops its number: one cue per reward). */
+  onRewardCardChange?: (shown: boolean) => void;
   /** The daily chest button, under the recenter button while today's chest is unclaimed. */
   chestButton?: ReactNode;
   /** Buttons stacked in chestButton (chest and Daily 3), for the map's declutter inset. */
@@ -186,7 +188,7 @@ export interface HomeGuide {
  */
 export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching = null, onCatchCollected, onCatchUnavailable,
   onCatchDone, refreshVersion, homeLocationConfirmed,
-  introAllowed = false, introEligible = false, onIntroOpenChange, onIntroOwedChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
+  introAllowed = false, introEligible = false, onIntroOpenChange, onIntroOwedChange, onRewardCardChange, chestButton, chestButtonCount, highlightNearestFind = null, parkStory = null, eventChip = null,
   compassHintReady = false, quiet = false, firstHunt = false, homeGuide = null }: Props) {
   const [prepItems, setPrepItems] = useState<PrepItemType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -265,9 +267,12 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [sharkLook, setSharkLook] = useState<-1 | 0 | 1>(0);
   const [edgeFinds, setEdgeFinds] = useState<EdgeFind[]>([]);
+  // Treats partly under the map's chrome (a card, a corner button) or the screen edge: they still draw (Dustin, Nov 19:
+  // treats are the Pokemon of this map), only their words drop and the hand looks for a clear one.
+  const [quietPivots, setQuietPivots] = useState<ReadonlySet<number>>(() => new Set());
   const [findSides, setFindSides] = useState<Record<number, FingerSide>>({});
   const [cascadeOn, setCascadeOn] = useState(false);
-  const [findGroups, setFindGroups] = useState<ReturnType<typeof clusterFinds>>({ counts: {}, hidden: [], chromeless: [] });
+  const [findLabels, setFindLabels] = useState<ReturnType<typeof labelFinds>>({ chromeless: [] });
   // The catch reads GPS through a ref, so it never re-renders on a fix.
   const fixRef = useRef({ latestLocationSampleRef, location });
   fixRef.current = { latestLocationSampleRef, location };
@@ -566,8 +571,10 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     queueHaptic('tapLight', 1);
     const key = `far-${item.pivot_id ?? item.id}-${Date.now()}`;
     const pivot = item.pivot_id;
+    // One quiet line (mapChrome rule f): "Report this spot" is a long press on the pill (a long
+    // press on the treat stays a tap: kids press and hold).
     setChip({ key, text: peekLine(item.name, distance), ttlMs: PEEK_TTL_MS,
-      action: pivot != null ? { label: 'Report', hint: HOME_HUNT_COPY.reportTitle, onPress: () => reportSpot(pivot) } : undefined });
+      longPress: pivot != null ? { label: HOME_HUNT_COPY.reportTitle, onPress: () => reportSpot(pivot) } : undefined });
     const here = fixRef.current.location;
     if (here?.latitude == null || here?.longitude == null || item.latitude == null || item.longitude == null) return;
     const [shark, find] = await Promise.all([toLocal(here.latitude, here.longitude), toLocal(item.latitude, item.longitude)]);
@@ -625,8 +632,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     return bannerCovers(point, containerSize, BOTTOM_SLOT);
   };
   // One finger cue on the map at a time: the nearest find in range.
-  const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange)
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed]);
+  const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange && !quietPivots.has(entry.item.pivot_id ?? -1))
+    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed, quietPivots]);
   const fingerRef = useRef<number | null>(null);
   fingerRef.current = fingerPivot;
   // T148: while nothing is in range, the nearest treat bobs a little (one marker, on the map's clock).
@@ -649,21 +656,39 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     if (ridePhotoArt) void preloadRidePhoto(ridePhotoArt.split('|'));
   }, [ridePhotoArt]);
 
-  // Measure finds on screen after each settle: tap-to-open origins and edge arrows for finds off screen.
+  // The map's chrome, laid out once (mapChrome): the top card, the raid chip and the rail, the menu and the Shelf.
+  // A raid chip lives in the rail column (it never pushes the card down); every area here is reserved.
+  const guideShown = !!homeGuide && homeLocationConfirmed && !firstHunt && !quiet;
+  // The card's measured height (a long ride name wraps to two lines on the SE); the design height until it lays out.
+  const [cardHeight, setCardHeight] = useState(GUIDE_CARD_HEIGHT);
+  const onCardHeight = useCallback((h: number) => setCardHeight(current => (h > 0 && Math.abs(current - h) >= 1 ? h : current)), []);
+  const chrome = useMemo(() => mapChrome({ width: containerSize.width, height: containerSize.height,
+    card: guideShown ? { height: cardHeight, rightGap: GUIDE_CARD_RIGHT } : null, raidChip: !quiet && liveBar != null,
+    railExtras: chestButtonCount ?? (chestButton ? 1 : 0), menu: !quiet, shelf: !quiet }),
+  [containerSize.width, containerSize.height, guideShown, cardHeight, quiet, liveBar, chestButtonCount, chestButton]);
+  const reservedRects = useMemo(() => chrome.reserved.map(entry => entry.rect), [chrome]);
+  const reservedRef = useRef<readonly Rect[]>(reservedRects);
+  reservedRef.current = reservedRects;
+  const reservedKey = reservedRects.map(r => `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`).join('|');
+
+  // Measure finds on screen after each settle: tap-to-open origins, and edge arrows for finds wholly off the map.
   useEffect(() => {
     if (mapSettled === 0 || containerSize.width === 0) return;
     let alive = true;
     void (async () => {
       const next = new globalThis.Map<number, { x: number; y: number }>();
       const edges: EdgeFind[] = [];
+      const quiet = new Set<number>();
       for (const { item, distance } of placed) {
         if (item.pivot_id == null || item.latitude == null || item.longitude == null) continue;
         const point = await toLocal(item.latitude, item.longitude);
         if (!alive) return;
         if (!point) continue;
         next.set(item.pivot_id, point);
-        const off = point.x < 0 || point.y < 0 || point.x > containerSize.width || point.y > containerSize.height;
-        if (off) edges.push({ item, point, distance });
+        // Rule c: only a treat with none of its art on the map is an edge arrow. One partly under a button, a card or
+        // the edge draws as its own marker (as in Pokemon GO); its words drop so no text sits under chrome.
+        if (offMap(point, containerSize)) edges.push({ item, point, distance });
+        else if (underChrome(point, reservedRef.current, undefined, containerSize)) quiet.add(item.pivot_id);
       }
       findPoints.current = next;
       // The shark's look-around turns toward the nearest find in range (screen side of it, from the centre).
@@ -681,21 +706,27 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       });
       setFindSides(current => (JSON.stringify(current) === JSON.stringify(sides) ? current : sides));
       const distances = new globalThis.Map(placed.map(entry => [entry.item.pivot_id, entry.distance] as const));
-      const groups = clusterFinds([...next.entries()].map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })));
-      setFindGroups(current => (JSON.stringify(current) === JSON.stringify(groups) ? current : groups));
-      // What each visible find occupies on screen: the HUD row and the peek keep clear of these.
-      const prints = [...next.entries()].filter(([pivot, p]) => !groups.hidden.includes(pivot)
-        && p.x > -40 && p.y > -40 && p.x < containerSize.width + 40 && p.y < containerSize.height + 40)
-        .map(([pivot, p]) => findFootprint(p, pivot === fingerRef.current));
       const here = fixRef.current.location;
       const shark = here?.latitude != null && here?.longitude != null ? await toLocal(here.latitude, here.longitude) : null;
       if (!alive) return;
+      // Every uncaught treat draws as its own marker; only words that would sit on other words drop (rule e). The
+      // hand's treat (the nearest in range, clear of chrome) keeps its words and its hand.
+      const keep = placed.filter(entry => entry.inRange && entry.item.pivot_id != null && !quiet.has(entry.item.pivot_id))
+        .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))[0]?.item.pivot_id ?? null;
+      // A caught find (hidden while the list refresh catches up) takes no label room.
+      const labels = labelFinds([...next.entries()].filter(([pivot]) => !caughtPivots.has(pivot))
+        .map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })), { keep, quiet });
+      setFindLabels(current => (JSON.stringify(current) === JSON.stringify(labels) ? current : labels));
+      // What each find on the map occupies on screen: the chips, the peek and the tip keep clear of these.
+      const prints = [...next.entries()].filter(([pivot, p]) => !caughtPivots.has(pivot) && !offMap(p, containerSize))
+        .map(([pivot, p]) => findFootprint(p, pivot === fingerRef.current));
       if (shark) prints.push(sharkFootprint(shark));
       setFootprints(current => (JSON.stringify(current) === JSON.stringify(prints) ? current : prints));
-      setEdgeFinds(edges.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)).slice(0, 4));
+      setEdgeFinds(edges.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)));
+      setQuietPivots(current => (current.size === quiet.size && [...quiet].every(p => current.has(p)) ? current : quiet));
     })();
     return () => { alive = false; };
-  }, [mapSettled, placed, containerSize.width, containerSize.height, toLocal]);
+  }, [mapSettled, placed, containerSize.width, containerSize.height, toLocal, reservedKey, caughtPivots]);
 
   // Stable callbacks for the catch (refs, so memo holds across renders).
   const callbacks = useRef({ onCatchCollected, onCatchUnavailable, onCatchDone, onPrepItemNearby, catchRequest });
@@ -752,20 +783,22 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     catchRef.current?.primeRide(prepItem, findPoints.current.get(prepItem.pivot_id) ?? null);
     state.onPrepItemNearby(prepItem, prepItem.pivot_id, 'tap');
   }, []);
-  const rowTop = TOP + (liveBar ? LIVE_BAR_ROW : 0);
-  const guideShown = !!homeGuide && homeLocationConfirmed && !firstHunt && !quiet;
-  const guideBlock = guideShown ? GUIDE_CARD_HEIGHT + 8 : 0;
-  // Edge tokens (48 pt) centre below the chip row's home row, so a live boss bar pushes both down together.
+  // The top slot never drops for a raid: the raid chip sits in the rail column at the top right (mapChrome).
+  const rowTop = chrome.cardTop;
+  const guideBlock = guideShown ? cardHeight + 8 : 0;
+  // Edge tokens (48 pt) centre below the chip row's home row.
   const edgeTop = rowTop + guideBlock + 30 + 8 + 24;
-  const tokens = useMemo(() => edgeFinds.map(edge => {
-    const at = edgeArrowPlacement(edge.point, containerSize, { top: edgeTop, bottom: 190, side: 30 });
-    return { x: at.x - 28, y: at.y - 28, w: 56, h: 56 };
-  }), [edgeFinds, containerSize, edgeTop]);
+  // One arrow per side, slid clear of the chrome, touching arrows merged (mapChrome rule d). While a treat is in
+  // range the hand on it is the one next thing, so the arrows step back until it is caught (rule g).
+  const edgeArrows = useMemo(() => (edgesAtRest({ targetInRange: fingerPivot != null })
+    ? edgeTokens(edgeFinds, containerSize, { top: edgeTop, bottom: 190, side: 30 }, reservedRects) : []),
+  [edgeFinds, containerSize, edgeTop, reservedRects, fingerPivot]);
+  const tokens = useMemo(() => edgeArrows.map(t => ({ x: t.x - EDGE_TOKEN / 2 - 4, y: t.y - EDGE_TOKEN / 2 - 4, w: EDGE_TOKEN + 8, h: EDGE_TOKEN + 8 })), [edgeArrows]);
   const obstacles = useMemo(() => footprints.concat(tokens), [footprints, tokens]);
   // The chip row drops a row when a find (or an edge token) sits under it, so a tap there reaches the find.
-  // The guide card takes the top row (it drops a row while a find sits under it, like the chips); the chips sit under it.
-  const cardTop = useMemo(() => (guideShown && containerSize.width > 0
-    ? hudRowTop(obstacles, rowTop, containerSize.width - GUIDE_CARD_RIGHT - 12) : rowTop), [guideShown, obstacles, rowTop, containerSize.width]);
+  // The guide card holds the top slot where mapChrome put it: a treat under it is normal map behavior (Dustin, Nov 19),
+  // so the card never jumps a row for one. The chips sit under it.
+  const cardTop = rowTop;
   const chipsTop = guideShown ? cardTop + guideBlock : rowTop;
   const hudTop = useMemo(() => (hudWidth > 0 ? hudRowTop(obstacles, chipsTop, hudWidth) : chipsTop), [obstacles, chipsTop, hudWidth]);
   // The one next thing (fix pass w4, T007): the treats on this map join what ExploreScreen knows.
@@ -773,6 +806,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const homeStep = useMemo(() => homeGuide ? homeNextStep({ ...homeGuide.next,
     treats: { onMap: treatsOnMap, toTicket: ticket.until, capped: ticket.capped } }) : null, [homeGuide, treatsOnMap, ticket.until, ticket.capped]);
   const homeCopy = homeStep?.copy ?? null;
+  const rewardCard = guideShown && homeStep?.key === 'reward';
+  useEffect(() => { onRewardCardChange?.(rewardCard); }, [rewardCard, onRewardCardChange]);
   const [arcadeOpen, setArcadeOpen] = useState(false);
   const onHomeAction = useCallback((action: HomeAction) => {
     if (!homeStep || !homeGuide) return;
@@ -783,6 +818,13 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   }, [homeStep, homeGuide]);
   // A tapped find's peek docks low, or higher until it covers no find (never another find's timer).
   const slotBottom = chip && containerSize.width > 0 ? peekBottom(obstacles, containerSize, BOTTOM_SLOT, hudTop + 30 + 8, chipWidthFor(chip)) : BOTTOM_SLOT;
+
+  // The compass hint fits around the card, the chips, every treat, the edge arrows and the shark, or it waits.
+  const tipCard = useMemo(() => (guideShown && homeCopy && containerSize.width > 0
+    ? { rect: { x: 12, y: cardTop, w: containerSize.width - GUIDE_CARD_RIGHT - 12, h: cardHeight }, key: `${homeStep?.key ?? ''}:${cardTop}` }
+    : null), [guideShown, homeCopy, containerSize.width, cardTop, cardHeight, homeStep?.key]);
+  const tipObstacles = useMemo(() => obstacles.concat(hudWidth > 0 ? [{ x: 12, y: hudTop, w: hudWidth, h: 30 }] : []),
+    [obstacles, hudWidth, hudTop]);
 
   // Map states are one-line chips too: nothing over the map is ever a card.
   const status = mapStatusLine({ homeLocationConfirmed, isLoading, empty: activePrepItems.length === 0, loadError, rankLine, firstHunt, healGaveUp });
@@ -804,7 +846,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         setContainerSize(current => (current.width === width && current.height === height ? current : { width, height }));
       }}>
       {/* Map with prep items - player marker is handled by Map component */}
-      <Map coverHost="screen" controlsTop={rowTop} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
+      <Map coverHost="screen" controlsTop={chrome.controlsTop} tipCard={tipCard} tipObstacles={tipObstacles} projector={projector} snapshotter={snapshotter} onZoomChange={onMapSettled} focusCoordinate={findFocus}
         sharkLook={sharkLook} sharkHop={sharkHop}
         extraControls={chestButton} extraControlsCount={chestButtonCount} ambientFrozen={catchOpen} chromeHidden={catchOpen} onUserPan={onUserPan}
         hintReady={compassHintReady && !catchOpen && introSeen === true} trailHidden={firstHunt}>
@@ -813,11 +855,11 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
             // Rounded so GPS jitter does not re-render every marker.
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
             animated={animatedPivots.has(prepItem.pivot_id)}
-            hidden={caughtPivots.has(prepItem.pivot_id ?? -1) || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
-            count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1}
+            // Only a catch (or a ridden-off Legendary, gone for good) hides a treat: never grouping, chrome or the edge.
+            hidden={caughtPivots.has(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
             // The find being caught never re-renders mid-catch (a re-render would push its pin's first-render
             // style again for a frame on Fabric: the caught pin flashing back at its spot, wow-map r4).
-            chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && prepItem.pivot_id !== catchingPivot && underBanner(prepItem.pivot_id))}
+            chromeless={findLabels.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && prepItem.pivot_id !== catchingPivot && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}
             fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot}
             idleBob={idlePivot != null && prepItem.pivot_id === idlePivot}
@@ -826,7 +868,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       </Map>
       {/* Kept mounted (no blank remount on return); hidden and inert during a catch. */}
       <Animated.View style={[StyleSheet.absoluteFill, edgesBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
-        <FindEdgeArrows finds={edgeFinds} size={containerSize} onPress={onEdgePress} insetTop={edgeTop} />
+        <FindEdgeArrows tokens={edgeArrows} size={containerSize} onPress={onEdgePress} />
       </Animated.View>
 
       {bottom && <Animated.View style={[styles.bottomSlot, { bottom: slotBottom }, cardFade.style]} pointerEvents={cardFade.pointerEvents}>{bottom}</Animated.View>}
@@ -836,7 +878,7 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
         <Animated.View style={[StyleSheet.absoluteFill, chipsBack]} pointerEvents={catchOpen ? 'none' : 'box-none'}>
           <NextCoinCard testID="home-guide-card" copy={homeCopy} state={homeStep?.key === 'welcome_back' ? 'welcome_back' : 'home'} parkName={null}
             coinUrl={homeStep?.art === 'coin' ? homeStep.coin?.coinUrl ?? null : null} art={homeStep ? HOME_ART[homeStep.art] : null}
-            top={cardTop} onAction={onHomeAction} onCardPress={homeCopy.button ? () => onHomeAction(homeCopy.button!.action) : undefined} />
+            top={cardTop} onHeight={onCardHeight} onAction={onHomeAction} onCardPress={homeCopy.button ? () => onHomeAction(homeCopy.button!.action) : undefined} />
         </Animated.View>
       )}
       {/* Live bosses from home; the team race only when the Home Hunt board is on. */}

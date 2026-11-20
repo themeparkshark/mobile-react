@@ -374,7 +374,7 @@ test('Finn is the only voice in minute one: event chips, park story, live parks 
 
 test('the map finger lands on the find, which breathes a soft ring', () => {
   const src = read('src/screens/ExploreScreen/PrepItem.tsx');
-  assert.match(src, /const pointed = inRange && showFinger;/);
+  assert.match(src, /const pointed = cues\.finger;/);
   assert.match(src, /\{pointed && <Animated\.View style=\{\[styles\.softRing, softRing\]\}/);
   // Fingertip = box centre + the turned half-height; it must land within 12 pt of the art centre.
   const B = 112, w = 34, h = 43;

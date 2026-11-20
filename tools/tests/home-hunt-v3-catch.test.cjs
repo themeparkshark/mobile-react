@@ -456,19 +456,21 @@ test('round 4 variety: every ride is a config with one paint for the live scene 
   assert.match(stage, /const gap = box\.w \* 0\.15 \+ 8;/, 'the camera never overlaps the brackets at 1.3x');
 });
 
-test('round 4 map: overlapping finds collapse into one marker with a count; finds under the header drop their chrome', () => {
+test('round 4 map: every treat keeps its own marker (Nov 19); overlapping words drop on the farther one; under the header drops its chrome', () => {
   const edges = loadTs('src/screens/ExploreScreen/findEdges.ts');
-  const out = edges.clusterFinds([
+  const out = edges.labelFinds([
     { pivot: 1, x: 100, y: 300, distance: 30 },
     { pivot: 2, x: 120, y: 310, distance: 20 },
     { pivot: 3, x: 300, y: 300, distance: 10 },
     { pivot: 4, x: 200, y: 20, distance: 40 },
   ]);
-  assert.deepEqual(plain(out.counts), { 2: 2 }, 'the nearer find leads the pair');
-  assert.deepEqual(plain(out.hidden), [1]);
-  assert.deepEqual(plain(out.chromeless), [4]);
+  assert.equal(out.hidden, undefined, 'nothing is hidden or folded');
+  assert.equal(out.counts, undefined, 'no count badges on treats');
+  assert.deepEqual(plain(out.chromeless).sort(), [1, 4], 'the farther of the pair shows its art without words; the header one too');
   const marker = read('src/screens/ExploreScreen/PrepItem.tsx');
-  assert.match(marker, /is_new_variant && count === 1/, "never two NEW tags stacked");
+  // Map Calm (Nov 19): mapChrome.markerCues owns the NEW tag (the target wears the hand instead); no count badge.
+  assert.match(marker, /markerCues\(\{ isNew: !!prepItem\.is_new_variant, inRange, target: showFinger \}\)/, "never two NEW tags stacked");
+  assert.doesNotMatch(marker, /countBadge|×\{count\}/, 'treats never wear a count');
   assert.match(marker, /newBadge, chromeless && styles.chromeOff/, "chrome hides by opacity, never by unmounting");
   assert.match(marker, /groundShadow: \{[^}]*borderRadius: 18[\s\S]*?scaleY: 0\.28/, 'round ground shadow, not a bar');
 });
