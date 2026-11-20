@@ -42,6 +42,7 @@ import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
 import { guide, playerChose } from '../services/guide/nextCoin';
 import { useGuideFlags } from '../services/guide/guideFlags';
+import TicketPips from '../components/tickets/TicketPips';
 import { shelfBarFor, shelfGiftHeaderLine } from '../services/guide/guideCopy';
 import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
@@ -546,6 +547,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     onChooseGoal={canChooseGoal ? () => chooseNextCoin(task as TaskType) : undefined}
                     onShowOnMap={canChooseGoal && inThisPark
                       ? () => goToCoin(task as TaskType, 'shelf_slot') : undefined} />
+                  {/* Its price as Ticket pictures under the empty slot, filled up to the wallet (arcade plan, section 6). */}
+                  {canChooseGoal && <TicketPips testID={`shelf-slot-pips-${task.id}`} price={(task as TaskType).ticket_cost}
+                    held={viewer?.tickets ?? null} size="island"
+                    style={{ position: 'absolute', top: coinSize + 2, left: 0, right: 0, justifyContent: 'center' }} />}
                   {/* Parts you earned in this ride's line before winning its coin wait in its slot. */}
                   {canChooseGoal && partsWaiting(task) > 0 && <View pointerEvents="none" style={{ position: 'absolute',
                     right: -6, bottom: -4, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#fff8e4',

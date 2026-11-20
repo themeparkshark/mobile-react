@@ -182,7 +182,7 @@ export const SUGGESTION_SOURCES: ReadonlySet<string> = new Set(['win_card', 'lin
  * Get Tickets, their MY GOAL, a Find from their own checklist, a coin card's GET RIDE PARTS, or LinePlay's DONE putting
  * back the pick it found. Anything else (a win card, a recap, a ride log, Daily 3's nearest ride) is ignored.
  */
-export const PLAYER_SOURCES: ReadonlySet<string> = new Set(['pick', 'callout', 'coin_card', 'shelf', 'shelf_next', 'near_me',
+export const PLAYER_SOURCES: ReadonlySet<string> = new Set(['pick', 'callout', 'coin_card', 'shelf', 'shelf_next', 'shelf_slot', 'coin_guide', 'near_me',
   'wait_times', 'my_goal', 'find', 'coin_parts', 'get_tickets', 'lineplay_done']);
 /** Standing this close to today's Adventure ride, its Line story always leads (its line is right here). */
 export const LINE_STORY_NEAR_METERS = 60;

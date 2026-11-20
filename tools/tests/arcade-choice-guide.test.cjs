@@ -86,7 +86,7 @@ test('C1: setTarget accepts only player sources; win card, recap, ride log and a
     assert.equal(G.guide.resolve(base), null, `${source} never moves the pointer`);
     assert.equal(G.guide.plan(), null);
   }
-  for (const source of ['callout', 'coin_card', 'shelf', 'shelf_next', 'near_me', 'wait_times', 'my_goal', 'find', 'get_tickets']) {
+  for (const source of ['callout', 'coin_card', 'shelf', 'shelf_next', 'shelf_slot', 'coin_guide', 'near_me', 'wait_times', 'my_goal', 'find', 'get_tickets']) {
     G.guide.reset();
     G.guide.setTarget(66, source);
     assert.equal(G.guide.resolve(base)?.taskId, 66, `${source} is the player's own pick`);
