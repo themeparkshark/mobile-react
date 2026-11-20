@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Image } from 'expo-image';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import useAmbientLoop from '../../power/useAmbientLoop';
@@ -8,7 +8,7 @@ import type { PrepItemType } from '../../models/prep-item-type';
 import { BRAND } from '../../ui';
 import { findImageSource } from './PrepItem';
 import { mapGlowColor } from './findPresentation';
-import { edgeArrowPlacement } from './findEdges';
+import type { EdgeToken } from '../../components/map/mapChrome';
 
 export interface EdgeFind {
   readonly item: PrepItemType;
@@ -18,14 +18,13 @@ export interface EdgeFind {
 }
 
 /**
- * Finds off screen get a small arrow on the screen edge with the item's own
- * thumbnail, pointing the way (like a "Nearby" tracker). Tapping one gives the
- * walk-closer nudge.
+ * Finds off screen (or under the map's chrome) get a small arrow on the screen edge with the item's own
+ * thumbnail, pointing the way (like a "Nearby" tracker). The map chrome layout (mapChrome.edgeTokens) already
+ * placed them: one per side, clear of every button and card, never touching; a token standing for more than
+ * one find wears a small count. Tapping one gives the walk-closer nudge for its nearest find.
  */
-function FindEdgeArrows({ finds, size, onPress, insetTop = 70 }: {
-  readonly finds: readonly EdgeFind[];
-  /** Where the top edge's tokens centre: below the HUD chip row (and the live bar when it shows). */
-  readonly insetTop?: number;
+function FindEdgeArrows({ tokens, size, onPress }: {
+  readonly tokens: readonly EdgeToken<EdgeFind>[];
   readonly size: { width: number; height: number };
   readonly onPress: (find: EdgeFind) => void;
 }) {
@@ -36,19 +35,21 @@ function FindEdgeArrows({ finds, size, onPress, insetTop = 70 }: {
   useAmbientLoop(
     () => { pulse.value = 0; pulse.value = withRepeat(withSequence(withTiming(1, { duration: 300, easing: Easing.out(Easing.cubic) }), withTiming(0, { duration: 600, easing: Easing.inOut(Easing.quad) })), -1, false); },
     () => { cancelAnimation(pulse); pulse.value = 0; },
-    focused && finds.length > 0,
+    focused && tokens.length > 0,
   );
   const pulseStyle = useAnimatedStyle(() => ({ transform: [{ scale: 1 + 0.15 * pulse.value }] }));
   if (size.width === 0) return null;
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      {finds.map(find => {
-        const at = edgeArrowPlacement(find.point, size, { top: insetTop, bottom: 190, side: 30 });
+      {tokens.map(token => {
+        const find = token.lead;
+        const at = token;
         const art = findImageSource(find.item);
         const color = mapGlowColor(find.item.rarity);
         return (
           <Pressable key={find.item.pivot_id ?? find.item.id} accessibilityRole="button"
-            accessibilityLabel={`${find.item.name}, off screen. Show how far.`} onPress={() => onPress(find)}
+            accessibilityLabel={token.count > 1 ? `${find.item.name} and ${token.count - 1} more this way. Show how far.` : `${find.item.name}, off screen. Show how far.`}
+            onPress={() => onPress(find)}
             style={[styles.wrap, { left: at.x - 24, top: at.y - 24 }]}>
             <Animated.View style={[styles.fill, pulseStyle]}>
             <View style={[styles.arrow, { transform: [{ rotate: `${at.angleDeg}deg` }] }]}>
@@ -59,6 +60,7 @@ function FindEdgeArrows({ finds, size, onPress, insetTop = 70 }: {
               {art && <Image source={art} style={styles.art} contentFit="contain" transition={0} cachePolicy="memory-disk"
                 recyclingKey={String(find.item.pivot_id ?? find.item.id)} />}
             </View>
+            {token.count > 1 && <View style={styles.count}><Text style={styles.countText}>×{token.count}</Text></View>}
             </Animated.View>
           </Pressable>
         );
@@ -79,4 +81,8 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', shadowColor: BRAND.shadow, shadowOffset: { width: 0, height: 2 },
     shadowRadius: 0, shadowOpacity: 0.25 },
   art: { width: 28, height: 28 },
+  // The same count badge a grouped treat marker wears ("×2": navy, white edge).
+  count: { position: 'absolute', right: -4, bottom: 0, backgroundColor: BRAND.navy, borderWidth: 2, borderColor: BRAND.white,
+    borderRadius: 10, paddingHorizontal: 5 },
+  countText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 13 },
 });

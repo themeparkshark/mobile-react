@@ -315,8 +315,10 @@ test('round 2: Whack Play again has one start (the shell count calls onStart at 
 
 test('round 2: Memory Play again waits for the new deal (a new board clears the dealt flag)', () => {
   const mem = read('src/games/memory/MemoryGame.tsx');
-  const nb = mem.slice(mem.indexOf('const newBoardView'), mem.indexOf('const newBoardView') + 600);
-  assert.match(nb, /setStageDealt\(false\)/);
+  // w5 N04: a same-shape re-deal before GO resets the mounted cards in place (no new board); a new board still waits.
+  const start = mem.indexOf('const newBoardView');
+  const nb = mem.slice(mem.indexOf('    cards.current = [];', start), mem.indexOf('/** Place and deal every card', start));
+  assert.match(nb, /setBoardKey\(\(k\) => k \+ 1\);[\s\S]*setStageDealt\(false\)/);
 });
 
 test('round 3: GO is the money frame (pop to 1.3, a held beat at full size, then the burst, the fan and the flash)', () => {

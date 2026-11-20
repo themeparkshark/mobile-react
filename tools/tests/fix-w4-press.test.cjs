@@ -192,8 +192,10 @@ test('the gate marks an ask it never drew as unshown, and the offer row is busy 
 
 test('the gate is presented with no UIKit animation and fades on the UI thread (UIKit\'s fade reported 1.3 to 5.3 s late)', () => {
   const gate = src('src/components/GrownUpGate.tsx');
-  assert.match(gate, /<Modal visible=\{closing === null && !devRefuse\(\)\} transparent animationType="none"/);
-  assert.match(gate, /<Animated\.View style=\{\[styles\.scrim, inSheet \? null : fadeStyle\]\}>/);
+  // Native sheets (the kill switch's path) still present with no UIKit animation; in-tree sheets (fix pass w5) fade on the UI thread.
+  assert.match(gate, /<Modal visible=\{closing === null && !devRefuse\(\)\} transparent animationType=\{inTreeRef\.current && !reduced \? 'fade' : 'none'\}/);
+  // Fix pass w5 (34dd34af): the scrim also marks a touch that lands while the gate is closing, so a prop may follow the style.
+  assert.match(gate, /<Animated\.View style=\{\[styles\.scrim, inSheet \? null : fadeStyle\]\}[\s>]/);
   assert.match(gate, /fade\.value = withTiming\(0, \{ duration: reduced \? 0 : GATE_FADE_OUT_MS \}, done => \{ if \(done\) runOnJS\(closeAfterFade\)\(ok\); \}\);/);
   assert.match(gate, /setTimeout\(\(\) => closeAfterFade\(ok\), GATE_FADE_OUT_MS \+ 250\)/, 'a fade that never reports still closes');
 });

@@ -25,6 +25,8 @@ import { haptic } from '../../gamekit/Haptics';
 import { BRAND, FONT, GameButton, GameIcon, type GameIconName } from '../../ui';
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import { useAmbient } from '../../services/money/useAmbient';
+import { SPRING } from '../../ui/motion';
+import { touchHeal, useCommitHeal } from '../map/alive/commitHeal';
 import RealMoneyMark from '../RealMoneyMark';
 import RewardBurst from '../RewardBurst';
 import { unitWord } from '../../services/money/copy';
@@ -200,6 +202,28 @@ export function Contents({ grants, size = 'big', tone = 'onBlue' }: { grants: Sh
       ))}
     </View>
   );
+}
+
+/**
+ * An offer row's own entrance on the UI thread (fix pass w5, W4-SMOKE-3a). It replaces Reanimated's entering layout
+ * animation, which inside a native sheet (the coin card, the win card, the coin level card) kept the laid-out row
+ * invisible for seconds: a blank gap where the row already was. On this Fabric build every re-render sends an
+ * Animated view's first-render style again (commitHeal.ts), so the style names a commit heal: after any commit of the
+ * row's host it re-sends its live value instead of resting on the first frame's opacity 0. Reduce Motion: drawn at once.
+ */
+export function useRowEntrance(on: boolean, delayMs: number) {
+  const reduced = useUiReducedMotion();
+  const enter = useSharedValue(reduced ? 1 : 0);
+  const heal = useCommitHeal();
+  useEffect(() => {
+    if (!on) return;
+    if (reduced) { enter.value = 1; return; }
+    enter.value = withDelay(delayMs, withSpring(1, SPRING.settle));
+  }, [on, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
+  return useAnimatedStyle(() => {
+    touchHeal(heal);
+    return { opacity: Math.min(1, enter.value * 1.4), transform: [{ translateY: (1 - enter.value) * 10 }] };
+  });
 }
 
 /** The art with a soft bob (UI thread; still under Reduce Motion). */

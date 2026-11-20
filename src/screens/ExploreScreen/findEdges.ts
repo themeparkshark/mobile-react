@@ -19,23 +19,44 @@ export function edgeArrowPlacement(point: { x: number; y: number }, size: { widt
 }
 
 /**
- * Overlapping finds collapse into one marker with a count ("×2"), never two NEW tags stacked: the
- * nearest find in a group leads and the rest hide. Finds whose spot sits within `clearTop` of the
- * map's top edge (under the header) keep their art but drop their chrome (pill, dot, badge, finger).
+ * What a find draws on screen around its spot: the NEW tag above its art, the art, and the distance pill that
+ * hangs under it (rule e: two of these never put their words on top of each other).
  */
-export function clusterFinds(points: readonly { pivot: number; x: number; y: number; distance: number | null }[],
-  radius = 44, clearTop = 24 + 34): { counts: Record<number, number>; hidden: number[]; chromeless: number[] } {
-  const order = [...points].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || a.pivot - b.pivot);
-  const counts: Record<number, number> = {};
-  const hidden: number[] = [];
-  const leaders: typeof order = [];
-  for (const point of order) {
-    const lead = leaders.find(l => Math.hypot(l.x - point.x, l.y - point.y) < radius);
-    if (lead) { counts[lead.pivot] = (counts[lead.pivot] ?? 1) + 1; hidden.push(point.pivot); } else leaders.push(point);
-  }
-  const chromeless = leaders.filter(point => point.y < clearTop).map(point => point.pivot);
-  return { counts, hidden, chromeless };
+export function markerBox(point: { x: number; y: number }): Rect {
+  return { x: point.x - 42, y: point.y - 42, w: 84, h: 84 };
 }
+
+/**
+ * Every uncaught treat on the map draws as its own marker (Dustin, Nov 19: "i didnt mind multiple redeemable items on
+ * map thats normaly like pokemon go to see pokemon around you"). Nothing here hides or folds a treat. It only says
+ * which treats drop their words (NEW tag, NEW dot, distance pill, camera badge) so no two labels sit on top of each
+ * other and no label sits under chrome: the nearest treat keeps its words (the hand's treat, `keep`, first), and a
+ * farther one whose box would touch them shows its art alone. `quiet` are treats under a button, a card or the screen
+ * edge (mapChrome.underChrome): their art draws, their words drop. Finds within `clearTop` of the map's top (under the
+ * header) drop their words too. The shark draws on top of any treat under it. GPS spots never move. Pure.
+ */
+export function labelFinds(points: readonly { pivot: number; x: number; y: number; distance: number | null }[],
+  opts: { readonly keep?: number | null; readonly quiet?: ReadonlySet<number>; readonly clearTop?: number } = {}):
+  { chromeless: number[] } {
+  const clearTop = opts.clearTop ?? 24 + 34;
+  const order = [...points].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || a.pivot - b.pivot);
+  const kept = order.find(point => point.pivot === opts.keep);
+  const chromeless: number[] = [];
+  const labelled: Rect[] = [];
+  for (const point of kept ? [kept, ...order.filter(p => p !== kept)] : order) {
+    if (point.y < clearTop || opts.quiet?.has(point.pivot)) { chromeless.push(point.pivot); continue; }
+    // The hand hovers above its treat: its words and the hand both count.
+    const box = point === kept ? union(markerBox(point), findFootprint(point, true)) : markerBox(point);
+    if (labelled.some(other => hits(other, box))) chromeless.push(point.pivot);
+    else labelled.push(box);
+  }
+  return { chromeless };
+}
+
+const union = (a: Rect, b: Rect): Rect => {
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+};
 
 /** Whether a find's map spot sits under the reward banner (its tags would poke through the cascade). */
 export function bannerCovers(point: { x: number; y: number }, size: { width: number; height: number }, bottomSlot: number): boolean {

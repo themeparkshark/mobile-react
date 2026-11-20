@@ -1,4 +1,4 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 
 /**
  * Set while a mounted game waits off stage: under the ride's ticket punch, or under its how-to card on a
@@ -20,3 +20,39 @@ export function useStageHold(): boolean {
  * Null outside a ride challenge's punch.
  */
 export const StageDrawnContext = createContext<(() => void) | null>(null);
+
+/**
+ * Fix pass w5 (N04): the ride try number on a board that stays mounted. TRY AGAIN of the same game keeps the last
+ * board on screen and bumps this instead of mounting a new game: the shell and the game reset in place (score,
+ * clocks, seed, combos, hit boxes, the results lock), so the next try is live in well under a second. 0 outside a
+ * ride challenge and on a try's first mount; a game resets only when it changes after its mount.
+ */
+export const RetryRoundContext = createContext<number>(0);
+
+/**
+ * Fix pass w5 (N04): false while TRY AGAIN's kept board is on screen and counting but the server has not dealt the
+ * new try yet. The board takes taps and counts 2-1-GO at once; the shell opens play (GO's onStart) only once this is
+ * true again, so the try always plays the dealt seed and rules. True everywhere else.
+ */
+export const StageDealtContext = createContext<boolean>(true);
+
+/** The ride try number (see RetryRoundContext). */
+export function useRetryRound(): number {
+  return useContext(RetryRoundContext);
+}
+
+/**
+ * Runs `reset` once each time the retry round changes after the first render (never on mount), in the same commit
+ * as the shell's own reset. The latest `reset` is used, so a game's new seed (dealt with the retry) is read.
+ */
+export function useOnRetryRound(reset: () => void): void {
+  const round = useRetryRound();
+  const last = useRef(round);
+  const resetRef = useRef(reset);
+  resetRef.current = reset;
+  useEffect(() => {
+    if (round === last.current) return;
+    last.current = round;
+    resetRef.current();
+  }, [round]);
+}

@@ -9,6 +9,7 @@ import { hudGlow, hudPunch, rollMs } from '../map/alive/mapWow';
 import { touchHeal, useCommitHeal } from '../map/alive/commitHeal';
 import RollingDigits, { type DigitStream } from './RollingDigits';
 import { hudClock, hudStreamId, onHudPulse } from './hudPulse';
+import { claimHudShown, publishHudShown, releaseHudShown } from './hudShown';
 import shortenNumber from '../../helpers/shorten-number';
 import { useCurrencyFly } from '../../context/CurrencyFlyProvider';
 import { useHelp } from '../help/HelpProvider';
@@ -82,7 +83,18 @@ export default function Currency({ image, count, name, flyTarget, coverArt = fal
   // A spend just rolls down quietly. A coin flying in holds the roll until it lands (hudPulse).
   const reduced = useReducedGameMotion();
   const [shown, setShownState] = useState<{ value: number; prev: number; stream?: DigitStream | null; key: number }>({ value: count, prev: count, key: 0 });
-  const setShown = useCallback((next: { value: number; prev: number; stream?: DigitStream | null }) => setShownState(cur => ({ ...next, key: cur.key + 1 })), []);
+  // Fix pass w5 (W4-SMOKE-3b): this chip owns its target's number (hudShown). Each new number is published in the same
+  // tick it is set, so a mirror (the coin card's Ticket line) changes in the same React commit as the chip's roll.
+  const ownerRef = useRef<number | null>(null);
+  const keyRef = useRef(0);
+  const setShown = useCallback((next: { value: number; prev: number; stream?: DigitStream | null }) => {
+    keyRef.current += 1;
+    const state = { ...next, key: keyRef.current };
+    setShownState(state);
+    if (flyTarget && ownerRef.current != null) {
+      publishHudShown(flyTarget, ownerRef.current, { value: state.value, prev: state.prev, stream: state.stream ?? null, key: state.key });
+    }
+  }, [flyTarget]);
   const shownRef = useRef(shown.value);
   shownRef.current = shown.value;
   const holdUntil = useRef(0);
@@ -164,6 +176,17 @@ export default function Currency({ image, count, name, flyTarget, coverArt = fal
     });
     return () => { off(); if (release.current) clearTimeout(release.current); };
   }, [flyTarget, rollTo, reduced, bump]);
+  // The chip claims its target while mounted, and publishes what it shows on mount (later numbers go out in setShown).
+  useEffect(() => {
+    if (!flyTarget) return undefined;
+    const owner = claimHudShown(flyTarget);
+    ownerRef.current = owner;
+    return () => { ownerRef.current = null; releaseHudShown(flyTarget, owner); };
+  }, [flyTarget]);
+  useEffect(() => {
+    if (!flyTarget || ownerRef.current == null) return;
+    publishHudShown(flyTarget, ownerRef.current, { value: shown.value, prev: shown.prev, stream: shown.stream ?? null, key: shown.key });
+  }, [flyTarget, shown]);
   // Round 5: the chip re-renders when a stream starts; its icon, glow and "+N" re-send for a moment after (commitHeal).
   const heal = useCommitHeal();
   const iconStyle = useAnimatedStyle(() => {

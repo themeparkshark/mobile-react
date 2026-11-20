@@ -398,3 +398,10 @@ export function restingSightCopy(copy: GuideCardCopy, target: GuideTarget | null
     a11y: `Rides are resting. Sights stay open: ${target.name}${far ? `, ${far}` : ''}.`,
   };
 }
+
+/** The card's kicker with the park's name on the same line ("NEXT COIN · DISNEYLAND"); home and arrive keep theirs. Pure. */
+export function cardKicker(kicker: string, parkName: string | null, state: GuideState): string {
+  if (!parkName || state === 'arrive') return kicker;
+  const park = parkName.toUpperCase();
+  return kicker.includes(park) ? kicker : `${kicker} · ${park}`;
+}

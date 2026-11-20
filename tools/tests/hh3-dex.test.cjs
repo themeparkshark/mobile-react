@@ -596,12 +596,13 @@ test('round 7b: a finished set the live list sends without rewards_claimed reads
 
 test('ship: "Report this spot" is reachable from a tapped find\'s peek, and the park goal help names the real entry', () => {
   const explore = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(explore, /action: pivot != null \? \{ label: 'Report', hint: HOME_HUNT_COPY\.reportTitle, onPress: \(\) => reportSpot\(pivot\) \}/);
+  // Map Calm (Nov 19): the peek is one quiet line; Report is its long press (and a named screen reader action).
+  assert.match(explore, /longPress: pivot != null \? \{ label: HOME_HUNT_COPY\.reportTitle, onPress: \(\) => reportSpot\(pivot\) \}/);
   assert.match(explore, /reportHomeSpot\(pivotId, reason\)/);
   assert.match(explore, /showToast\(HOME_HUNT_COPY\.reportThanks/);
   const chip = read('src/screens/ExploreScreen/HomeHuntChip.tsx');
-  assert.match(chip, /message\.action && \(/);
-  assert.match(chip, /accessibilityLabel=\{message\.action\.hint \?\? message\.action\.label\}/);
+  assert.match(chip, /onLongPress=\{message\.longPress\?\.onPress \?\? noop\}/);
+  assert.match(chip, /accessibilityActions=\{message\.longPress \? \[\{ name: 'longpress', label: message\.longPress\.label \}\] : undefined\}/);
   const glossary = read('src/services/help/glossary.ts');
   assert.doesNotMatch(glossary, /Next Park Trip/);
   assert.match(glossary, /Tap a coin on your shelf, then Make this my next coin/);

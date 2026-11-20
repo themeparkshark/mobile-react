@@ -26,7 +26,7 @@ import {
 } from 'react-native';
 import Animated, {
   Easing, FadeIn, FadeInRight, FadeOut, interpolate, useAnimatedScrollHandler, useAnimatedStyle, useSharedValue, withRepeat, withSequence,
-  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction,
+  withSpring, withTiming, ZoomIn, Extrapolation, runOnJS, useAnimatedReaction, type SharedValue,
 } from 'react-native-reanimated';
 import * as RootNavigation from '../../RootNavigation';
 import type { InventoryType } from '../../models/inventory-type';
@@ -38,7 +38,7 @@ import { BRAND, GameButton, GameIcon, RADIUS, SHADOW, SharkLoader, textPreset } 
 import useUiReducedMotion from '../../ui/useUiReducedMotion';
 import LastWeekCard from './LastWeekCard';
 import MiniPodium, { MINI_PODIUM_HEIGHT, ScoreIcon } from './MiniPodium';
-import PodiumSteps, { type PodiumStep } from './PodiumSteps';
+import PodiumBarrels from './PodiumBarrels';
 import { CROWN_ART } from './PodiumSpot';
 import SharkCard from './SharkCard';
 import StandingsShark from './StandingsShark';
@@ -50,7 +50,7 @@ import {
 import { prefetchLayers } from './faceLayers';
 import { faceLayerSources, facePoints, wearsOwnLook } from './StandingsShark';
 import {
-  boardMatches, DIVIDER_HEIGHT, dockLabel, expectedWeekEnd, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, rowOnScreen, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
+  boardMatches, DIVIDER_HEIGHT, dockLabel, expectedWeekEnd, firstSkeletonIndex, nextStep, onlyFirstPage, safeToInsert, SKELETON_ROWS, NAV_RISE, rowClear, youInlineTop, youLabel, emptyCopy, isMissingEndpoint, isUnknownPark, itemLayouts, listItems, passedPlayers, podiumRows,
   podiumSignature, rankClimb, ROW_HEIGHT, rowLabel, shouldPrefetch, unitWord, weekLeft, youLine,
   type ListItem, type StandingsBoardModel, type StandingsMetric, type StandingsRowModel,
 } from './standingsV2Model';
@@ -80,8 +80,6 @@ const sizeOfItem = (layout: { size?: number }, item: ListItem) => {
   layout.size = item.type === 'divider' ? DIVIDER_HEIGHT : item.type === 'retry' ? ROW_HEIGHT * SKELETON_ROWS : ROW_HEIGHT;
 };
 const VIEWABILITY = { itemVisiblePercentThreshold: 60 };
-/** The empty board's podium: the same plain steps, small. */
-const EMPTY_STEPS: readonly PodiumStep[] = [{ rank: 2, width: 60, height: 44 }, { rank: 1, width: 70, height: 66 }, { rank: 3, width: 60, height: 32 }];
 
 /**
  * The board's one pill: what the number is and how long the week has left.
@@ -333,7 +331,11 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
  * plays in the step slot: each player you passed slides by with a tick, then
  * "Up N!" lands on your rank.
  */
-function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught }: {
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught, inlineTop = null, scrollY }: {
+  /** A short board: the card sits right under its last row (this top, in the board's frame), never over it. */
+  readonly inlineTop?: number | null;
+  /** The list's scroll, so an inline card moves with its rows. */
+  readonly scrollY?: SharedValue<number>;
   /** The week's first visit: bounce once with a tap glyph, so a kid learns the row opens their card (r7). */
   readonly teach?: boolean;
   readonly onTaught?: () => void;
@@ -435,8 +437,9 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
   // text never ghosts over a row (r2).
   const dockStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, Math.max(0, shown.value) * 4),
-    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) + bounce.value }],
-  }));
+    transform: [{ translateY: Math.max(0, 1 - shown.value) * (YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 30) + bounce.value
+      - (inlineTop != null && scrollY ? scrollY.value : 0) }],
+  }), [inlineTop, scrollY]);
   const joining = step.kind === 'join';
   const reviewing = step.kind === 'review';
   const label = youLabel(model, climb, inPark);
@@ -452,7 +455,7 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
   const shownRank = revealing && climbFrom ? climbFrom : me?.rank;
 
   return (
-    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[{ position: 'absolute', left: 0, right: 0, bottom: YOU_CARD_BOTTOM - 8 }, dockStyle]}>
+    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[inlineTop != null ? { position: 'absolute', left: 0, right: 0, top: inlineTop } : { position: 'absolute', left: 0, right: 0, bottom: YOU_CARD_BOTTOM - 8 }, dockStyle]}>
       {/* The dock: rows fade out above it. It stops above the nav's raised icons
           (r2: a strip down to the screen edge erased them). */}
       <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
@@ -893,10 +896,18 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (onScreen !== before) runOnJS(setPodiumOnScreen)(onScreen);
   });
   const viewability = VIEWABILITY;
+  // Your row is fully clear on screen (inside the list and above the nav's raised compass), from geometry.
+  const myRowClearRef = useRef<() => boolean>(() => true);
+  myRowClearRef.current = () => {
+    const index = itemsRef.current.findIndex(item => item.type === 'row' && item.row.isMe);
+    return index >= 0 && rowClear(HEADER_HEIGHT + (layouts[index]?.offset ?? 0), ROW_HEIGHT, scrollY.value, viewport.current);
+  };
   // Your row's visibility is tracked even while this tab is hidden, and applied when it shows.
   const myRowSeen = useRef(false);
   const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken[] }) => {
-    myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe));
+    // Seen means fully clear of the nav's raised compass too (critic M4), not just 60% inside the list.
+    myRowSeen.current = viewableItems.some(token => (token.item as ListItem)?.type === 'row' && ((token.item as ListItem & { row: StandingsRowModel }).row.isMe))
+      && myRowClearRef.current();
     if (activeRef.current) setMyRowVisible(myRowSeen.current);
     // A fast programmatic scroll can report an empty window for a frame: keep the last known one.
     if (viewableItems.length) {
@@ -915,6 +926,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   // Becoming the active tab: wake the list and work out from geometry whether your
   // row is on screen, so the You card never duplicates a visible row.
   const viewport = useRef(0);
+  const [listBox, setListBox] = useState({ y: 0, height: 0 });
   const [snapId, setSnapId] = useState(0);
   const prevActive = useRef(active);
   useLayoutEffect(() => {
@@ -925,7 +937,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
     if (becameActive) setSnapId(id => id + 1);
     list.current?.recordInteraction();
     const index = items.findIndex(item => item.type === 'row' && item.row.isMe);
-    const onScreen = index >= 0 && rowOnScreen(HEADER_HEIGHT + (layouts[index]?.offset ?? 0), ROW_HEIGHT, scrollY.value, viewport.current);
+    const onScreen = index >= 0 && rowClear(HEADER_HEIGHT + (layouts[index]?.offset ?? 0), ROW_HEIGHT, scrollY.value, viewport.current);
     myRowSeen.current = onScreen;
     setMyRowVisible(onScreen);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1007,9 +1019,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           {board === 'friends' ? <GameIcon name="heart" size={84} /> : (
             <View style={{ alignItems: 'center' }}>
               <Image source={CROWN_ART[1]} style={{ width: 64, height: 64, marginBottom: -14, zIndex: 2 }} contentFit="contain" />
-              {/* An empty podium (plain steps, no coin piles) waiting for its first three. */}
-              <View style={{ width: 200, height: 70 }}>
-                <PodiumSteps steps={EMPTY_STEPS} gap={4} />
+              {/* Alex's numbered barrels, small, waiting for their first three. */}
+              <View style={{ width: 200, height: 86, overflow: 'hidden', borderRadius: RADIUS.md }}>
+                <PodiumBarrels cut="numbered" width={200} height={86} />
               </View>
             </View>
           )}
@@ -1026,11 +1038,22 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
 
   // A hidden tab keeps its card down, so activating it can never flash a duplicate of your row.
   const hideYou = !active || (!climbing && (myRowVisible || (meOnPodium && podiumOnScreen)));
+  // A short board (every row fits with the card under it, clear of the nav's raised compass): the card joins the flow
+  // right under the last row instead of docking over it (critic M4). Where the screen has no room for both (an SE
+  // with the podium and four players), the card docks and the footer's room lets the last row scroll up from under it.
+  const lastLayout = layouts[layouts.length - 1];
+  const rowsEnd = HEADER_HEIGHT + (lastLayout ? lastLayout.offset + lastLayout.length : 0);
+  const inlineAt = youInlineTop(rowsEnd, listBox.height, 22 + YOU_CARD_HEIGHT + 8 + NAV_RISE);
+  const inlineTop = inlineAt != null ? listBox.y + inlineAt : null;
 
   return (
     <View style={{ flex: 1 }}>
       {strip}
-      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }} onLayout={event => { viewport.current = event.nativeEvent.layout.height; }}>
+      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }} onLayout={event => {
+        const { y, height } = event.nativeEvent.layout;
+        viewport.current = height;
+        setListBox(current => (current.y === y && current.height === height ? current : { y, height }));
+      }}>
         <AnimatedFlashList
           ref={list as never}
           data={items as ListItem[]}
@@ -1053,7 +1076,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           onEndReachedThreshold={2}
           refreshControl={refreshControl}
           // Room for the docked row only while it shows (r2: no cream void under Your spot).
-          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34 }} />}
+          // A short board's cream runs down to the nav under its inline card, so no background shows below it.
+          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: Math.max(hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34,
+            inlineAt != null ? listBox.height - rowsEnd : 0) }} />}
           onLoad={() => setListDrawn(true)}
         />
         {!revealed && <View pointerEvents="none" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }}><Skeleton /></View>}
@@ -1063,7 +1088,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           <LinearGradient colors={[BRAND.cream, 'rgba(255,248,228,0)']} style={{ flex: 1 }} />
         </Animated.View>
       </View>
-      <YouRow model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
+      <YouRow inlineTop={inlineTop} scrollY={scrollY} model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
         onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
         finaleFollows={meJoined}

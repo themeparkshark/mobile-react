@@ -213,8 +213,8 @@ test('round 3 wiring: the Monday card always releases the queued climb, the clim
   assert.match(board, /onClimbDone=\{\(\) => \{ setClimbing\(false\); setClimb\(0\); setPassed\(\[\]\); setClimbFrom\(null\); setPodiumHold\(false\); \}\}/, 'the climb resets, so a same-size climb plays again');
   assert.match(board, /\}, \[climbId\]\);/);
   assert.match(read('src/screens/LeaderboardsScreen/StandingsShark.tsx'), /fadeDuration=\{0\}/);
-  // Plain podium steps, no gold barrels or coin piles (Dustin, Oct 28, ledger 38).
-  assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /<PodiumSteps steps=\{MINI_STEPS\}/);
+  // Alex's barrel tops under the spots again (OTA 2 look, Dustin Nov 19), through the one podium part.
+  assert.match(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /<PodiumBarrels cut="tops" width=\{width\} height=\{MINI_BARRELS_SHOWN\} \/>/);
   assert.doesNotMatch(read('src/screens/LeaderboardsScreen/MiniPodium.tsx'), /barrel(-flipped)?\.png/);
   assert.match(read('src/api/endpoints/me/task-attempts.ts'), /winNote\(/);
 });
@@ -267,4 +267,29 @@ test('r6 follow-up: a held podium week gets a "being checked" card, never a priz
   assert.deepEqual(plain(paidLater), { headline: '26 wins!', line: 'Ride Champ! #1', reward: '+5 Tickets' });
   const board = model.boardModel({ board: 'week', rows: [], last_week: { week_start: '2026-09-28', rank: 1, score: 26, players_count: 30, title: null, tickets: 0, held: true, seen: false } }, 'week', 5);
   assert.equal(board.lastWeek.held, true);
+});
+
+test('critic M4 (Nov 19): a short board puts your card under its last row; a row under the compass is not seen', () => {
+  // A board of 4 on a 17 Pro: the podium header plus one row leaves room, so the card follows row 4.
+  const room = 22 + 72 + 8 + model.NAV_RISE;
+  assert.equal(model.youInlineTop(330, 620, room), 330, 'room for the card: it follows the last row');
+  assert.equal(model.youInlineTop(330, 420, room), null, 'no room (SE): it docks, and the last row scrolls up from under it');
+  assert.equal(model.youInlineTop(900, 520, room), null, 'a long board docks the card at the bottom');
+  assert.equal(model.youInlineTop(330, 0, room), null, 'not laid out yet');
+  // 17 Pro All-Time top: row 8 half under the raised Map compass is not clear, so the dock shows.
+  assert.equal(model.rowOnScreen(560, 64, 0, 620), true, '60% inside the list');
+  assert.equal(model.rowClear(560, 64, 0, 620), false, 'but under the compass: the dock shows');
+  assert.equal(model.rowClear(400, 64, 0, 620), true, 'fully clear');
+  const src = read('src/screens/LeaderboardsScreen/StandingsBoardV2.tsx');
+  assert.match(src, /const inlineAt = youInlineTop\(rowsEnd, listBox\.height, 22 \+ YOU_CARD_HEIGHT \+ 8 \+ NAV_RISE\);/);
+  assert.match(src, /- \(inlineTop != null && scrollY \? scrollY\.value : 0\)/, 'an inline card scrolls with its rows');
+  assert.match(src, /<YouRow inlineTop=\{inlineTop\}/);
+  assert.match(src, /inlineAt != null \? listBox\.height - rowsEnd : 0\) \}\} \/>\}/, 'cream runs to the nav under an inline card');
+  assert.match(src, /&& myRowClearRef\.current\(\);/);
+  assert.doesNotMatch(src, /rowOnScreen\(/, 'every visibility check uses the clear test');
+});
+
+test('critic (Nov 19): a short board says how many are racing, so its cream sheet is never a blank slab', () => {
+  const src = read('src/screens/LeaderboardsScreen/standingsV2Model.ts');
+  assert.match(src, /if \(model\.board !== 'friends' && \(model\.playersCount \?\? 0\) > 0\) \{/);
 });

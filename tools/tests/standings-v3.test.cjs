@@ -176,7 +176,7 @@ test('smooth: FlashList recycling, prefetch on view, skeleton rows, cached faces
   assert.match(shark, /!usePhoto && layers\.length < 2 \? \(/, 'no skin decoded: the color shark, never a floating outfit');
   assert.match(shark, /useFaceLayers\(sources, faceBucket\(facePoints\(size\)\)\)/, 'layers drawn from bitmaps decoded at the drawn size');
   const layers = read('src/screens/LeaderboardsScreen/faceLayers.ts');
-  assert.match(layers, /ExpoImage\.loadAsync\(\{ uri \}, \{ maxWidth: px \}\)/);
+  assert.match(layers, /loadImageRef\(\{ uri \}, \{ maxWidth: px \}\)/, 'decoded through the one loadAsync gate (w5 cold-launch crash)');
   assert.match(layers, /const MAX_BYTES = 24 \* 1024 \* 1024;/, 'a cache bounded in bytes');
   assert.match(layers, /const MAX_RUNNING = 4;/, 'at most 4 decodes at once');
   assert.match(store, /prefetchLayers\(faceLayerSources\(inv\), facePoints\(40\)\)/, 'the next page decodes its faces before its rows show');

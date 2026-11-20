@@ -1,13 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { GameIconName } from '../ui/iconNames';
 import RealMoneyMark from './RealMoneyMark';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View, type GestureResponderEvent } from 'react-native';
 import * as RootNavigation from '../RootNavigation';
 import { BRAND, FONT, GameIcon } from '../ui';
 import { useSheetOverlay } from '../ui/sheetOverlay';
 import { useModalLayer } from '../ui/modalLayers';
 import { pressTrace } from '../ui/pressTrace';
+import { sheetsInTree } from '../ui/sheetHostMode';
 import Animated, { runOnJS, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
@@ -131,6 +132,17 @@ async function loadRest() {
   } catch { /* storage is best effort */ }
 }
 const MISS_KEY = 'grown-up-gate:misses';
+/**
+ * The saved rest and miss count, read once per launch (fix pass w5, ROOT-GATE). Every ask used to read both again,
+ * two storage round trips before the gate could even start to draw (most of the 180 ms from the row's touch to the
+ * gate's request on a busy phone). This module writes both and keeps them in memory, so one read at start is enough.
+ */
+let restReady: Promise<void> | null = null;
+let restDone = false;
+function restLoaded(): Promise<void> {
+  restReady ??= loadRest().finally(() => { restDone = true; });
+  return restReady;
+}
 
 /**
  * What the grown-up is saying yes to, in plain words, shown above the sum so
@@ -225,15 +237,19 @@ export function askGrownUp(reason: GateReason | null = null, seed = Math.floor(M
  */
 export function askGrownUpOutcome(reason: GateReason | null = null, seed = Math.floor(Math.random() * 1000), now = Date.now()): Promise<GateOutcome> {
   if (!showGate) return Promise.resolve('unshown');
-  open ??= loadRest()
-    .then(() => new Promise<GateOutcome>(resolve => {
-      if (!showGate) { resolve('unshown'); return; }
-      const request: GateRequest = { seed: now < gateRestUntil ? -1 : seed, reason,
-        resolve: ok => resolve(request.unshown ? 'unshown' : ok ? 'yes' : 'no') };
-      pressTrace('gate.request', () => `reason=${reason?.kind ?? 'none'}`);
-      showGate(request);
-    }))
-    .finally(() => { open = null; });
+  pressTrace('gate.asked', () => `reason=${reason?.kind ?? 'none'} open=${!!open}`);
+  if (open) return open;
+  const start = () => new Promise<GateOutcome>(resolve => {
+    if (!showGate) { resolve('unshown'); return; }
+    const request: GateRequest = { seed: now < gateRestUntil ? -1 : seed, reason,
+      resolve: ok => resolve(request.unshown ? 'unshown' : ok ? 'yes' : 'no') };
+    pressTrace('gate.request', () => `reason=${reason?.kind ?? 'none'}`);
+    showGate(request);
+  });
+  // Rest already read (every ask after the first second of a launch): the gate is asked for inside the very press
+  // that wanted it, so it draws in that press's own render. Behind a promise it waited for the end of the whole touch
+  // batch (React Native runs promise callbacks after it): 170 to 280 ms on a busy phone (fix pass w5, ROOT-GATE).
+  open = (restDone ? start() : restLoaded().then(start)).finally(() => { open = null; });
   return open;
 }
 
@@ -416,7 +432,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   // w4, N02): UIKit's own fade presentation took 1.3 to 5.3 s to report under load and sometimes never did, so the
   // gate was closed before it drew. A plain present reports at once; the look is the same soft fade.
   const reduced = useUiReducedMotion();
-  const fade = useSharedValue(0);
+  const inTreeRef = useRef(Platform.OS === 'ios' && sheetsInTree());
+  const fade = useSharedValue(inTreeRef.current ? 1 : 0);
   const fadeStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
   const closeAfterFade = useCallback((ok: boolean) => { setClosing(current => (current === null ? ok : current)); }, []);
   const close = useCallback((ok: boolean) => {
@@ -424,8 +441,11 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     answerRef.current = ok;
     // Only iOS refuses to present while a modal is leaving (and only iOS reports onDismiss).
     if (Platform.OS !== 'ios') { finish(); return; }
-    // In a sheet's own view the layer fades itself out and lets taps through at once.
+    // In a sheet's own view the layer fades itself out, holding taps until it is gone.
     if (inSheetRef.current) { closeAfterFade(ok); return; }
+    // An in-tree sheet (fix pass w5, W4-SMOKE-2): the sheet fades out on the UI thread and holds every tap until it is
+    // gone, then hands the first one to what is under it. A fade of the gate's own let taps die on its scrim.
+    if (inTreeRef.current) { closeAfterFade(ok); return; }
     fade.value = withTiming(0, { duration: reduced ? 0 : GATE_FADE_OUT_MS }, done => { if (done) runOnJS(closeAfterFade)(ok); });
     // A fade whose end never comes back (a busy phone) still closes.
     setTimeout(() => closeAfterFade(ok), GATE_FADE_OUT_MS + 250);
@@ -468,7 +488,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   useEffect(() => {
     // In a sheet's own view the layer fades itself in once it is mounted (ui/SheetOverlayLayer.tsx): a fade started
     // here could end before that view existed, and the gate stayed at opacity 0, unseen (fix pass w4, N02).
-    if (!presenting || inSheetRef.current) return;
+    if (!presenting || inSheetRef.current || inTreeRef.current) return;
     fadeIn();
   }, [presenting, req]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { if (req) pressTrace('gate.front', () => `nested=${nested} front=${front} presenting=${presenting}`); }, [req, front, presenting]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -504,7 +524,9 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   if (overlayKey.current === 0) overlayKey.current = nextOverlayKey++;
   const bodyRef = useRef<ReactNode>(null);
   const sentRef = useRef<ReactNode>(null);
-  useEffect(() => {
+  // In the commit that changed the body (a layout effect, fix pass w5, ROOT-GATE): the sheet draws the gate in that
+  // same pass, not one passive-effect flush (a frame or more on a busy phone) later.
+  useLayoutEffect(() => {
     if (!sheetOverlay || bodyRef.current === sentRef.current) return;
     sentRef.current = bodyRef.current;
     sheetOverlay(overlayKey.current, bodyRef.current);
@@ -532,6 +554,8 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   const q = resting ? null : grownUpQuestion(req.seed);
   const why = resting ? null : gateReasonLines(req.reason);
   const press = (k: typeof KEYS[number]) => {
+    // Already closing: a key under the next press does nothing (that press is held for what is under the gate).
+    if (answerRef.current !== null) return;
     if (k === 'del') { setTyped(t => t.slice(0, -1)); return; }
     if (k === 'ok') {
       const ok = judgeGate(typed, req.seed);
@@ -542,7 +566,11 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
     setTyped(t => (t.length < 3 ? t + k : t));
   };
   const scrim = (
-      <Animated.View style={[styles.scrim, inSheet ? null : fadeStyle]}>
+      <Animated.View style={[styles.scrim, inSheet ? null : fadeStyle]}
+        // Asked to close (Not now, a wrong answer) but not yet leaving on screen: a touch that lands now is the next
+        // press, for what is under the gate. The host holding the gate keeps it until the gate is gone (fix pass w5,
+        // W4-SMOKE-2: Not now and a quick tap on the row reached the app in one batch, and the row's tap died here).
+        onTouchStart={(event: GestureResponderEvent) => { if (answerRef.current !== null) (event.nativeEvent as { tpsLeaving?: boolean }).tpsLeaving = true; }}>
         {details ? (
           <View style={styles.card} accessibilityViewIsModal>
             <RealMoneyMark size={36} />
@@ -625,7 +653,7 @@ export function GrownUpGateHost({ nested = false }: { readonly nested?: boolean 
   }
   return (
     <>
-    <Modal visible={closing === null && !devRefuse()} transparent animationType="none" onRequestClose={() => close(false)} statusBarTranslucent
+    <Modal visible={closing === null && !devRefuse()} transparent animationType={inTreeRef.current && !reduced ? 'fade' : 'none'} onRequestClose={() => close(false)} statusBarTranslucent
       testID={nested ? 'gate-slot' : 'gate'}
       onShow={() => { shownRef.current = true; }} onDismiss={finish}>
       {scrim}
@@ -684,4 +712,4 @@ const styles = StyleSheet.create({
 });
 
 // Load the saved rest and miss count as soon as the app starts (best effort).
-void loadRest();
+void restLoaded();

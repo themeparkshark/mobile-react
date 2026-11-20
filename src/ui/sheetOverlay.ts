@@ -49,3 +49,14 @@ export function withOverlay(list: SheetOverlayList, key: number, node: ReactNode
 export function overlayDrop(list: SheetOverlayList, key: number): SheetOverlayList {
   return list.some(item => item.key === key && item.leaving) ? list.filter(item => !(item.key === key && item.leaving)) : list;
 }
+
+/**
+ * Press what is under a window point inside this sheet's own contents (fix pass w5, lane host, W4-SMOKE-2): a layer
+ * that is leaving holds every tap until it is gone, then hands the first one to the sheet under it this way.
+ */
+export type SheetPressAt = (x: number, y: number) => void;
+let pressContext: Context<SheetPressAt | null> | null = null;
+export function sheetPressContext(): Context<SheetPressAt | null> {
+  if (!pressContext) pressContext = createContext<SheetPressAt | null>(null);
+  return pressContext;
+}

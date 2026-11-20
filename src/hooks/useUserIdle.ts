@@ -10,6 +10,7 @@
 import { useEffect, useState } from 'react';
 
 import { IDLE_AFTER_MS } from '../power/powerPolicy';
+import { pressTrace } from '../ui/pressTrace';
 
 /** One idle constant app-wide (power budget and idle-aware polls agree). */
 export const USER_IDLE_MS = IDLE_AFTER_MS;
@@ -31,6 +32,7 @@ export function markUserActivity(now = Date.now()): void {
 let lastTouchAt = 0;
 const touchListeners = new Set<() => void>();
 export function markUserTouch(now = Date.now()): void {
+  pressTrace('touch');
   lastTouchAt = now;
   markUserActivity(now);
   if (touchListeners.size) touchListeners.forEach(fn => fn());

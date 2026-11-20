@@ -59,7 +59,7 @@ test('N04/T036: the shell holds its count off stage and shows the field once the
 
 test('N04/T036: Memory shows its felt during the deal, deals in place off stage, and holds barker and bot; Whack holds its music', () => {
   assert.match(memory, /stageReady=\{stageDealt\}\n\s+stageDrawn=\{!!geo\}/);
-  assert.match(memory, /const offStage = stageHeldRef\.current;\n\s+dealCards\(offStage\);/);
+  assert.match(memory, /const offStage = stageHeldRef\.current \|\| retryDealRef\.current;\n\s+dealCards\(offStage\);/);
   assert.match(memory, /if \(stageHeldRef\.current\) introWaiting\.current = true;/);
   assert.match(memory, /enabled: visible && !stageHeld && !result && !tryScreen/);
   assert.match(whack, /const bed = !visible \|\| stageHeld \|\| result \? null/);
@@ -80,7 +80,7 @@ test('N04: TRY AGAIN starts the ticket punch on the press, never a Setting Up lo
   const modal = fs.readFileSync('src/components/RedeemRedeemableModal.tsx', 'utf8');
   const start = modal.indexOf('const handleProtectedRetry = useCallback(async () => {');
   assert.ok(start > 0);
-  const body = modal.slice(start, modal.indexOf('}, [handleStartWheel, location, clearAttemptCheckpoint]);', start));
+  const body = modal.slice(start, modal.indexOf('}, [handleStartWheel, location, clearAttemptCheckpoint, selectedGame, keepBoard]);', start));
   // Before any await: the lost try is cleared and the punch scene is up (it bobs until the server deals).
   const firstAwait = body.indexOf('await ');
   const punch = body.indexOf("setFlowState('spinning');");
@@ -88,7 +88,7 @@ test('N04: TRY AGAIN starts the ticket punch on the press, never a Setting Up lo
   assert.ok(body.indexOf('setSelectedGame(null);') < punch, 'the lost game is cleared before the punch, so it never pops the old card');
   assert.doesNotMatch(body, /setFlowState\('retrying'\)/);
   // A start that could not begin goes back to the loss card.
-  assert.match(body, /if \(flowStateRef\.current === 'spinning' && !attemptRef\.current && !spendingRef\.current\) \{ repeatPunchRef\.current = false; setFlowState\('lost'\); \}/);
+  assert.match(body, /if \(\(flowStateRef\.current === 'spinning' \|\| flowStateRef\.current === 'replay' \|\| replayRef\.current\) && !attemptRef\.current && !spendingRef\.current\) \{\n\s+repeatPunchRef\.current = false; replayRef\.current = null; setFlowState\('lost'\);/);
   assert.match(body, /repeatPunchRef\.current = true;\n\s+setFlowState\('spinning'\);/, 'TRY AGAIN marks the punch as a repeat');
 });
 

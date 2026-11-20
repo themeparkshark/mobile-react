@@ -896,14 +896,21 @@ test('Adventure ticket tab: the card wears it whenever the Adventure is active h
   assert.match(src, /const adventureTab = !!input\.adventure && input\.adventure\.park_id === parkId && input\.adventure\.phase !== 'complete'\s*&& !adventureDots/);
   const card = require('node:fs').readFileSync(require('node:path').join(__dirname, '../../src/components/guide/NextCoinCard.tsx'), 'utf8');
   assert.match(card, /testID="adventure-tab"/);
-  // Round 3 fix 9: a gold button (never a white label like the park chip beside it), 8 pt or bigger dots, 46 pt to tap.
-  assert.match(card, /tab: \{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: BRAND\.gold,/);
-  assert.match(card, /parkChip: \{ backgroundColor: BRAND\.white/);
+  // Round 3 fix 9: a gold button, 8 pt or bigger dots, 46 pt to tap. Critic M3 (Nov 19): it sits inside the card on
+  // the kicker line, and the park's name joins the kicker, so nothing rides the card's frame.
+  assert.match(card, /tab: \{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: BRAND\.gold,/);
+  assert.doesNotMatch(card, /parkChip|edgeRow/, 'no chip or tab on the card frame');
+  assert.match(card, /<View style=\{styles\.kickerRow\}>[\s\S]*?\{kicker\}[\s\S]*?<AdventureTab /);
   const dot = Number(card.match(/export const TAB_DOT = (\d+);/)[1]);
   assert.ok(dot >= 8, `stamp dots ${dot} pt`);
-  const height = Number(card.match(/paddingHorizontal: 6, height: (\d+), marginTop: -8/)[1]);
-  const slop = card.match(/hitSlop=\{\{ top: (\d+), bottom: (\d+), left: 6, right: 6 \}\}/);
+  const height = Number(card.match(/paddingHorizontal: 5, height: (\d+), marginLeft: 'auto'/)[1]);
+  const slop = card.match(/const TAB_SLOP = \{ top: (\d+), bottom: (\d+), left: 6, right: 6 \}/);
   assert.ok(height + Number(slop[1]) + Number(slop[2]) >= 46, 'a 46 pt tap target');
+  const { cardKicker } = loadTs('src/services/guide/guideCopy.ts');
+  assert.equal(cardKicker('NEXT COIN', 'Disneyland', 'walk'), 'NEXT COIN · DISNEYLAND');
+  assert.equal(cardKicker('DISNEYLAND', 'Disneyland', 'walk'), 'DISNEYLAND');
+  assert.equal(cardKicker('NEXT COIN', 'Disneyland', 'arrive'), 'NEXT COIN');
+  assert.equal(cardKicker('READY TO LEVEL UP', null, 'home'), 'READY TO LEVEL UP');
   const screen = mapSource();
   assert.match(screen, /adventureTab=\{nextCoin\.adventureTab && adventure && tripGoalData \? adventureTabProps : null\}/);
   assert.match(screen, /case 'unfold': setAdventureCelebrateRequest/);

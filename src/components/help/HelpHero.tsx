@@ -25,7 +25,7 @@ import type { HelpHeroKey } from '../../services/help/helpSheets';
 import { playSfx } from '../../gamekit/SFX';
 import { usePowerBudget } from '../../power';
 import { BRAND, GameIcon, type GameIconName } from '../../ui';
-import PodiumSteps, { type PodiumStep } from '../../screens/LeaderboardsScreen/PodiumSteps';
+import PodiumBarrels, { BARREL_ASPECT, BARREL_TOPS_SEAT, BARREL_TOPS_SHOWN } from '../../screens/LeaderboardsScreen/PodiumBarrels';
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
@@ -332,29 +332,22 @@ function ClimbScene({ t, w, h }: SceneProps) {
 }
 
 function PodiumScene({ t, w, h }: SceneProps) {
-  // The board's own plain podium steps (cream, white rim, gold, silver and bronze top edge), the same
-  // pieces the Standings screen stands on. No barrels and no coin pile (Dustin, Oct 28, ledger 38).
-  const gap = 8;
-  const bw = Math.min(w - 36, 300);
-  const sw = (bw - gap * 2) / 3;
+  // The board's own podium (the one PodiumBarrels part): Alex's coin barrels, the tops cut, so
+  // silver stands on the taller left barrel, gold in the middle and bronze on the right, as on Standings.
+  const bw = Math.min(w - 36, 320);
+  const bh = bw * BARREL_ASPECT;
+  const shown = bh * BARREL_TOPS_SHOWN;
   const bx = (w - bw) / 2;
-  // Tall enough that each step shows its place number under the top edge, above the rounded stage frame (SE too).
-  const heights = { 1: h * 0.4, 2: h * 0.33, 3: h * 0.28 } as const;
-  const steps: readonly PodiumStep[] = [
-    { rank: 2, width: sw, height: heights[2] },
-    { rank: 1, width: sw, height: heights[1] },
-    { rank: 3, width: sw, height: heights[3] },
-  ];
-  const stand = (rank: 1 | 2 | 3, size: number) => h - heights[rank] - size * 0.86;
-  // Each shark stands on its step (left 2nd, middle 1st, right 3rd), as the board's podium.
+  // Each shark stands on its barrel's coin top (left 2nd, middle 1st, right 3rd).
+  const stand = (rank: 1 | 2 | 3, size: number) => h - shown + bh * BARREL_TOPS_SEAT[rank] - size * 0.86;
   const spots = [
-    { cx: bx + sw * 0.5, top: stand(2, h * 0.32), size: h * 0.32, face: 3, crown: ART.crownSilver, at: 0.1 },
-    { cx: bx + sw * 1.5 + gap, top: stand(1, h * 0.4), size: h * 0.4, face: 0, crown: ART.crownGold, at: 0.3, crownSit: 0.5 },
-    { cx: bx + sw * 2.5 + gap * 2, top: stand(3, h * 0.3), size: h * 0.3, face: 6, crown: ART.crownBronze, at: 0.2 },
+    { cx: bx + bw * 0.21, top: stand(2, h * 0.32), size: h * 0.32, face: 3, crown: ART.crownSilver, at: 0.1 },
+    { cx: bx + bw * 0.5, top: stand(1, h * 0.4), size: h * 0.4, face: 0, crown: ART.crownGold, at: 0.3, crownSit: 0.5 },
+    { cx: bx + bw * 0.79, top: stand(3, h * 0.3), size: h * 0.3, face: 6, crown: ART.crownBronze, at: 0.2 },
   ];
   return (
     <>
-      <Abs x={bx} y={0} w={bw} h={h}><PodiumSteps steps={steps} gap={gap} numberAt="top" /></Abs>
+      <Abs x={bx} y={0} w={bw} h={h}><PodiumBarrels cut="tops" width={bw} height={shown} /></Abs>
       {spots.map(spot => <PodiumShark key={spot.face} t={t} {...spot} />)}
       {[-1, 0, 1].map(i => <TicketPop key={i} t={t} cx={spots[1].cx} cy={spots[1].top + spots[1].size * 0.2} dir={i} />)}
     </>

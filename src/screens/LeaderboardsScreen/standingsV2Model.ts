@@ -314,8 +314,9 @@ export function listItems(model: Pick<StandingsBoardModel, 'board' | 'rows' | 'a
     resting.forEach(row => items.push({ type: 'row', key: row.key, row, muted: true }));
     if (more) items.push(...pending());
   }
-  // The end of the board (or of Your spot): how many are racing, never a blank void.
-  if (model.board !== 'friends' && (model.playersCount ?? 0) > 3) {
+  // The end of the board (or of Your spot): how many are racing, never a blank void. A short board (2 or 3 on the
+  // podium, no rows) says it too, so its cream sheet is never an empty slab (critic, Nov 19).
+  if (model.board !== 'friends' && (model.playersCount ?? 0) > 0) {
     const n = model.playersCount as number;
     items.push({ type: 'footer', key: 'footer', label: model.metric === 'ride_coins' ? `${countText(n)} collectors` : `${countText(n)} riders this week` });
   }
@@ -675,12 +676,33 @@ export function winNote(standings: unknown): { readonly text: string; readonly b
 /**
  * Whether your row is on screen, from geometry alone (a board that just
  * became the active tab cannot trust viewability events from while hidden).
- * At least 60% of the row must be inside the visible list area.
+ * At least `need` of the row (60% by default) must be inside the visible list area.
  */
-export function rowOnScreen(rowTop: number, rowHeight: number, scrollTop: number, viewport: number): boolean {
+export function rowOnScreen(rowTop: number, rowHeight: number, scrollTop: number, viewport: number, need = 0.6): boolean {
   if (!(viewport > 0) || !(rowHeight > 0)) return false;
   const visible = Math.min(rowTop + rowHeight, scrollTop + viewport) - Math.max(rowTop, scrollTop);
-  return visible >= rowHeight * 0.6;
+  return visible >= rowHeight * need - 0.5;
+}
+
+/**
+ * The nav's raised Map compass reaches this far up over the bottom of the board: a row there is not clear, so your
+ * row counts as seen only when it sits fully above it (critic M4, Nov 19: row 8 under the compass and no dock).
+ */
+export const NAV_RISE = 52;
+
+/** Whether your own row sits fully clear on screen: inside the list and above the nav's raised compass. Pure. */
+export function rowClear(rowTop: number, rowHeight: number, scrollTop: number, viewport: number): boolean {
+  return rowOnScreen(rowTop, rowHeight, scrollTop, viewport - NAV_RISE, 1);
+}
+
+/**
+ * Where your card goes (critic M4): when every row fits with the card's own room under the last one (the card and
+ * the nav's raised compass), the card joins the flow right after the last row (returns that row end); otherwise
+ * null and it docks at the bottom, and the list keeps room to scroll its last row up from under it. Pure.
+ */
+export function youInlineTop(rowsEnd: number, viewport: number, cardRoom: number): number | null {
+  if (!(viewport > 0) || !(rowsEnd > 0)) return null;
+  return rowsEnd + cardRoom <= viewport ? rowsEnd : null;
 }
 
 /**

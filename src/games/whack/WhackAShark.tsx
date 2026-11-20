@@ -30,7 +30,7 @@ import AsyncStorage from '../../gamekit/core/playerStorage';
 import { deckIdForRideName } from '../../services/rideTheme';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { RideChallengeContext } from '../../gamekit/RideChallengeContext';
-import { useStageHold } from '../../gamekit/StageHoldContext';
+import { useOnRetryRound, useStageHold } from '../../gamekit/StageHoldContext';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
 import { StampLayer, type StampLayerHandle } from '../../gamekit/fx/StampLayer';
 import { useCamera } from '../../gamekit/fx/useCamera';
@@ -44,6 +44,7 @@ import { THERMAL_NAMES, THERMAL_SCALES } from '../../gamekit/core/thermal';
 import { GameAudio } from '../../gamekit/audio/GameAudio';
 import { registerStudioAudio } from '../../gamekit/audio/studioLibrary';
 import { useGameMusic } from '../../gamekit/audio/useGameMusic';
+import { pressTrace } from '../../ui/pressTrace';
 import { playHaptic, playPattern } from '../../gamekit/Haptics';
 import { FinishBeat } from '../../gamekit/fx/FinishBeat';
 import { COUNT_END_MS, FINISH_HANDOFF_MS, FINISH_HANDOFF_SHORT_MS, FINISH_SPARKLES_MAX, GO_AT_MS } from '../../gamekit/core/gameMoments';
@@ -245,6 +246,8 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
   const rideChallenge = useContext(RideChallengeContext);
   // Off stage under the ticket punch (T036): the board draws, the music waits for the hand-over.
   const stageHeld = useStageHold();
+  const traceHeld = useRef<boolean | null>(null);
+  if (traceHeld.current !== stageHeld) { traceHeld.current = stageHeld; pressTrace('whack.render', () => `held=${stageHeld}`); }
   // LinePlay's no-clock rule (T082): in a line the timer ring drains with no number, like a ride coin.
   const inLine = useContext(LinePlayMovementContext) != null;
   const defend = ride && !rideChallenge;
@@ -1253,6 +1256,17 @@ export const WhackAShark = forwardRef<WhackHandle, WhackASharkProps>(function Wh
     // The shell runs the fresh count (2-1-GO on a repeat) and calls onStart at GO, which starts the
     // burst: no second READY/GO slam and no burst running under the count (one start, one callout).
   }, [runIndex, showTimerLen, buildTimeline, runtime, clearRest, restBoard, clearAutoReady]);
+
+  // Fix pass w5 (N04): TRY AGAIN of a ride try on the kept board. The same reset as PLAY AGAIN (score, Bursts,
+  // banked runs, carry, result, finisher), plus a hold left by Leave is let go without starting anything: the
+  // shell's 2-1-GO starts the new try, its timeline built from the newly dealt seed at GO.
+  useOnRetryRound(() => {
+    if (pauseAt.current) { pauseAt.current = null; runtime.clock.resume(); }
+    runtime.setRunning(false);
+    finisher.cancel();
+    interrupts.current = [];
+    handleRematch();
+  });
 
   // Wrap-up (boarding / left the queue): bank the live Burst from a coherent snapshot.
   const wrapMirror = useRef<{ score: number } | null>(null);

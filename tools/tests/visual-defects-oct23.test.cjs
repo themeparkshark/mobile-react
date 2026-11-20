@@ -560,7 +560,7 @@ test('the map loading cover lifts on the UI thread and hides the whole HUD until
   assert.match(explore, /<Map onPress=\{[^\n]*\n\s*coverHost="screen"/);
   assert.match(read('src/screens/ExploreScreen/HomeExplore.tsx'), /<Map coverHost="screen" /);
   // Tips, tutorials, the home intro and the adventure slam wait for the cover to lift.
-  assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
+  assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && \(!parkTip \|\| mapTipAllowed\(currentAppOpen\(\), parkTip\)\) && mapTipReady\(\{/);
   assert.match(explore, /if \(!mapOnScreen \|\| !mapCalm \|\| !player/);
   assert.match(explore, /if \(!\(mapOnScreen && player && isReady/);
   assert.match(explore, /introAllowed=\{mapOnScreen && homeIntroAllowed\}/);
@@ -716,7 +716,7 @@ test('first seconds on the map: pins arrive in the cover fade, late pins land in
   assert.match(explore, /useEffect\(\(\) => \{ holdMapCover\(coverHold\); \}, \[coverHold\]\);/);
   assert.match(explore, /delays: mapCovered \? new globalThis\.Map<number, number>\(\)\s*: revealDelays\(\[\.\.\.visibleTasks\]\.sort\([^]*?\.map\(task => task\.id\), 40, 400\)/);
   assert.match(explore, /const MAP_CALM_MS = 5000;/);
-  assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && mapTipReady\(\{/);
+  assert.match(explore, /const parkTipReady = !mapCovered && mapCalm && \(!parkTip \|\| mapTipAllowed\(currentAppOpen\(\), parkTip\)\) && mapTipReady\(\{/);
   const map = read('src/components/Map.tsx');
   assert.match(map, /\{!tileWaitOver && <TileWaitSheet drawn=\{tilesDrawn\} armed=\{!covered\} \/>\}/);
   assert.match(map, /setTimeout\(\(\) => \{ setTileWaitOver\(true\); mapTilesShown\(coverToken\.current\); \}, TILE_WAIT_MAX_MS \+ 500\)/);
@@ -1158,7 +1158,7 @@ test('launch never starts the login music while sign-in is still loading (no aud
 test('map rail: Daily 3 first and the late chest joins at the end, popping in on the UI thread (no button ever moves)', () => {
   const explore = read('src/screens/ExploreScreen.tsx');
   // Core loop 4.2: the chest and Daily 3 buttons fold into one Rewards button (one chest, one number), so no button moves.
-  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <TrailReadyPulse pulseKey=\{trailPulse\}>\n\s+<RewardsButton model=\{rewardsModel\} onPress=\{onRewardsPress\} isNew=\{rewardsNew\} \/>\n\s+<\/TrailReadyPulse> : null;/);
+  assert.match(explore, /const mapControls = mapControlsCount > 0 \? <TrailReadyPulse pulseKey=\{trailPulse\}>\n\s+<RewardsButton model=\{rewardsModel\} onPress=\{onRewardsPress\} isNew=\{rewardsNew\} cardHasIt=\{homeRewardCard && !atParkNow\} \/>\n\s+<\/TrailReadyPulse> : null;/);
   assert.doesNotMatch(explore, /retention\.button/);
   const chest = read('src/components/map/ChestMapButton.tsx');
   assert.match(chest, /Animated\.spring\(shown, \{ toValue: 1, stiffness: 320, damping: 18, mass: 0\.8, useNativeDriver: true \}\)/);

@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Dimensions, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Reanimated, { Easing, useAnimatedStyle, useSharedValue, withDelay, withRepeat, withSequence, withSpring, withTiming,
   type SharedValue } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -10,17 +10,6 @@ import type { FollowMode } from './cameraFollow';
 /** Panned away the button shows your own shark (its look), or Alex's Classic: "take me back to it". */
 const CLASSIC = require('../../../assets/images/map/follow-shark-classic.png');
 
-/**
- * Short phones (iPhone SE, 667 pt): the button sits only ~50 pt above the shark, so a bubble hung
- * level with it covers the shark. There the one-time hint rises above the button instead, its tail
- * still pointing at the button.
- */
-const SHORT_SCREEN = Dimensions.get('window').height < 700;
-/**
- * Risen, the bubble shares rows with the Adventure Ticket card (left 12 pt, 43% wide), so on short phones it
- * stays in the lane between that card's right edge and the button (lane ends 16 + 64 pt from the right).
- */
-const SHORT_HINT_WIDTH = Math.min(190, Math.floor(Dimensions.get('window').width * 0.57 - 12 - 6 - 16 - 64));
 
 /** What the map's top-right button is doing right now. */
 export type FollowButtonState = 'away' | FollowMode;
@@ -90,13 +79,18 @@ function LocatorShark() {
  * (`bearing` is the map's bearing, eased like the camera itself).
  */
 export default function FollowButton({ state, bearing, onPress, reducedMotion, hint, onHintDone, noCompassFlash = 0, awayArt,
-  compassAvailable = true }: {
+  compassAvailable = true, hintDrop = 0 }: {
   readonly state: FollowButtonState;
   readonly bearing: SharedValue<number>;
   readonly onPress: () => void;
   readonly reducedMotion: boolean;
   /** Show the one-time hint bubble. */
   readonly hint: boolean;
+  /**
+   * Where the map's chrome layout (mapChrome.tipSpot) put the bubble: 0 is beside the button; more tucks it that
+   * far down (under the top card), its tail at the top pointing up at the button.
+   */
+  readonly hintDrop?: number;
   readonly onHintDone: () => void;
   /** Bumped when a tap cannot turn the map (no compass): the pill says so. */
   readonly noCompassFlash?: number;
@@ -169,8 +163,8 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
       {(shownPill || hint) && (
         // A fixed-width lane left of the button: an absolute view with no width would be squeezed to
         // the 54 pt column it hangs from. The pill sizes to its words at the lane's right edge.
-        <View pointerEvents="none" style={[styles.pillLane, hint && SHORT_SCREEN && styles.pillLaneUp]}>
-        <View style={[styles.pill, hint && styles.hint, hint && SHORT_SCREEN && styles.hintShort]}>
+        <View pointerEvents="none" style={[styles.pillLane, hint && hintDrop > 0 && { top: hintDrop }]}>
+        <View style={[styles.pill, hint && styles.hint]}>
           {hint ? (
             <>
               <Text style={styles.hintTitle}>{FOLLOW_COPY.hintTitle}</Text>
@@ -179,7 +173,7 @@ export default function FollowButton({ state, bearing, onPress, reducedMotion, h
           ) : (
             <Text style={styles.pillText} numberOfLines={1}>{FOLLOW_COPY[shownPill ?? 'heading']}</Text>
           )}
-          <View style={[styles.tail, hint && styles.hintTail, hint && SHORT_SCREEN && styles.hintTailUp]} />
+          <View style={[styles.tail, hint && styles.hintTail, hint && hintDrop > 0 && styles.hintTailTucked]} />
         </View>
         </View>
       )}
@@ -253,10 +247,8 @@ const styles = StyleSheet.create({
     borderTopWidth: 2.5, borderRightWidth: 2.5, borderColor: BRAND.navy, transform: [{ rotate: '45deg' }] },
   hint: { marginTop: 0, height: 'auto', width: 210, paddingVertical: 8, borderRadius: 14, backgroundColor: BRAND.cream },
   hintTail: { top: 20, backgroundColor: BRAND.cream },
-  // SE: the lane's bottom sits at the button's middle, so the bubble rises above the shark; tail near its bottom.
-  pillLaneUp: { top: undefined, bottom: 20 },
-  hintShort: { width: SHORT_HINT_WIDTH },
-  hintTailUp: { top: undefined, bottom: 6 },
+  // Tucked under the top card: the tail sits on the bubble's top right corner, pointing up and right at the button.
+  hintTailTucked: { top: -6, right: 10, transform: [{ rotate: '-45deg' }] },
   hintTitle: { fontFamily: 'Knockout', fontSize: 17, color: BRAND.navy },
   hintBody: { fontFamily: 'Knockout', fontSize: 15, lineHeight: 18, color: BRAND.navySoft },
 });

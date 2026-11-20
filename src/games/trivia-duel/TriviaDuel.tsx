@@ -37,6 +37,8 @@ import Animated, {
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { GameShellV2, type GameResult, type GameShellV2Handle } from '../../gamekit/GameShellV2';
 import { COUNTDOWN } from '../../gamekit/theme';
+import { pressTrace } from '../../ui/pressTrace';
+import { useOnRetryRound } from '../../gamekit/StageHoldContext';
 import { LinePlayMovementContext } from '../../gamekit/LinePlayMovementContext';
 import { useGameClock } from '../../gamekit/useGameClock';
 import { FxStage, type FxStageHandle } from '../../gamekit/fx/FxStage';
@@ -526,7 +528,10 @@ export function TriviaDuel(props: TriviaDuelProps) {
   useEffect(() => { hotSv.value = streakView.streak >= 5 ? 2 : streakView.streak >= 3 ? 1 : 0; }, [streakView.streak, hotSv]);
 
   const dispatchRef = useRef<(ev: number, a: number, b: number) => void>(() => undefined);
-  const dispatch = useCallback((ev: number, a: number, b: number) => dispatchRef.current(ev, a, b), []);
+  const dispatch = useCallback((ev: number, a: number, b: number) => {
+    if (ev === EV_EARLY || ev === EV_LOCK) pressTrace('trivia.tap', () => (ev === EV_LOCK ? `lock ${a}` : `early ${a}`));
+    dispatchRef.current(ev, a, b);
+  }, []);
   const beatSv = music.beat;
 
   const clock = useGameClock({
@@ -652,6 +657,18 @@ export function TriviaDuel(props: TriviaDuelProps) {
       runOnJS(dispatch)(EV_SUB_LOCK, i, q.sub);
     }
   }, [qc, dispatch]);
+
+  // w5 T051: a tap on the striped tiles shown before the question (the opening and a repeat start) wiggles that tile,
+  // the same answer as a tap before the tiles open: nothing is spent, the next tap counts.
+  const [previewWiggle, setPreviewWiggle] = useState<number[]>([0, 0, 0, 0]);
+  const previewTap = useCallback((i: number) => {
+    pressTrace('trivia.tap', () => `early-preview ${i}`);
+    setPreviewWiggle((w) => w.map((v, k) => (k === i ? v + 1 : v)));
+  }, []);
+  const onPreviewTapUI = useCallback((i: number) => {
+    'worklet';
+    runOnJS(previewTap)(i);
+  }, [previewTap]);
 
   const onBuzzUI = useCallback(() => {
     runOnUI(() => {
@@ -829,6 +846,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
   const startRound = useCallback((p: MatchPlan, i: number) => {
     const r = p.rounds[i];
     if (!r) return;
+    pressTrace('trivia.round', () => `${i}`);
     setRoundIdx(i);
     setRound(r);
     ringSpeed.value = -1;
@@ -1052,6 +1070,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
     if (__DEV__ && (ev === EV_LOCK || ev === EV_SUB_LOCK || ev === EV_BUZZ || ev === EV_FIN_BUZZ)) console.log('[trivia-duel] ev', { ev, a, b, round: r.index, type: r.spec.type, sub: subMode });
     switch (ev) {
       case EV_UNLOCK: {
+        pressTrace('trivia.open');
         if (r.spec.type === 'buzz') {
           // Rev 7 bell: the tiles stay face-down for everyone; the bell goes live.
           setBellOn(true);
@@ -1726,8 +1745,11 @@ export function TriviaDuel(props: TriviaDuelProps) {
   // stamps on the stage, 3-2-1-GO on the shell's step timing, no scrim.
   const onStart = useCallback(async () => {
     await (warmRef.current ?? Promise.resolve());
-    await new Promise((r) => setTimeout(r, 250));
-    const steps = ['3', '2', '1', 'GO!'];
+    // A repeat start (TRY AGAIN on the kept board, w5 N04): GO! alone, then the round.
+    const repeat = repeatStart.current;
+    repeatStart.current = false;
+    if (!repeat) await new Promise((r) => setTimeout(r, 250));
+    const steps = repeat ? ['GO!'] : ['3', '2', '1', 'GO!'];
     // Over the face-down board (the stage band draws above the stamp layer).
     const y = ZONE_TOP + 40;
     steps.forEach((label, i) => later(i * COUNTDOWN.stepMs, () => {
@@ -1737,7 +1759,8 @@ export function TriviaDuel(props: TriviaDuelProps) {
       sfx(CUE.tick, { volume: label === 'GO!' ? 0.7 : 0.45 });
       Haptic.tickSelection();
     }));
-    later(3 * COUNTDOWN.stepMs + COUNTDOWN.goMs, () => { void beginMatch(false); });
+    // A repeat start deals the round under its GO! (the first question lands as the stamp settles).
+    later(repeat ? 0 : 3 * COUNTDOWN.stepMs + COUNTDOWN.goMs, () => { void beginMatch(false); });
   }, [beginMatch, later, stamp, W]);
 
   const onPause = useCallback(() => {
@@ -1781,6 +1804,35 @@ export function TriviaDuel(props: TriviaDuelProps) {
     const stars = isRide ? rideStars(t.me.correct, RIDE_QUESTIONS, t.me.score) : duelStars(t.me.score, t.opp.score, t.me.correct, plan?.rounds.length ?? 5);
     return { score: t.me.score, stars, meta: buildMeta(true) };
   }, [clearTimers, setClock, isRide, plan, buildMeta]);
+
+  // Fix pass w5 (N04): TRY AGAIN of a ride round on the kept board. The last round's results, hold, tiles,
+  // stamps and clock are let go here (in the shell's reset commit), and the next start is a repeat: one GO!
+  // and the newly dealt round, never the full 3-2-1 again (the player just played it).
+  const repeatStart = useRef(false);
+  useOnRetryRound(() => {
+    clearTimers();
+    if (held) { setHeld(false); holdTimers(false); clock.resume(); }
+    setClock({ phase: PH_IDLE });
+    setPhase('loading');
+    setResults(null);
+    setShellResult(null);
+    setCrate(null);
+    setVs(null);
+    setStamps([]);
+    setRound(null);
+    setTiles([]);
+    setGhost(null);
+    setScores({ me: 0, opp: 0 });
+    setLocks({ me: null, opp: null });
+    setStakes({ me: null, opp: null });
+    setChip(null);
+    setRoundIdx(0);
+    crown.value = 0;
+    // A new run key remounts the rail: its scores show 0 at once (never a roll down from the last try).
+    setRunKey((k) => k + 1);
+    setMusicBed(null);
+    repeatStart.current = isRide;
+  });
 
   // Reset when hidden.
   useEffect(() => {
@@ -1946,11 +1998,12 @@ export function TriviaDuel(props: TriviaDuelProps) {
 
           {/* Answer zone: the bottom 45%, every target at least 62pt tall. */}
           {((preview && visible) || phase === 'finalIntro') ? (
-            <View style={[styles.zone, { top: ZONE_TOP, height: ZONE_H, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2, opacity: 0.6 }]} pointerEvents="none">
+            <View style={[styles.zone, { top: ZONE_TOP, height: ZONE_H, width: tileGeom.zoneW, left: (W - tileGeom.zoneW) / 2, opacity: 0.6 }]} pointerEvents={preview ? 'box-none' : 'none'}>
               <View style={[styles.tiles, { flexDirection: 'row' }]}>
                 {[0, 1, 2, 3].map((i) => (
                   <View key={i} style={{ marginBottom: 12, marginRight: i % 2 === 0 ? 12 : 0 }}>
-                    <Tile index={i} label="" state="down" width={(tileGeom.zoneW - 12) / 2} height={96} onTapUI={onTapUI} flipDelay={0} heads={[]} share={-1} wiggleKey={0} reducedMotion={reducedMotion} fontSize={18} chomped={false} disabled />
+                    {/* w5 T051: the striped tiles before the question takes a tap too: it wiggles (never a silent drop). */}
+                    <Tile index={i} label="" state="down" width={(tileGeom.zoneW - 12) / 2} height={96} onTapUI={onPreviewTapUI} flipDelay={0} heads={[]} share={-1} wiggleKey={previewWiggle[i] ?? 0} reducedMotion={reducedMotion} fontSize={18} chomped={false} disabled={!preview} />
                   </View>
                 ))}
               </View>
@@ -2023,7 +2076,7 @@ export function TriviaDuel(props: TriviaDuelProps) {
           {/* While the results card is up it is the only thing to read: the rail
               dims and drops its lock times (TIME, 2.3s) and Final stake pills. */}
           <View style={[styles.railWrap, resultsUp && styles.railDim]}>
-            <Rail
+            <Rail key={`rail-${runKey}`}
               me={{ name: myName, score: scores.me, look: 'classic', lockLabel: resultsUp ? null : locks.me, stake: resultsUp ? null : stakes.me }}
               opp={{ name: oppName, score: scores.opp, look: opponentLook, lockLabel: resultsUp ? null : locks.opp, stake: resultsUp ? null : stakes.opp, ghost: !!ghost }}
               pips={pips}

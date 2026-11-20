@@ -187,6 +187,8 @@ export default function CalmModal({ visible, children, reducedMotion, onWillShow
       onShow={onNativeShow}
       // @ts-expect-error DoorModal's own prop, not in React Native's Modal types.
       onPresentLost={onPresentLost}
+      // DoorModal's own prop too: the shrink away has started, so a tap now is meant for the screen under the card.
+      leaving={!visible}
       onDismiss={() => cb.current.onDismiss?.()}
       onRequestClose={() => onBackButtonPress?.()}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onBackdropPress} disabled={!onBackdropPress}

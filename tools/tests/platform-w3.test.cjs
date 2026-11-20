@@ -99,7 +99,8 @@ test('T183: the guide card grows with Larger Text up to 1.3x and wraps instead o
   // Fix pass w4 T023: the title breathes while the first coin is picked (an Animated.Text, same limits).
   assert.match(src, /<Animated\.Text style=\{\[styles\.title, breathStyle\]\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
   assert.match(src, /<Text style=\{styles\.line\} numberOfLines=\{3\} maxFontSizeMultiplier=\{CARD_TEXT_MAX\}>/);
-  assert.equal((src.match(/maxFontSizeMultiplier=\{CARD_TEXT_MAX\}/g) || []).length, 5, 'every word on the card');
+  // Critic M3 (Nov 19): the park name joined the kicker line, so its chip's own Text is gone.
+  assert.equal((src.match(/maxFontSizeMultiplier=\{CARD_TEXT_MAX\}/g) || []).length, 4, 'every word on the card');
 });
 
 test('T180: shelf and closet loads retry once quietly, then show his shark with one button; the coach waits for a shelf', async () => {
