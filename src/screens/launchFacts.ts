@@ -1,12 +1,12 @@
 /**
  * The launch tip picker (fix w3 T135), kept free of React and imports so Splash and Loading share it.
- * Before a player has won a coin, the tip is about the first minute (walk to the glowing coin,
+ * Before a player has won a coin, the tip is about the first minute (pick any coin, walk there,
  * PLAY!) or a shark fact, never levels, Ride Parts, Energy, LinePlay or sets they have not met yet.
  */
 export const LATER_TIP = /\blevel up\b|\bRide Parts?\b|\bEnergy\b|\bcollection set\b|\bLinePlay\b|\bTap GO\b|\bSecret coins\b/i;
 export const FIRST_MINUTE_TIPS: readonly string[] = [
-  'Walk to the glowing coin on the park map, then tap PLAY!',
-  'Every ride has a coin. Win it and fill your park shelf!',
+  'Every ride has a coin. Pick any one, walk there, tap PLAY!',
+  'Bigger rides cost more Tickets. Win or lose, you get Ride Parts.',
 ];
 
 /** The tips this player can use now: first-minute ones until the first coin win. */

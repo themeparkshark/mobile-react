@@ -44,7 +44,7 @@ const parkOnboardingSteps: TutorialStep[] = [
   {
     id: 'welcome', sequence: 'onboarding', title: 'Your first adventure',
     text: "I'm Finn. Let's match four pairs together!",
-    subtitle: 'A free warm-up. Then follow the glowing coin on the map.',
+    subtitle: 'A free warm-up. Then pick any coin on the map.',
     activity: 'memory_warmup', sharkPosition: 'bottom-center', sharkMood: 'waving',
     showSkip: true, nextText: 'Play a quick round', delay: 200,
   },
@@ -53,14 +53,14 @@ const parkOnboardingSteps: TutorialStep[] = [
     // Copy stands on its own: it must read right whether or not the card is spotlit. The picture is
     // park help page 1 ("Win ride coins"), so a new player never needs the "?" to learn the loop, and
     // the guide card is the next thing on screen (blueprint 6.2).
-    text: 'Every ride has a coin. Follow the glowing coin, tap PLAY! and win it.',
+    text: 'Every ride has a coin. Pick any one, walk there, tap PLAY!',
     subtitle: 'It lands on your park shelf.',
     picture: 'win_coins',
     // Spotlights the "YOUR NEXT PARK COIN" card once ParkCollectionHeader calls
     // registerRef('next_park_coin') (change request filed with its owner). Until then
     // there is no spotlight and Finn keeps his default spot.
     spotlightRef: 'next_park_coin', placement: 'above-spotlight',
-    sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Follow the coin!',
+    sharkPosition: 'bottom-center', sharkMood: 'pointing', nextText: 'Pick a coin!',
   },
 ];
 
@@ -77,7 +77,7 @@ const parkSteps: TutorialStep[] = [
     id: 'park_intro',
     sequence: 'park',
     text: 'This is your park shelf. Every coin you win lands here.',
-    subtitle: 'The next coin is on top. Tap GO and follow the path.',
+    subtitle: 'Tap any empty slot to pick a coin.',
     sharkPosition: 'bottom-center',
     sharkMood: 'excited',
     nextText: 'Got it!',

@@ -42,7 +42,7 @@ export const HELP_TOPICS: readonly HelpTopic[] = [
     terms: ['ride_coins', 'ride_passport', 'coin_guide', 'limited_coins', 'adventure_ticket', 'keys'] },
   { id: 'ride_challenge', title: 'Win ride coins', art: 'coin',
     lines: [
-      'Walk up to a ride coin and tap PLAY! One Ticket gets you one quick game.',
+      'Walk up to a ride coin and tap PLAY! Win or lose, you get Ride Parts.',
       'Win and the coin lands on your shelf. Out of Tickets, claim the ones you earned, then use today\'s free try.',
     ],
     terms: ['ride_challenge', 'tickets', 'rescue_pass'] },
@@ -125,9 +125,9 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   park_hud: { title: 'You\'re at the park!', body: 'Walk to a ride to win its coin.' },
   // Matches the button word for word (PLAY!); the card shows a ticket, an arrow and the coin
   // instead of this line, which VoiceOver reads.
-  coin_in_range: { title: 'Tap PLAY!', body: 'One Ticket plays one game. Win the ride coin!' },
-  ride_challenge: { title: 'One Ticket, one game',
-    body: 'Tap PLAY! to spend a Ticket. Win the game to win this coin.' },
+  coin_in_range: { title: 'Tap PLAY!', body: 'Its Tickets play one game. Win the ride coin!' },
+  ride_challenge: { title: 'Pick, walk, PLAY!',
+    body: 'Bigger rides cost more Tickets. Win the game to win this coin.' },
   // LinePlay passes the line that matches its wait card (LINEPLAY_INTRO_BODY); this is the Parts-on default.
   lineplay_intro: { title: 'Welcome to LinePlay',
     body: 'Stay near the ride and your time in line earns Ride Parts. Games are bonus fun. Look up when the line moves.' },

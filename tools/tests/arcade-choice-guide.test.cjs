@@ -261,3 +261,20 @@ test('C4: the Distance switch and "I can play now" (price at or under the wallet
   assert.match(screen, /guide\.setTarget\(taskId, 'near_me'\);/, 'a row tap is the player\'s pick');
   assert.match(screen, /setNearMe\(\{ canPlay: nearMeParam === 'can_play' \}\);/, 'Get Tickets opens it filtered');
 });
+
+test('C10: the teaching words never promise a glowing coin, a path to follow, one Ticket per game or a Ticket back', () => {
+  const files = ['src/components/Tutorial/steps.ts', 'src/screens/launchFacts.ts', 'src/api/defaults/crumbs.json',
+    'src/services/help/helpSheets.ts', 'src/services/help/glossary.ts', 'src/services/help/helpTopics.ts'];
+  for (const file of files) {
+    const src = read(file);
+    assert.doesNotMatch(src, /glowing|follow the path|next coin is|one Ticket|comes back/i, file);
+    // launchFacts keeps "Tap GO" only inside its filter that holds later tips back from a new player.
+    if (!file.endsWith('launchFacts.ts')) assert.doesNotMatch(src, /Tap GO/, file);
+  }
+  const steps = read('src/components/Tutorial/steps.ts');
+  assert.match(steps, /text: 'Every ride has a coin\. Pick any one, walk there, tap PLAY!'/);
+  assert.match(steps, /subtitle: 'Tap any empty slot to pick a coin\.'/);
+  assert.match(read('src/services/help/glossary.ts'), /label: 'Your pick', icon: 'map', topic: 'home',\n    what: 'A coin you chose\. The map shows the way\.'/);
+  assert.ok(JSON.parse(read('src/api/defaults/crumbs.json')).crumbs || true, 'crumbs.json is still valid JSON');
+  assert.match(read('src/api/defaults/crumbs.json'), /Bigger rides cost more Tickets\. Win or lose, you get Ride Parts\./);
+});
