@@ -6,11 +6,13 @@
  * and scale megabytes of texture on the UI thread: that was the scroll hitch
  * (Release capture: frames over 17 ms dropped from 9-119 per run to 2-5 with
  * faces off). Each layer is now decoded once at the size it is drawn
- * (Image.loadAsync with maxWidth, iOS), kept in a small LRU, and drawn from
+ * (Image.loadAsync with maxWidth, iOS, through the one loadAsync gate:
+ * src/helpers/imageLoadGate.ts), kept in a small LRU, and drawn from
  * that native image, so a row costs a few tiny textures.
  */
-import { Image as ExpoImage, type ImageRef } from 'expo-image';
+import type { ImageRef } from 'expo-image';
 import { Image, PixelRatio } from 'react-native';
+import { loadImageRef } from '../../helpers/imageLoadGate';
 
 export type LayerSource = { readonly uri: string } | number;
 
@@ -92,7 +94,7 @@ export function loadLayer(source: LayerSource, px: number, urgent = false): Prom
   const running = pending.get(key);
   if (running) return running;
   const request = turn(urgent)
-    .then(() => ExpoImage.loadAsync({ uri }, { maxWidth: px }).finally(done))
+    .then(() => loadImageRef({ uri }, { maxWidth: px }).finally(done))
     .then(ref => { remember(key, ref, px); return ref; })
     .catch(() => null)
     .finally(() => { pending.delete(key); });
