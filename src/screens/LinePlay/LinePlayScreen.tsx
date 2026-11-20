@@ -50,7 +50,7 @@ import { celebrateAdventureTicket, getTripGoal } from '../../api/endpoints/me/tr
 import { lineZoneForRide, loadParkRides, rideTypeForRide } from '../../services/lineplay/resolveRide';
 import { startAwayCopy, startAwayMeters } from '../../services/lineplay/lineZone';
 import { readCheckpoint } from '../../services/lineplay/checkpoint';
-import { guide } from '../../services/guide/nextCoin';
+import { guide, playerChose } from '../../services/guide/nextCoin';
 import { doneKeepsTarget } from '../../services/lineplay/recapExit';
 import { recordProgress, useRung } from '../../services/reveal/revealLadder';
 import { useQueueTicketsOn } from '../../services/lineplay/lineFlags';
@@ -935,7 +935,8 @@ export default function LinePlayScreen() {
       noteRideQuestionAnswered();
       await session.complete();
       if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();
-      const keep = doneKeepsTarget(heldAtOpen.current, guide.current());
+      // Only the player's own pick comes back (a coin they stood at or a line they stood in is not a pick).
+      const keep = playerChose(heldAtOpen.current) ? doneKeepsTarget(heldAtOpen.current, guide.current()) : null;
       if (keep != null) guide.setTarget(keep, 'lineplay_done');
       // DONE always closes to the map (T076), wherever LinePlay was opened from (Wait Times, a callout, the guide).
       navigation.navigate('Explore' as never);
@@ -1032,8 +1033,8 @@ export default function LinePlayScreen() {
     releaseRideStep();
     if (go.kind === 'level_up') { await handleOpenCoin(); return; }
     if (go.kind === 'shelf') { await handleOpenPark(); return; }
-    // Win this ride's coin, or the next coin: the guide points at it, and the map shows the way.
-    if (go.taskId != null) guide.setTarget(go.taskId, 'lineplay_recap');
+    // Win this ride's coin: back to the map where the player stands at it (PLAY! rises there). The recap never moves
+    // the pointer (Dustin, Nov 20: no app pick).
     try {
       await session.complete();
       if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();

@@ -278,3 +278,33 @@ test('C10: the teaching words never promise a glowing coin, a path to follow, on
   assert.ok(JSON.parse(read('src/api/defaults/crumbs.json')).crumbs || true, 'crumbs.json is still valid JSON');
   assert.match(read('src/api/defaults/crumbs.json'), /Bigger rides cost more Tickets\. Win or lose, you get Ride Parts\./);
 });
+
+test('C5: the win card buttons are BACK TO MAP and SEE MY SHELF; on today\'s Adventure coin, Play its line story', () => {
+  const W = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': { taskHasLine: () => true } });
+  const pickTarget = { taskId: 66, name: 'Jungle Cruise', meters: 60, reason: 'chosen' };
+  for (const target of [pickTarget, { ...pickTarget, reason: 'nearest_open' }, null]) {
+    const button = W.nextCoinButton(target, 155);
+    assert.equal(button.kind, 'map');
+    assert.equal(button.label, 'Back to Map');
+    assert.equal(button.detail, null, 'never a coin name or distance');
+  }
+  assert.equal(W.nextCoinButton(pickTarget, 155, true).label, 'Play its line story', 'the Adventure ride the player just won');
+  assert.doesNotMatch(read('src/components/rewards/postWinModel.ts'), /label: 'NEXT COIN'/);
+});
+
+test('C6: the LinePlay recap keeps GO for the line just waited in, else the shelf; Ride logged says BACK TO MAP; no setTarget', () => {
+  const S = loadTs('src/services/lineplay/rideStep.ts');
+  const base = { rideName: 'Jungle Cruise', partsEarned: 1, rideTaskId: 66, upgradeReady: false, nextCoin: { taskId: 73, name: 'Space Mountain' } };
+  assert.equal(S.recapGo({ ...base, coinState: 'unowned' }).kind, 'win_coin');
+  assert.equal(S.recapGo({ ...base, coinState: 'unowned' }).taskId, 66, 'the line the player chose');
+  const owned = S.recapGo({ ...base, coinState: 'owned' });
+  assert.equal(owned.kind, 'shelf');
+  assert.equal(owned.label, 'See your park shelf');
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.doesNotMatch(screen, /setTarget\([^)]*'lineplay_recap'\)/);
+  assert.match(screen, /const keep = playerChose\(heldAtOpen\.current\) \? doneKeepsTarget\(heldAtOpen\.current, guide\.current\(\)\) : null;/);
+  const success = read('src/components/RideTracker/RideLogSuccess.tsx');
+  assert.match(success, /testID="ride-logged-back-to-map" label="BACK TO MAP"/);
+  assert.doesNotMatch(success, /NEXT COIN/);
+  assert.doesNotMatch(read('src/screens/RideTracker/RideLogScreen.tsx'), /setTarget|ride_logged/);
+});

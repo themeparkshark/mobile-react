@@ -155,6 +155,6 @@ export function recapGo(input: {
   if (input.coinState === 'owned' && input.upgradeReady) {
     return { kind: 'level_up', label: `Level up ${possessive(input.rideName)} coin`, button: 'LEVEL UP' };
   }
-  if (input.nextCoin) return { kind: 'next_coin', label: `Next coin: ${input.nextCoin.name}`, button: 'GO', taskId: input.nextCoin.taskId };
+  // Never a next coin (Dustin, Nov 20: the app never picks a ride): the line just waited in, a level up, or the shelf.
   return { kind: 'shelf', label: 'See your park shelf', button: 'SHELF' };
 }

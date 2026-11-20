@@ -356,7 +356,8 @@ test('the screens wire the one ride question', () => {
   assert.match(journal, /if \(fromRideStep && timedWait != null && Number\.isFinite\(timedWait\)\) setWaitTime/);
   assert.match(journal, /if \(below === 'RideTracker'\) navigation\.goBack\(\);\n\s+else navigation\.dispatch\(StackActions\.replace\('RideTracker'\)\);/);
   const success = read('src/components/RideTracker/RideLogSuccess.tsx');
-  assert.match(success, /label=\{`NEXT COIN: \$\{nextCoinName\}`\}/);
+  assert.match(success, /label="BACK TO MAP"/, 'Ride logged: BACK TO MAP, never NEXT COIN (Dustin, Nov 20)');
+  assert.doesNotMatch(journal, /setTarget\(/);
   assert.match(success, /Next time, just ride\. Your shark asks once when you are done\./);
 });
 

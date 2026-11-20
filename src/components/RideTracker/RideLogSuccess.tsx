@@ -41,15 +41,13 @@ interface RideLogSuccessProps {
   queued?: boolean;
   /** Why the kept ride waits: signal (default) or signing in again. */
   queuedReason?: RideLogWaitReason;
-  /** The guide's next coin (its name), for the one NEXT COIN button. */
-  nextCoinName?: string | null;
-  /** Back to the map, where the guide points at the next coin. */
-  onNextCoin?: () => void;
+  /** BACK TO MAP: the one next thing after a logged ride (the player picks the next coin there). */
+  onBackToMap?: () => void;
 }
 
 const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
   ride, rideCount, totalRideCount, xpEarned, newAchievements, onDone, doneLabel = 'Return to Ride Tracker', onLogAnother, queued = false, queuedReason = 'signal',
-  nextCoinName = null, onNextCoin,
+  onBackToMap,
 }) => {
   const { playSound } = useContext<SoundEffectContextType>(SoundEffectContext);
   const scaleAnim = useRef(new Animated.Value(0)).current;
@@ -183,10 +181,10 @@ const RideLogSuccess: React.FC<RideLogSuccessProps> = ({
           </View>
         )}
 
-        {/* One next thing: the guide's next coin, back on the map. */}
-        {onNextCoin && nextCoinName && (
-          <GameButton label={`NEXT COIN: ${nextCoinName}`} icon="coin" fullWidth onPress={onNextCoin}
-            style={styles.nextCoin} accessibilityLabel={`Next coin, ${nextCoinName}. Back to the map.`} />
+        {/* One next thing: back to the map, where the player picks (Dustin, Nov 20: the app never names a ride). */}
+        {onBackToMap && (
+          <GameButton testID="ride-logged-back-to-map" label="BACK TO MAP" icon="map" fullWidth onPress={onBackToMap}
+            style={styles.nextCoin} accessibilityLabel="Back to the map" />
         )}
 
         {/* Shareable Card */}
