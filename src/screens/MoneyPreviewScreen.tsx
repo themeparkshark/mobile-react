@@ -23,6 +23,7 @@ import StarterSticker from '../components/money/StarterSticker';
 import { Image } from 'expo-image';
 import { BRAND, FONT } from '../ui';
 import countText from '../helpers/countText';
+import TicketPips from '../components/tickets/TicketPips';
 
 export default function MoneyPreviewScreen({ route }: { route?: { params?: { screen?: string } } }) {
   const screen = route?.params?.screen;
@@ -44,6 +45,29 @@ export default function MoneyPreviewScreen({ route }: { route?: { params?: { scr
         {ready && <SharkPassBanner style={{ alignSelf: 'stretch' }} />}
         <StarterOfferCard ready onShown={() => undefined} />
       </View>
+    );
+  }
+  if (screen === 'ticket-pips') {
+    // T1 bench (arcade plan, Nov 20 2026): the price pictures at 1, 2 and 3 Tickets, held 0 to 4, at all three sizes.
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: BRAND.blue }}>
+        <ScrollView contentContainerStyle={s.scroll}>
+          {(['island', 'card', 'button'] as const).map(size => <View key={size} style={[s.cream, { gap: 8 }]}>
+            <Text style={[s.label, { color: BRAND.navy }]}>{size.toUpperCase()}</Text>
+            {[1, 2, 3].map(price => <View key={price} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+              {[0, 1, 2, 3, 4].map(held => <View key={held} style={{ alignItems: 'center', gap: 2, minWidth: 44 }}>
+                <TicketPips price={price} held={held} size={size} />
+                <Text style={{ fontFamily: FONT.body, fontSize: 11, color: BRAND.navySoft }}>{`${held} held`}</Text>
+              </View>)}
+            </View>)}
+          </View>)}
+          <View style={[s.cream, { gap: 8 }]}>
+            <Text style={[s.label, { color: BRAND.navy }]}>CARD WITH NUMBER</Text>
+            <TicketPips price={3} held={1} size="card" showNumber />
+            <TicketPips price={2} held={5} size="card" showNumber />
+          </View>
+        </ScrollView>
+      </SafeAreaView>
     );
   }
   if (screen === 'natural') {
