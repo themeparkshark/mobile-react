@@ -34,8 +34,8 @@ import { catchStyleFor } from './ridePhoto';
 import { preloadRidePhoto } from './ridePhoto/rideAssets';
 import { useCatchOpen, catchDim, catchShown } from './catchPresence';
 import FindEdgeArrows, { type EdgeFind } from './FindEdgeArrows';
-import { bannerCovers, clusterFinds, findFootprint, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
-import { EDGE_TOKEN, edgesAtRest, edgeTokens, mapChrome, underChrome } from '../../components/map/mapChrome';
+import { bannerCovers, findFootprint, labelFinds, hudRowTop, peekBottom, sharkFootprint, type Rect } from './findEdges';
+import { EDGE_TOKEN, edgesAtRest, edgeTokens, mapChrome, offMap, underChrome } from '../../components/map/mapChrome';
 import type { FingerSide } from './PrepItem';
 import { mapStatusLine, peekLine, screenBearing } from './findPresentation';
 import { isStaleHighlight, nearestFind } from './nearestFind';
@@ -267,11 +267,12 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
   const [sharkLook, setSharkLook] = useState<-1 | 0 | 1>(0);
   const [edgeFinds, setEdgeFinds] = useState<EdgeFind[]>([]);
-  // Treats whose spot sits under the map's chrome (a card, a corner button): drawn as edge arrows, never peeking.
-  const [coveredPivots, setCoveredPivots] = useState<ReadonlySet<number>>(() => new Set());
+  // Treats partly under the map's chrome (a card, a corner button) or the screen edge: they still draw (Dustin, Nov 19:
+  // treats are the Pokemon of this map), only their words drop and the hand looks for a clear one.
+  const [quietPivots, setQuietPivots] = useState<ReadonlySet<number>>(() => new Set());
   const [findSides, setFindSides] = useState<Record<number, FingerSide>>({});
   const [cascadeOn, setCascadeOn] = useState(false);
-  const [findGroups, setFindGroups] = useState<ReturnType<typeof clusterFinds>>({ counts: {}, hidden: [], chromeless: [] });
+  const [findLabels, setFindLabels] = useState<ReturnType<typeof labelFinds>>({ chromeless: [] });
   // The catch reads GPS through a ref, so it never re-renders on a fix.
   const fixRef = useRef({ latestLocationSampleRef, location });
   fixRef.current = { latestLocationSampleRef, location };
@@ -631,8 +632,8 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
     return bannerCovers(point, containerSize, BOTTOM_SLOT);
   };
   // One finger cue on the map at a time: the nearest find in range.
-  const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange && !coveredPivots.has(entry.item.pivot_id ?? -1))
-    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed, coveredPivots]);
+  const fingerPivot = useMemo(() => placed.filter(entry => entry.inRange && !quietPivots.has(entry.item.pivot_id ?? -1))
+    .sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0))[0]?.item.pivot_id ?? null, [placed, quietPivots]);
   const fingerRef = useRef<number | null>(null);
   fingerRef.current = fingerPivot;
   // T148: while nothing is in range, the nearest treat bobs a little (one marker, on the map's clock).
@@ -670,25 +671,24 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   reservedRef.current = reservedRects;
   const reservedKey = reservedRects.map(r => `${Math.round(r.x)},${Math.round(r.y)},${Math.round(r.w)},${Math.round(r.h)}`).join('|');
 
-  // Measure finds on screen after each settle: tap-to-open origins and edge arrows for finds off screen or under chrome.
+  // Measure finds on screen after each settle: tap-to-open origins, and edge arrows for finds wholly off the map.
   useEffect(() => {
     if (mapSettled === 0 || containerSize.width === 0) return;
     let alive = true;
     void (async () => {
       const next = new globalThis.Map<number, { x: number; y: number }>();
       const edges: EdgeFind[] = [];
-      const covered = new Set<number>();
+      const quiet = new Set<number>();
       for (const { item, distance } of placed) {
         if (item.pivot_id == null || item.latitude == null || item.longitude == null) continue;
         const point = await toLocal(item.latitude, item.longitude);
         if (!alive) return;
         if (!point) continue;
         next.set(item.pivot_id, point);
-        const off = point.x < 0 || point.y < 0 || point.x > containerSize.width || point.y > containerSize.height;
-        const under = !off && underChrome(point, reservedRef.current, undefined, containerSize);
-        // Off screen counts as covered too, so its pill and sparkle never peek in from the edge (rule c).
-        if (off || under) covered.add(item.pivot_id);
-        if (off || under) edges.push({ item, point, distance });
+        // Rule c: only a treat with none of its art on the map is an edge arrow. One partly under a button, a card or
+        // the edge draws as its own marker (as in Pokemon GO); its words drop so no text sits under chrome.
+        if (offMap(point, containerSize)) edges.push({ item, point, distance });
+        else if (underChrome(point, reservedRef.current, undefined, containerSize)) quiet.add(item.pivot_id);
       }
       findPoints.current = next;
       // The shark's look-around turns toward the nearest find in range (screen side of it, from the centre).
@@ -709,21 +709,21 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
       const here = fixRef.current.location;
       const shark = here?.latitude != null && here?.longitude != null ? await toLocal(here.latitude, here.longitude) : null;
       if (!alive) return;
-      // Rule h: markers never overlap each other or the shark. Only finds that show are grouped; the hand's treat
-      // (the nearest one in range) always keeps its own marker.
-      const keep = placed.filter(entry => entry.inRange && entry.item.pivot_id != null && !covered.has(entry.item.pivot_id))
+      // Every uncaught treat draws as its own marker; only words that would sit on other words drop (rule e). The
+      // hand's treat (the nearest in range, clear of chrome) keeps its words and its hand.
+      const keep = placed.filter(entry => entry.inRange && entry.item.pivot_id != null && !quiet.has(entry.item.pivot_id))
         .sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity))[0]?.item.pivot_id ?? null;
-      // A caught find never leads a group (it is hidden while the list refresh catches up), so the rest show at once.
-      const groups = clusterFinds([...next.entries()].filter(([pivot]) => !covered.has(pivot) && !caughtPivots.has(pivot))
-        .map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })), { shark, keep });
-      setFindGroups(current => (JSON.stringify(current) === JSON.stringify(groups) ? current : groups));
-      // What each visible find occupies on screen: the HUD row and the peek keep clear of these.
-      const prints = [...next.entries()].filter(([pivot]) => !groups.hidden.includes(pivot) && !covered.has(pivot))
+      // A caught find (hidden while the list refresh catches up) takes no label room.
+      const labels = labelFinds([...next.entries()].filter(([pivot]) => !caughtPivots.has(pivot))
+        .map(([pivot, point]) => ({ pivot, x: point.x, y: point.y, distance: distances.get(pivot) ?? null })), { keep, quiet });
+      setFindLabels(current => (JSON.stringify(current) === JSON.stringify(labels) ? current : labels));
+      // What each find on the map occupies on screen: the chips, the peek and the tip keep clear of these.
+      const prints = [...next.entries()].filter(([pivot, p]) => !caughtPivots.has(pivot) && !offMap(p, containerSize))
         .map(([pivot, p]) => findFootprint(p, pivot === fingerRef.current));
       if (shark) prints.push(sharkFootprint(shark));
       setFootprints(current => (JSON.stringify(current) === JSON.stringify(prints) ? current : prints));
       setEdgeFinds(edges.sort((a, b) => (a.distance ?? 0) - (b.distance ?? 0)));
-      setCoveredPivots(current => (current.size === covered.size && [...covered].every(p => current.has(p)) ? current : covered));
+      setQuietPivots(current => (current.size === quiet.size && [...quiet].every(p => current.has(p)) ? current : quiet));
     })();
     return () => { alive = false; };
   }, [mapSettled, placed, containerSize.width, containerSize.height, toLocal, reservedKey, caughtPivots]);
@@ -796,9 +796,9 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
   const tokens = useMemo(() => edgeArrows.map(t => ({ x: t.x - EDGE_TOKEN / 2 - 4, y: t.y - EDGE_TOKEN / 2 - 4, w: EDGE_TOKEN + 8, h: EDGE_TOKEN + 8 })), [edgeArrows]);
   const obstacles = useMemo(() => footprints.concat(tokens), [footprints, tokens]);
   // The chip row drops a row when a find (or an edge token) sits under it, so a tap there reaches the find.
-  // The guide card takes the top row (it drops a row while a find sits under it, like the chips); the chips sit under it.
-  const cardTop = useMemo(() => (guideShown && containerSize.width > 0
-    ? hudRowTop(obstacles, rowTop, containerSize.width - GUIDE_CARD_RIGHT - 12) : rowTop), [guideShown, obstacles, rowTop, containerSize.width]);
+  // The guide card holds the top slot where mapChrome put it: a treat under it is normal map behavior (Dustin, Nov 19),
+  // so the card never jumps a row for one. The chips sit under it.
+  const cardTop = rowTop;
   const chipsTop = guideShown ? cardTop + guideBlock : rowTop;
   const hudTop = useMemo(() => (hudWidth > 0 ? hudRowTop(obstacles, chipsTop, hudWidth) : chipsTop), [obstacles, chipsTop, hudWidth]);
   // The one next thing (fix pass w4, T007): the treats on this map join what ExploreScreen knows.
@@ -855,11 +855,11 @@ export default function HomeExplore({ onPrepItemNearby, onFindInRange, catching 
             // Rounded so GPS jitter does not re-render every marker.
             distance={distance == null ? null : Math.round(distance / 5) * 5} inRange={inRange}
             animated={animatedPivots.has(prepItem.pivot_id)}
-            hidden={caughtPivots.has(prepItem.pivot_id ?? -1) || findGroups.hidden.includes(prepItem.pivot_id ?? -1) || coveredPivots.has(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
-            count={findGroups.counts[prepItem.pivot_id ?? -1] ?? 1}
+            // Only a catch (or a ridden-off Legendary, gone for good) hides a treat: never grouping, chrome or the edge.
+            hidden={caughtPivots.has(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)}
             // The find being caught never re-renders mid-catch (a re-render would push its pin's first-render
             // style again for a frame on Fabric: the caught pin flashing back at its spot, wow-map r4).
-            chromeless={findGroups.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && prepItem.pivot_id !== catchingPivot && underBanner(prepItem.pivot_id))}
+            chromeless={findLabels.chromeless.includes(prepItem.pivot_id ?? -1) || (cascadeOn && prepItem.pivot_id !== catchingPivot && underBanner(prepItem.pivot_id))}
             onTap={tapFind} onExpire={handlePrepItemExpire}
             fingerSide={(findSides[prepItem.pivot_id ?? -1] ?? 'right')} showFinger={prepItem.pivot_id === fingerPivot}
             idleBob={idlePivot != null && prepItem.pivot_id === idlePivot}

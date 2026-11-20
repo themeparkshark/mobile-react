@@ -19,54 +19,44 @@ export function edgeArrowPlacement(point: { x: number; y: number }, size: { widt
 }
 
 /**
- * What a find draws on screen around its spot (rule h): the NEW tag above its art, the art, and the distance pill
- * that hangs under it. Two finds whose boxes touch are drawn as one marker, and a box cut by the screen edge is an
- * edge arrow instead (mapChrome.underChrome).
+ * What a find draws on screen around its spot: the NEW tag above its art, the art, and the distance pill that
+ * hangs under it (rule e: two of these never put their words on top of each other).
  */
 export function markerBox(point: { x: number; y: number }): Rect {
   return { x: point.x - 42, y: point.y - 42, w: 84, h: 84 };
 }
 
 /**
- * Markers never overlap (MAP_LAYOUT rule h). Finds whose marker boxes touch collapse into one marker with a count
- * ("x2"), never two NEW tags stacked: the nearest find in a group leads and the rest hide. The player's shark is
- * reserved too: a find (other than `keep`, the one the hand points at) whose box lands on the shark folds into the
- * nearest marker still showing. GPS spots never move; only what is drawn there does. Finds whose spot sits within
- * `clearTop` of the map's top edge (under the header) keep their art but drop their chrome (pill, dot, badge,
- * finger). Pure.
+ * Every uncaught treat on the map draws as its own marker (Dustin, Nov 19: "i didnt mind multiple redeemable items on
+ * map thats normaly like pokemon go to see pokemon around you"). Nothing here hides or folds a treat. It only says
+ * which treats drop their words (NEW tag, NEW dot, distance pill, camera badge) so no two labels sit on top of each
+ * other and no label sits under chrome: the nearest treat keeps its words (the hand's treat, `keep`, first), and a
+ * farther one whose box would touch them shows its art alone. `quiet` are treats under a button, a card or the screen
+ * edge (mapChrome.underChrome): their art draws, their words drop. Finds within `clearTop` of the map's top (under the
+ * header) drop their words too. The shark draws on top of any treat under it. GPS spots never move. Pure.
  */
-export function clusterFinds(points: readonly { pivot: number; x: number; y: number; distance: number | null }[],
-  opts: { readonly shark?: { x: number; y: number } | null; readonly keep?: number | null; readonly clearTop?: number } = {}):
-  { counts: Record<number, number>; hidden: number[]; chromeless: number[] } {
+export function labelFinds(points: readonly { pivot: number; x: number; y: number; distance: number | null }[],
+  opts: { readonly keep?: number | null; readonly quiet?: ReadonlySet<number>; readonly clearTop?: number } = {}):
+  { chromeless: number[] } {
   const clearTop = opts.clearTop ?? 24 + 34;
   const order = [...points].sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity) || a.pivot - b.pivot);
-  const keep = opts.keep ?? order[0]?.pivot ?? null;
-  const shark = opts.shark ? sharkFootprint(opts.shark) : null;
-  const counts: Record<number, number> = {};
-  const hidden: number[] = [];
-  const leaders: typeof order = [];
-  const onShark: typeof order = [];
-  const fold = (lead: typeof order[number], point: typeof order[number]) => {
-    counts[lead.pivot] = (counts[lead.pivot] ?? 1) + 1;
-    hidden.push(point.pivot);
-  };
-  // The kept find leads first, so the hand's treat is never folded into another.
-  const kept = order.find(point => point.pivot === keep);
+  const kept = order.find(point => point.pivot === opts.keep);
+  const chromeless: number[] = [];
+  const labelled: Rect[] = [];
   for (const point of kept ? [kept, ...order.filter(p => p !== kept)] : order) {
-    const box = markerBox(point);
-    const lead = leaders.find(l => hits(markerBox(l), box));
-    if (lead) fold(lead, point);
-    else if (shark && point.pivot !== keep && hits(box, shark)) onShark.push(point);
-    else leaders.push(point);
+    if (point.y < clearTop || opts.quiet?.has(point.pivot)) { chromeless.push(point.pivot); continue; }
+    // The hand hovers above its treat: its words and the hand both count.
+    const box = point === kept ? union(markerBox(point), findFootprint(point, true)) : markerBox(point);
+    if (labelled.some(other => hits(other, box))) chromeless.push(point.pivot);
+    else labelled.push(box);
   }
-  for (const point of onShark) {
-    const lead = [...leaders].sort((a, b) => Math.hypot(a.x - point.x, a.y - point.y) - Math.hypot(b.x - point.x, b.y - point.y))[0];
-    if (lead) fold(lead, point);
-    else leaders.push(point);
-  }
-  const chromeless = leaders.filter(point => point.y < clearTop).map(point => point.pivot);
-  return { counts, hidden, chromeless };
+  return { chromeless };
 }
+
+const union = (a: Rect, b: Rect): Rect => {
+  const x = Math.min(a.x, b.x), y = Math.min(a.y, b.y);
+  return { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y };
+};
 
 /** Whether a find's map spot sits under the reward banner (its tags would poke through the cascade). */
 export function bannerCovers(point: { x: number; y: number }, size: { width: number; height: number }, bottomSlot: number): boolean {

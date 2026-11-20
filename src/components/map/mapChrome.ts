@@ -6,15 +6,16 @@
  *  (a) One card in the top slot. Everything else that wants the top waits its turn or wears its small chip.
  *  (b) A coach tip shows only where its bubble fits without covering a card, a button, a marker or the shark,
  *      never while a card is arriving, one on screen and one per app open. If it cannot fit, it waits.
- *  (c) Chrome reserves its areas. A treat under a corner button or a card is not drawn peeking out from behind
- *      it: it becomes an edge arrow at the nearest clear edge.
+ *  (c) Treats are the Pokemon of this map: every uncaught treat draws as its own marker, even partly under a
+ *      button, a card or the screen edge (Dustin, Nov 19). There its words drop (no text under chrome); only a
+ *      treat whose art is wholly off the map becomes an edge arrow. Nothing but a catch or a claim hides a treat.
  *  (d) Edge arrows never touch: one per side (the nearest find leads, the rest are its count), and two that
  *      would still touch merge into one.
- *  (e) One cue per marker: the hand or the NEW tag, never both; the calling rings only on the current target.
+ *  (e) One cue per marker: the hand or the NEW tag, never both; the calling rings only on the current target;
+ *      two treats' words never sit on top of each other (findEdges.labelFinds: the nearer keeps them).
  *  (f) The distance pill is one quiet line (Report is a long press on the pill or the treat).
  *  (g) At rest the map shows only what matters now (restThings lists them).
- *  (h) Markers never overlap each other or the shark: touching markers draw as one with a count, and a treat on
- *      the shark folds into the nearest marker still showing (findEdges.clusterFinds; the hand's treat stays).
+ *  (h) Retired Nov 19 at Dustin's word: treats are never folded into one marker with a count.
  */
 import { markerBox, type Rect } from '../../screens/ExploreScreen/findEdges';
 
@@ -178,7 +179,8 @@ export const UNDER_PAD = 18;
 
 /**
  * Whether a treat's marker sits under any reserved area, or so close to the map's edge that any part of it (the art,
- * the NEW tag above it, the distance pill under it) is cut off. Then it shows as an edge arrow, never peeking. Pure.
+ * the NEW tag above it, the distance pill under it) is cut off. The treat still draws (normal map behavior, as in
+ * Pokemon GO); only its words drop, so no text sits under a button or a card or is cut by the edge. Pure.
  */
 export function underChrome(point: { readonly x: number; readonly y: number }, reserved: readonly Rect[], pad = UNDER_PAD,
   size: { readonly width: number; readonly height: number } | null = null): boolean {
@@ -188,6 +190,17 @@ export function underChrome(point: { readonly x: number; readonly y: number }, r
   // The art stands about 36 pt above its spot: that box keeps the padded margin around chrome.
   const art: Rect = { x: point.x - 20, y: point.y - 36, w: 40, h: 44 };
   return reserved.some(r => hits(art, inflate(r, pad)) || hits(box, r));
+}
+
+/** A treat's art (it stands about 36 pt above its spot). */
+const findArt = (point: { readonly x: number; readonly y: number }): Rect => ({ x: point.x - 20, y: point.y - 36, w: 40, h: 44 });
+
+/**
+ * Whether none of a treat's art is on the map: only then is it an edge arrow. A treat partly past the edge draws as
+ * its own marker (Dustin, Nov 19). Pure.
+ */
+export function offMap(point: { readonly x: number; readonly y: number }, size: { readonly width: number; readonly height: number }): boolean {
+  return !hits(findArt(point), { x: 0, y: 0, w: size.width, h: size.height });
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -294,12 +307,12 @@ export interface MarkerCues {
  * The current target (the find the hand points at) wears the hand and the rings; any other find in range wears its
  * NEW tag if it is new, and nothing else. A far new find keeps its small dot. Pure.
  */
-export function markerCues(m: { readonly isNew: boolean; readonly inRange: boolean; readonly target: boolean; readonly grouped: boolean }): MarkerCues {
+export function markerCues(m: { readonly isNew: boolean; readonly inRange: boolean; readonly target: boolean }): MarkerCues {
   const finger = m.inRange && m.target;
   return {
     finger,
-    newTag: m.isNew && !m.grouped && m.inRange && !finger,
-    newDot: m.isNew && !m.grouped && !m.inRange,
+    newTag: m.isNew && m.inRange && !finger,
+    newDot: m.isNew && !m.inRange,
     rings: finger,
   };
 }

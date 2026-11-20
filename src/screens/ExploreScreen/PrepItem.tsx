@@ -120,7 +120,6 @@ interface Props {
   animated?: boolean;
   /** Which side the finger cue hovers on: away from the player's shark, so it never points at the player. */
   fingerSide?: FingerSide;
-  count?: number;
   /** Only one find on the map shows the pointing finger at a time (the nearest in range). */
   showFinger?: boolean;
   pulseKey?: number | null;
@@ -218,7 +217,7 @@ function RarityMark({ tier }: { tier: number }) {
  * twinkle with 4-point stars. One shared glow image, no iOS shadows, and motion
  * only when `animated` (in range or among the nearest), on the map's clock.
  */
-function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, distance = null, plainDistance = false, idleBob = false }: Props) {
+function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animated = true, fingerSide = 'right', chromeless = false, showFinger = true, pulseKey = null, distance = null, plainDistance = false, idleBob = false }: Props) {
   const { clock, active } = useMapAlive();
   const reduced = useReducedGameMotion();
   const reducedRef = useRef(reduced);
@@ -362,7 +361,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   const myPivot = prepItem.pivot_id ?? -2;
   // The catch layer takes over on the UI thread: this pin hides on the same frame the layer's copy starts
   // moving (after its art has drawn), never a frame before (no blink) or after (no double).
-  // A hidden find (folded into a group, under chrome or off screen) stays hidden here too: this style comes last in
+  // A hidden find (caught, or a ridden-off Legendary) stays hidden here too: this style comes last in
   // the box's style list, so an opacity of 1 here used to override styles.hidden and every hidden find still drew
   // (critic M1 and M2, Nov 19: grouped treats and edge-cut pills showing).
   const handOff = useAnimatedStyle(() => ({ opacity: hidden || catchHidePivot.value === myPivot ? 0 : 1 }), [myPivot, hidden]);
@@ -373,7 +372,7 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
   // The pointed-at find breathes a soft ring on the map's clock, so a kid who cannot read sees which one to tap.
   // One cue per marker (map chrome rule e): the current target wears the hand and the calling rings; any other
   // find wears its NEW tag, never both.
-  const cues = markerCues({ isNew: !!prepItem.is_new_variant, inRange, target: showFinger, grouped: count > 1 });
+  const cues = markerCues({ isNew: !!prepItem.is_new_variant, inRange, target: showFinger });
   const pointed = cues.finger;
   const softRing = useAnimatedStyle(() => {
     if (!pointed) return { opacity: 0 };
@@ -430,9 +429,6 @@ function PrepItem({ prepItem, onExpire, inRange = false, hidden = false, animate
         <GameIcon name="camera" size={inRange ? 16 : 12} />
         {inRange && <RarityMark tier={tier} />}
       </View>}
-      {/* With the hand on it, the group's count sits on the hand's side (always the side away from the shark) and
-          at the other end from the hand, so neither the hand nor the shark ever covers it (rule h). */}
-      {count > 1 && <View style={[styles.countBadge, cues.finger && !below && styles.countBadgeLow, cues.finger && !leftSide && styles.countBadgeRight, chromeless && styles.chromeOff]}><Text style={styles.countText}>×{count}</Text></View>}
       {cues.newTag && <View style={[styles.newBadge, chromeless && styles.chromeOff]}><Text style={styles.newText}>NEW</Text></View>}
       {cues.newDot && <View style={[styles.newDot, chromeless && styles.chromeOff]} />}
       {cues.finger && <Animated.Image source={FINGER} style={[styles.finger, chromeless && styles.chromeOff, below ? styles.fingerBelow : leftSide ? styles.fingerLeft : styles.fingerRight, finger]} />}
@@ -486,11 +482,6 @@ const styles = StyleSheet.create({
   newBadge: { position: 'absolute', top: B / 2 - A / 2 - 12, left: B / 2 - A / 2 - 14, backgroundColor: BRAND.gold,
     borderWidth: 2, borderColor: BRAND.white, borderRadius: 8, paddingHorizontal: 4, paddingVertical: 0 },
   newText: { color: BRAND.navy, fontFamily: 'Knockout', fontSize: 14 },
-  countBadge: { position: 'absolute', top: B / 2 - A / 2 - 12, left: B / 2 - A / 2 - 14, backgroundColor: BRAND.navy,
-    borderWidth: 2, borderColor: BRAND.white, borderRadius: 10, paddingHorizontal: 6 },
-  countBadgeLow: { top: B / 2 + A / 2 - 18 },
-  countBadgeRight: { left: undefined, right: B / 2 - A / 2 - 14 },
-  countText: { color: BRAND.white, fontFamily: 'Knockout', fontSize: 15 },
   // The fingertip (bottom centre of the 34 x 43 art, turned 28 degrees) lands on the find itself, 6 pt
   // from its centre on the side away from the player, never on the NEW tag or the badges.
   finger: { position: 'absolute', top: B / 2 - 46, width: 34, height: 43 },

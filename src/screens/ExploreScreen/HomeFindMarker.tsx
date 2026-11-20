@@ -17,7 +17,7 @@ export function findLabel(item: PrepItemType, distance: number | null, inRange: 
  * One find on the home map, memoized: GPS ticks re-render it only when its
  * own range, rounded distance, motion budget or hidden state changes.
  */
-function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onExpire, fingerSide = 'right', count = 1, chromeless = false, showFinger = true, pulseKey = null, plainDistance = false, idleBob = false }: {
+function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onExpire, fingerSide = 'right', chromeless = false, showFinger = true, pulseKey = null, plainDistance = false, idleBob = false }: {
   readonly item: PrepItemType;
   readonly distance: number | null;
   readonly inRange: boolean;
@@ -26,9 +26,7 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
   readonly onTap: (item: PrepItemType, distance: number | null, inRange: boolean) => void;
   readonly onExpire: () => void;
   readonly fingerSide?: FingerSide;
-  /** Overlapping finds collapse into this one marker. */
-  readonly count?: number;
-  /** Under the header: art only. */
+  /** Under the header, chrome or the edge, or its words would sit on a nearer treat's: art only. */
   readonly chromeless?: boolean;
   readonly showFinger?: boolean;
   /** A new value pulses this find once (How to Play hand-off). */
@@ -42,10 +40,10 @@ function HomeFindMarker({ item, distance, inRange, animated, hidden, onTap, onEx
   const press = useCallback(() => { squashFind(item.pivot_id); onTap(item, distance, inRange); }, [onTap, item, distance, inRange]);
   return (
     // Kids press and hold: a long-press is the same as a tap (no report dialog here).
-    // A hidden find takes no touches (the same Pressable stays mounted): a tap there reaches the marker that shows.
+    // A hidden (caught) find takes no touches (the same Pressable stays mounted).
     <Marker coordinate={coordinate} anchor={PREP_MARKER_ANCHOR} onPress={press} onLongPress={press} touchEnabled={!hidden}
       accessibilityLabel={findLabel(item, distance, inRange)}>
-      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} distance={distance} animated={animated} hidden={hidden} fingerSide={fingerSide} count={count} chromeless={chromeless} showFinger={showFinger} pulseKey={pulseKey} plainDistance={plainDistance} idleBob={idleBob} />
+      <PrepItemMarker prepItem={item} onExpire={onExpire} inRange={inRange} distance={distance} animated={animated} hidden={hidden} fingerSide={fingerSide} chromeless={chromeless} showFinger={showFinger} pulseKey={pulseKey} plainDistance={plainDistance} idleBob={idleBob} />
     </Marker>
   );
 }

@@ -81,7 +81,7 @@ test('(b) never while a card is arriving, and one map tip per app open', () => {
   assert.equal(C.mapTipAllowed('open-2', 'map_compass', 'open-1', 'park_hud'), true, 'a new open, a new tip');
 });
 
-test('(c) a treat under a corner button or the card is under chrome; one in the open map is not', () => {
+test('(c) a treat partly under a corner button or the card drops its words (it still draws); one in the open map does not', () => {
   const layout = home({ raidChip: true });
   const reserved = layout.reserved.map(r => r.rect);
   const shelf = layout.reserved.find(r => r.kind === 'shelf').rect;
@@ -129,13 +129,12 @@ test('(d) two sides whose arrows would meet at a corner merge into one', () => {
 });
 
 test('(e) one cue per marker: the target wears the hand and the rings, any other new find only its NEW tag', () => {
-  assert.deepEqual(plain(C.markerCues({ isNew: true, inRange: true, target: true, grouped: false })),
+  assert.deepEqual(plain(C.markerCues({ isNew: true, inRange: true, target: true})),
     { finger: true, newTag: false, newDot: false, rings: true }, 'his donut: hand, not hand plus NEW');
-  assert.deepEqual(plain(C.markerCues({ isNew: false, inRange: true, target: false, grouped: false })),
+  assert.deepEqual(plain(C.markerCues({ isNew: false, inRange: true, target: false})),
     { finger: false, newTag: false, newDot: false, rings: false }, 'his popcorn: no rings off target');
-  assert.deepEqual(plain(C.markerCues({ isNew: true, inRange: true, target: false, grouped: false })).newTag, true);
-  assert.deepEqual(plain(C.markerCues({ isNew: true, inRange: false, target: false, grouped: false })).newDot, true);
-  assert.deepEqual(plain(C.markerCues({ isNew: true, inRange: true, target: false, grouped: true })).newTag, false);
+  assert.deepEqual(plain(C.markerCues({ isNew: true, inRange: true, target: false})).newTag, true);
+  assert.deepEqual(plain(C.markerCues({ isNew: true, inRange: false, target: false})).newDot, true);
 });
 
 test('(g) at rest: the edge arrows step back while a treat is in range', () => {
@@ -147,7 +146,7 @@ test('the home map and the park map read their chrome from the one owner', () =>
   const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
   assert.doesNotMatch(homeSrc, /LIVE_BAR_ROW/, 'no second rule that drops the card for the raid');
   assert.match(homeSrc, /controlsTop=\{chrome\.controlsTop\}/);
-  assert.match(homeSrc, /underChrome\(point, reservedRef\.current, undefined, containerSize\)/);
+  assert.match(homeSrc, /else if \(underChrome\(point, reservedRef\.current, undefined, containerSize\)\) quiet\.add\(item\.pivot_id\);/);
   assert.match(homeSrc, /edgeTokens\(edgeFinds, containerSize/);
   assert.doesNotMatch(homeSrc, /edgeArrowPlacement/);
   const chip = read('src/screens/ExploreScreen/HomeHuntChip.tsx');
@@ -162,52 +161,49 @@ test('the home map and the park map read their chrome from the one owner', () =>
 
 const E = loadTs('src/screens/ExploreScreen/findEdges.ts');
 
-test('(h) markers never overlap: touching markers draw as one with a count, one NEW tag at most', () => {
-  // Critic M1 (SE, cr-13): three treats piled on the shark, two NEW tags stacked one above the other.
-  const out = E.clusterFinds([
-    { pivot: 1, x: 150, y: 260, distance: 6 },
-    { pivot: 2, x: 190, y: 225, distance: 12 },
-    { pivot: 3, x: 280, y: 270, distance: 30 },
-  ]);
-  assert.deepEqual(plain(out.counts), { 1: 2 }, 'the pair that touches is one marker, the nearer find leads');
-  assert.deepEqual(plain(out.hidden), [2]);
-  // No two markers that still show touch.
-  const shown = [{ x: 150, y: 260 }, { x: 280, y: 270 }];
-  assert.ok(!hits(E.markerBox(shown[0]), E.markerBox(shown[1])));
-  // Grouped markers wear no NEW tag (one cue per marker): never two stacked.
-  assert.equal(C.markerCues({ isNew: true, inRange: true, target: false, grouped: true }).newTag, false);
-});
-
-test('(h) the shark is reserved: a treat on it folds into the nearest marker still showing; the hand keeps its own', () => {
-  const shark = { x: 187, y: 260 };
-  const out = E.clusterFinds([
-    { pivot: 10, x: 150, y: 300, distance: 5 },   // the hand's treat, beside the shark
-    { pivot: 11, x: 200, y: 230, distance: 9 },   // behind the shark's head
-    { pivot: 12, x: 320, y: 420, distance: 40 },  // far and clear
-  ], { shark, keep: 10 });
-  assert.ok(!out.hidden.includes(10), 'the target treat is never folded away');
-  assert.ok(out.hidden.includes(11), 'the treat behind the shark folds');
-  assert.equal(Object.values(plain(out.counts)).reduce((a, b) => a + b, 0), 2, 'its count joins a marker that shows');
-  assert.ok(!out.hidden.includes(12));
-  // A treat on the shark with no other marker showing still shows (nothing vanishes).
-  const lone = E.clusterFinds([{ pivot: 20, x: 190, y: 250, distance: 3 }], { shark, keep: null });
-  assert.deepEqual(plain(lone.hidden), []);
-  // HomeExplore groups only the finds that show, around the real shark, keeping the hand's treat.
-  const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  assert.match(homeSrc, /clusterFinds\(\[\.\.\.next\.entries\(\)\]\.filter\(\(\[pivot\]\) => !covered\.has\(pivot\) && !caughtPivots\.has\(pivot\)\)/);
-  assert.match(homeSrc, /\{ shark, keep \}\)/);
-});
-
-test('(c) a marker cut by the screen edge is an edge arrow: its pill never peeks (critic M2)', () => {
-  const layout = home();
+// Dustin, Nov 19, after seeing the x4 sheets: "i didnt mind multiple redeemable items on map thats normaly like pokemon
+// go to see pokemon around you i more so meant the prompts and texts and buttons aroudn the screen". Rule h retired.
+test('treats are the Pokemon of this map: no uncaught treat on screen is ever hidden or folded', () => {
+  const layout = home({ raidChip: true });
   const reserved = layout.reserved.map(r => r.rect);
-  assert.ok(C.underChrome({ x: 18, y: 400 }, reserved, undefined, PRO), '18 pt inside the left edge: the pill would be cut');
-  assert.ok(C.underChrome({ x: PRO.width - 30, y: 400 }, reserved, undefined, PRO), '30 pt inside the right edge');
-  assert.ok(!C.underChrome({ x: 60, y: 400 }, reserved, undefined, PRO), 'fully on screen');
+  const shelf = layout.reserved.find(r => r.kind === 'shelf').rect;
+  const menu = layout.reserved.find(r => r.kind === 'menu').rect;
+  const shark = { x: PRO.width / 2, y: PRO.height / 2 };
+  // His worst case: treats piled around the shark, one under it, others by the edges and partly under buttons.
+  const treats = [
+    { pivot: 1, x: shark.x - 50, y: shark.y + 20, distance: 6 },
+    { pivot: 2, x: shark.x + 40, y: shark.y + 25, distance: 8 },
+    { pivot: 3, x: shark.x + 4, y: shark.y - 6, distance: 3 },         // under the shark
+    { pivot: 4, x: shark.x - 20, y: shark.y + 40, distance: 9 },
+    { pivot: 5, x: PRO.width - 10, y: 420, distance: 30 },             // partly past the right edge
+    { pivot: 6, x: shelf.x + 30, y: shelf.y - 4, distance: 40 },       // partly under the Shelf
+    { pivot: 7, x: menu.x + 10, y: menu.y + 20, distance: 45 },        // partly under the menu disc
+    { pivot: 8, x: 100, y: layout.cardRect.y + 60, distance: 60 },     // under the card
+  ];
+  for (const t of treats) assert.equal(C.offMap(t, PRO), false, `treat ${t.pivot} is on the map, so it is a marker, not an arrow`);
+  const quiet = new Set(treats.filter(t => C.underChrome(t, reserved, undefined, PRO)).map(t => t.pivot));
+  const out = E.labelFinds(treats, { keep: 3, quiet });
+  assert.deepEqual(Object.keys(plain(out)), ['chromeless'], 'labelFinds only drops words: no hidden list, no counts');
+  assert.ok(!out.chromeless.includes(3), 'the hand\'s treat keeps its words, even under the shark');
+  // No two treats that keep their words put them on top of each other (rule e).
+  const worded = treats.filter(t => !out.chromeless.includes(t.pivot));
+  for (const a of worded) for (const b of worded) if (a !== b) assert.ok(!hits(E.markerBox(a), E.markerBox(b)), `${a.pivot} and ${b.pivot} words overlap`);
+  // Wholly off the map is the only edge arrow.
+  assert.equal(C.offMap({ x: PRO.width + 30, y: 400 }, PRO), true);
+  assert.equal(C.offMap({ x: -25, y: 400 }, PRO), true);
+  // The screen: only a catch (or a ridden-off Legendary) hides a treat; no count badge, no grouping, no chrome hide.
   const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
-  // A point just off screen (10 pt outside) is hidden too and becomes an edge arrow candidate.
-  assert.match(homeSrc, /if \(off \|\| under\) covered\.add\(item\.pivot_id\);/);
-  assert.match(homeSrc, /if \(off \|\| under\) edges\.push\(\{ item, point, distance \}\);/);
+  const hidden = homeSrc.match(/hidden=\{([^\n]*)\}\n/)[1];
+  assert.equal(hidden, 'caughtPivots.has(prepItem.pivot_id ?? -1) || isRodeOff(prepItem)');
+  assert.doesNotMatch(homeSrc, /clusterFinds|findGroups|count=\{/);
+  assert.match(homeSrc, /if \(offMap\(point, containerSize\)\) edges\.push\(\{ item, point, distance \}\);/);
+  assert.doesNotMatch(read('src/screens/ExploreScreen/findEdges.ts'), /export function clusterFinds/);
+  assert.doesNotMatch(read('src/screens/ExploreScreen/PrepItem.tsx'), /countBadge/);
+});
+
+test('the guide card holds its top slot: a treat under it never pushes it down a row', () => {
+  const homeSrc = read('src/screens/ExploreScreen/HomeExplore.tsx');
+  assert.match(homeSrc, /const cardTop = rowTop;/);
 });
 
 test('(e) one cue per reward: while the home card names a reward, the rail chest drops its number', () => {
@@ -220,12 +216,10 @@ test('(e) one cue per reward: while the home card names a reward, the rail chest
   assert.match(park, /onRewardCardChange=\{setHomeRewardCard\}/);
 });
 
-test('(c, h) a hidden find never draws or takes a tap: the catch hand-off style keeps it hidden (root of M1 and M2)', () => {
+test('a hidden (caught) find never draws or takes a tap: the catch hand-off style keeps it hidden (the real PrepItem fix)', () => {
   const item = read('src/screens/ExploreScreen/PrepItem.tsx');
   assert.match(item, /const handOff = useAnimatedStyle\(\(\) => \(\{ opacity: hidden \|\| catchHidePivot\.value === myPivot \? 0 : 1 \}\), \[myPivot, hidden\]\);/);
   assert.match(item, /style=\{\[styles\.box, hidden && styles\.hidden, handOff\]\}/);
   const marker = read('src/screens/ExploreScreen/HomeFindMarker.tsx');
   assert.match(marker, /touchEnabled=\{!hidden\}/);
-  // The group's count never sits under the hand.
-  assert.match(item, /cues\.finger && !below && styles\.countBadgeLow, cues\.finger && !leftSide && styles\.countBadgeRight/);
 });
