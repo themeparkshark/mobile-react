@@ -36,6 +36,7 @@ import StandingsPodium from './StandingsPodium';
 import { StandingsInvite, StandingsListCard, StandingsRow } from './StandingsRow';
 import countText from '../../helpers/countText';
 import { UpperText } from '../../ui/upper';
+import { useScreenPad } from '../../ui/sticker/LookScreen';
 
 const rewardSound = require('../../../assets/sounds/reward.mp3');
 const STALE_MS = 60_000;
@@ -159,6 +160,8 @@ function SettingRow({ title, hint, value, disabled, onChange }: {
 }
 
 export default function HomeHunt() {
+  // Sticker look: your row docks in flow under the list (nothing under it at rest), above the footer's room.
+  const pad = useScreenPad();
   const { player } = useContext(AuthContext);
   const reduced = useUiReducedMotion();
   const [week, setWeek] = useState<HomeHuntWeek | null>(cachedHomeHuntWeek());
@@ -242,7 +245,7 @@ export default function HomeHunt() {
 
   return (
     <View style={{ flex: 1 }}>
-      <ScrollView contentContainerStyle={{ paddingBottom: me ? 96 : 24 }}>
+      <ScrollView contentContainerStyle={{ paddingBottom: pad.sticker ? (me ? 24 : pad.bottom) : (me ? 96 : 24) }}>
         <FloatingParticles count={reduced ? 0 : 8} />
         <HeaderCard week={week} label={label} now={now} onInfo={() => setInfoOpen(true)} />
         {badges.length > 0 && (
@@ -314,7 +317,7 @@ export default function HomeHunt() {
       </ScrollView>
 
       {me && (
-        <View pointerEvents="box-none" style={{ position: 'absolute', left: 0, right: 0, bottom: 8 }}>
+        <View pointerEvents="box-none" style={pad.sticker ? { marginBottom: pad.bottom - 8 } : { position: 'absolute', left: 0, right: 0, bottom: 8 }}>
           <StandingsRow player={asPlayer(me)} rank={me.rank} index={0} score={me.points} scoreIcon="star"
             detail={`${me.finds} ${me.finds === 1 ? 'find' : 'finds'}`} isMe interactive={false} enterDelayBase={0} />
         </View>

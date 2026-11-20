@@ -5,7 +5,7 @@ import { ImageBackground, Pressable, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
 import InformationModal from '../components/InformationModal';
 import { InformationModalEnums } from '../models/information-modal-enums';
-import LookScreen from '../ui/sticker/LookScreen';
+import LookScreen, { lookTop } from '../ui/sticker/LookScreen';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import Experience from './LeaderboardsScreen/Experience';
 import ParkCoins from './LeaderboardsScreen/ParkCoins';
@@ -124,15 +124,17 @@ export default function LeaderboardScreen() {
   return <StandingsV2 meId={player.id} onMissing={() => setV2Missing(true)} />;
 }
 
-/** The Standings bar: no left button, the title, the "?". */
-const STANDINGS_HEADER = { left: null, title: 'Standings', right: <InformationModal id={InformationModalEnums.LeaderboardScreen} /> } as const;
+/** The Standings bar: no left button, the title, the "?" (built at render, never at module load, so no import cycle can leave it undefined). */
+function standingsHeader() {
+  return { left: null, title: 'Standings', right: <InformationModal id={InformationModalEnums.LeaderboardScreen} /> } as const;
+}
 
 function StandingsShell({ children }: { readonly children: React.ReactNode }) {
   return (
-    <LookScreen footer legacyPad={{ top: -8 }} header={STANDINGS_HEADER}>
+    <LookScreen footer legacyPad={{ top: -8 }} header={standingsHeader()}>
       {pad => (
-      <View style={{ marginTop: pad.top, flex: 1 }}>
-        <ImageBackground style={{ flex: 1 }} source={STANDINGS_PLATE}>
+      <View style={{ marginTop: pad.sticker ? 0 : pad.top, flex: 1 }}>
+        <ImageBackground style={pad.sticker ? [{ flex: 1 }, lookTop(pad)] : { flex: 1 }} source={STANDINGS_PLATE}>
           {children}
         </ImageBackground>
       </View>
@@ -240,18 +242,16 @@ function LegacyStandings() {
   useEffect(() => { if (activeTab >= tabs.length) setActiveTab(0); }, [tabs.length, activeTab]);
 
   return (
-    <LookScreen footer legacyPad={{ top: -8 }} header={STANDINGS_HEADER}>
+    <LookScreen footer legacyPad={{ top: -8 }} header={standingsHeader()}>
       {pad => (
       <View
         style={{
-          marginTop: pad.top,
+          marginTop: pad.sticker ? 0 : pad.top,
           flex: 1,
         }}
       >
         <ImageBackground
-          style={{
-            flex: 1,
-          }}
+          style={pad.sticker ? [{ flex: 1 }, lookTop(pad)] : { flex: 1 }}
           source={STANDINGS_PLATE}
         >
           <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} onChange={index => {

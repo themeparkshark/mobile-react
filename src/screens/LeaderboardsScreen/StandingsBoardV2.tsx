@@ -56,6 +56,7 @@ import {
 } from './standingsV2Model';
 import countText from '../../helpers/countText';
 import { UpperText } from '../../ui/upper';
+import { useScreenPad } from '../../ui/sticker/LookScreen';
 
 const tapSound = require('../../../assets/sounds/tap.mp3');
 const rewardSound = require('../../../assets/sounds/reward.mp3');
@@ -331,7 +332,11 @@ function StepGlyphs({ plus, target, metric, kind, icon, compact = false }: {
  * plays in the step slot: each player you passed slides by with a tick, then
  * "Up N!" lands on your rank.
  */
-function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught, inlineTop = null, scrollY }: {
+function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now, inPark, onPress, onOpenCard, onGoRide, onClimbLanded, onClimbDone, finaleFollows, teach = false, onTaught, inlineTop = null, scrollY, flowDock = false, onDockHeight }: {
+  /** Sticker look, docked: the list ends at the card's top edge (no row under it, so no fade over rows). */
+  readonly flowDock?: boolean;
+  /** Sticker look: the dock's height, so the list can end exactly at its top edge. */
+  readonly onDockHeight?: (height: number) => void;
   /** A short board: the card sits right under its last row (this top, in the board's frame), never over it. */
   readonly inlineTop?: number | null;
   /** The list's scroll, so an inline card moves with its rows. */
@@ -455,10 +460,12 @@ function YouRow({ model, climb, climbFrom, climbId, passed, hidden, snapId, now,
   const shownRank = revealing && climbFrom ? climbFrom : me?.rank;
 
   return (
-    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[inlineTop != null ? { position: 'absolute', left: 0, right: 0, top: inlineTop } : { position: 'absolute', left: 0, right: 0, bottom: YOU_CARD_BOTTOM - 8 }, dockStyle]}>
+    <Animated.View pointerEvents={hidden ? 'none' : 'box-none'} style={[inlineTop != null ? { position: 'absolute', left: 0, right: 0, top: inlineTop } : { position: 'absolute', left: 0, right: 0, bottom: YOU_CARD_BOTTOM - 8 }, dockStyle]}
+      onLayout={onDockHeight ? event => onDockHeight(event.nativeEvent.layout.height) : undefined}>
       {/* The dock: rows fade out above it. It stops above the nav's raised icons
-          (r2: a strip down to the screen edge erased them). */}
-      <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />
+          (r2: a strip down to the screen edge erased them). In the sticker look the list ends at
+          the card's top edge instead (nothing under it at rest), so there is nothing to fade. */}
+      {flowDock ? null : <LinearGradient pointerEvents="none" colors={['rgba(255,248,228,0)', BRAND.cream]} style={{ height: 22 }} />}
       {tapHint && (
         <Animated.View pointerEvents="none" entering={FadeIn.duration(150)} exiting={FadeOut.duration(200)} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden
           style={{ position: 'absolute', top: -18, right: 28, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 30, borderRadius: 15,
@@ -562,6 +569,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
 }) {
   const reduced = useUiReducedMotion();
   const { playSound } = useContext(SoundEffectContext);
+  // The body's room from LookScreen (sticker look: the you-card docks in flow, never over a row).
+  const pad = useScreenPad();
+  const [dockH, setDockH] = useState(YOU_CARD_HEIGHT + 8);
   // At a park, a new player gets GO RIDE; at home there is no dead-end button.
   const inPark = !!useContext(LocationStatusContext).park;
   const [parks, setParks] = useState<ParkType[]>(cachedParks());
@@ -1009,7 +1019,7 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   if (noFriends || (!scored && board !== 'friends')) {
     const copy = emptyCopy(board, model.friendsCount);
     return (
-      <ScrollView contentContainerStyle={{ paddingBottom: 140 }}
+      <ScrollView contentContainerStyle={{ paddingBottom: pad.sticker ? pad.bottom : 140 }}
         refreshControl={<RefreshControl tintColor={BRAND.white} refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}>
         {strip}
         <Animated.View entering={reduced ? undefined : ZoomIn.springify().damping(14).stiffness(160)} style={{
@@ -1045,14 +1055,20 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
   const rowsEnd = HEADER_HEIGHT + (lastLayout ? lastLayout.offset + lastLayout.length : 0);
   const inlineAt = youInlineTop(rowsEnd, listBox.height, 22 + YOU_CARD_HEIGHT + 8 + NAV_RISE);
   const inlineTop = inlineAt != null ? listBox.y + inlineAt : null;
+  // Sticker look (critic M4, Nov 20): a docked card sits in flow under the list. The list's box ends
+  // at the card's top edge, so rows clip there at rest and no row is ever under the card or its fade.
+  // listBox keeps the whole board's height (list plus dock), so the short-board check is unchanged.
+  const flowDock = pad.sticker && inlineAt == null && !hideYou;
+  const dockRoom = flowDock ? YOU_CARD_BOTTOM - 8 + dockH : 0;
 
   return (
     <View style={{ flex: 1 }}>
       {strip}
-      <View style={{ flex: 1, opacity: switching ? 0.6 : 1 }} onLayout={event => {
+      <View style={{ flex: 1, opacity: switching ? 0.6 : 1, marginBottom: dockRoom || undefined }} onLayout={event => {
         const { y, height } = event.nativeEvent.layout;
         viewport.current = height;
-        setListBox(current => (current.y === y && current.height === height ? current : { y, height }));
+        const full = height + dockRoom;
+        setListBox(current => (current.y === y && current.height === full ? current : { y, height: full }));
       }}>
         <AnimatedFlashList
           ref={list as never}
@@ -1077,7 +1093,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           refreshControl={refreshControl}
           // Room for the docked row only while it shows (r2: no cream void under Your spot).
           // A short board's cream runs down to the nav under its inline card, so no background shows below it.
-          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: Math.max(hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34,
+          ListFooterComponent={<View style={{ backgroundColor: BRAND.cream, height: Math.max(pad.sticker
+            ? (flowDock ? 12 : pad.bottom)
+            : (hideYou ? YOU_CARD_BOTTOM + 12 : YOU_CARD_HEIGHT + YOU_CARD_BOTTOM + 34),
             inlineAt != null ? listBox.height - rowsEnd : 0) }} />}
           onLoad={() => setListDrawn(true)}
         />
@@ -1088,7 +1106,9 @@ export default function StandingsBoardV2({ board, meId, onMissing, active = true
           <LinearGradient colors={[BRAND.cream, 'rgba(255,248,228,0)']} style={{ flex: 1 }} />
         </Animated.View>
       </View>
-      <YouRow inlineTop={inlineTop} scrollY={scrollY} model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
+      <YouRow inlineTop={inlineTop} scrollY={scrollY} flowDock={pad.sticker && inlineAt == null}
+        onDockHeight={pad.sticker && inlineAt == null ? h => setDockH(current => (Math.abs(current - h) < 0.5 ? current : h)) : undefined}
+        model={model} climb={climb} climbFrom={climbFrom} climbId={climbId} passed={passed} hidden={hideYou} snapId={snapId} now={now} inPark={inPark} onPress={scrollToMe}
         onOpenCard={() => { playSound(tapSound); setCard(model.me); }}
         onGoRide={() => { playSound(tapSound); RootNavigation.navigate('Explore'); }}
         finaleFollows={meJoined}

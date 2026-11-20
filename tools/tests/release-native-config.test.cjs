@@ -158,7 +158,8 @@ test('App holds the splash at module scope and Root releases it once fonts settl
   const app = read('App.tsx');
   assert.ok(app.indexOf('holdNativeSplash();') < app.indexOf('export default function App'));
   const rootSource = read('src/Root.tsx');
-  assert.match(rootSource, /if \(fontsLoaded\) releaseNativeSplash\(\{ waitForArt: initialRouteName === 'Splash' \}\)/);
+  // The Sticker Book look is known before the first screen (instant while its key 1 is off, look.ts).
+  assert.match(rootSource, /if \(fontsLoaded && lookReady\) releaseNativeSplash\(\{ waitForArt: initialRouteName === 'Splash' \}\)/);
   assert.match(rootSource, /fontsReady \|\| !!fontError/);
 });
 

@@ -7,6 +7,8 @@
  */
 import { useContext, useRef, type ReactNode } from 'react';
 import { View, useWindowDimensions, type ImageSourcePropType } from 'react-native';
+import * as Haptics from 'expo-haptics';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Broadcasts from '../../components/Broadcasts';
 import { useFooterTabs } from '../../components/Wrapper';
 import { ThemeContext } from '../../context/ThemeProvider';
@@ -17,7 +19,7 @@ import Header, { type HeaderProps } from './Header';
 import Screen, { screenBodyPadding } from './Screen';
 import { footerBand } from './layout';
 import { FOOTER, HEADER } from './tokens';
-import type { LookFooter, LookHeader } from './LookScreen';
+import { InStickerBar, PadContext, lookPad, type LookFooter, type LookHeader, type ScreenPad } from './LookScreen';
 
 /**
  * The kit's body room on a moved screen. The body ends where the footer's band starts (its wave
@@ -27,7 +29,17 @@ import type { LookFooter, LookHeader } from './LookScreen';
  */
 export function stickerPad(hasHeader: boolean, hasFooter: boolean, insetTop: number, insetBottom: number, width: number) {
   const kit = screenBodyPadding(hasHeader, hasFooter ? 'footer' : 'none', insetTop, insetBottom, width);
-  return hasFooter ? { top: kit.top, bottom: FOOTER.rise + HEADER.gap } : kit;
+  return hasFooter ? { top: kit.top, bottom: stickerFooterBottom() } : kit;
+}
+
+/** A footer body's bottom room in the kit: the hump and the raised Map icon, then the standard gap. */
+export function stickerFooterBottom(): number {
+  return FOOTER.rise + HEADER.gap;
+}
+
+/** A slot in the kit Header: its "?" draws the kit's help disc (InformationModal reads InStickerBar). */
+function inBar(node: ReactNode): ReactNode {
+  return node == null ? undefined : <InStickerBar.Provider value>{node}</InStickerBar.Provider>;
 }
 
 /** The kit Header's props for a LookHeader (the theme's bar art, the purple and night bars, Broadcasts). */
@@ -36,7 +48,7 @@ function useKitHeader(header: LookHeader | undefined): HeaderProps | undefined {
   if (!header) return undefined;
   const variant = header.night ? 'night' : header.purple ? 'purple' : 'water';
   const art = !header.purple && theme?.top_bar_url ? { uri: theme.top_bar_url } : undefined;
-  return { title: header.title ?? undefined, left: header.left ?? undefined, right: header.right ?? undefined, variant, art, broadcast: <Broadcasts /> };
+  return { title: header.title ?? undefined, left: inBar(header.left), right: inBar(header.right), variant, art, broadcast: <Broadcasts /> };
 }
 
 /** The kit Header drawn where the screen draws its bar (a bar inside the Shark Shop's folding stack). */
@@ -45,11 +57,12 @@ export function StickerBar({ header }: { readonly header: LookHeader }) {
   return props ? <Header {...props} /> : null;
 }
 
-export function StickerLookScreen({ header, footer, testID, children }: {
+export function StickerLookScreen({ header, footer, testID, before, children }: {
   readonly header?: LookHeader;
   readonly footer?: LookFooter;
   readonly testID?: string;
-  readonly children?: ReactNode;
+  readonly before?: ReactNode;
+  readonly children?: ReactNode | ((pad: ScreenPad) => ReactNode);
 }) {
   const { theme } = useContext(ThemeContext);
   const nav = typeof footer === 'object' ? footer : {};
@@ -57,6 +70,9 @@ export function StickerLookScreen({ header, footer, testID, children }: {
   const kitHeader = useKitHeader(header);
   const footArt = theme?.bottom_bar_url ? { uri: theme.bottom_bar_url } : undefined;
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const pad = lookPad(true, undefined, () => stickerPad(!!header, !!footer, insets.top, insets.bottom, width));
+  const body = <>{before}{typeof children === 'function' ? children(pad) : children}</>;
   const items = tabs.items.map(item => ({
     key: item.screen,
     label: item.text,
@@ -70,11 +86,13 @@ export function StickerLookScreen({ header, footer, testID, children }: {
     tabs.goTo(item);
   };
   return (
-    <Screen testID={testID} scroll={false} list
-      header={kitHeader}
-      footer={footer ? { items, picked: tabs.topRoute, onPick, art: footArt } : undefined}>
-      {footer ? <View style={{ flex: 1, marginBottom: footerBand(width) }}>{children}</View> : children}
-    </Screen>
+    <PadContext.Provider value={pad}>
+      <Screen testID={testID} scroll={false} list
+        header={kitHeader}
+        footer={footer ? { items, picked: tabs.topRoute, onPick, art: footArt } : undefined}>
+        {footer ? <View style={{ flex: 1, marginBottom: footerBand(width) }}>{body}</View> : body}
+      </Screen>
+    </PadContext.Provider>
   );
 }
 
@@ -87,6 +105,8 @@ export function StickerBack({ onPress }: { readonly onPress?: () => unknown }) {
     busy.current = true;
     try {
       playSound(require('../../../assets/sounds/button_press.mp3'));
+      // Today's BackButton taps lightly too.
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
       if (onPress) await onPress();
       RootNavigation.goBack();
     } finally {

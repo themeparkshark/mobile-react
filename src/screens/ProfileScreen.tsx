@@ -338,7 +338,7 @@ export default function ProfileScreen() {
           ref={scrollViewRef}
           style={{
             flex: 1,
-            marginTop: pad.top,
+            marginTop: pad.sticker ? 0 : pad.top,
             backgroundColor: '#dff4ff',
           }}
           refreshControl={
@@ -360,7 +360,9 @@ export default function ProfileScreen() {
               } : require('../../assets/images/seaweed_background.png')}
               resizeMode="cover"
               style={{
-                height: STAGE_H,
+                // Look on: the hero art reaches the bar's drop and grows by the gap (LookScreen lookTop).
+                height: STAGE_H + (pad.sticker ? pad.top : 0),
+                paddingTop: pad.sticker ? pad.top : undefined,
                 overflow: 'hidden',
                 position: 'relative',
               }}

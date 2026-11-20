@@ -897,7 +897,8 @@ function seasonIcon(key: string | null | undefined): GameIconName {
   return 'sparkle';
 }
 const styles = StyleSheet.create({
-  scroll: { paddingTop: 14, paddingBottom: 40, gap: 14 },
+  // paddingBottom: useLookBottom (one owner for the footer room).
+  scroll: { paddingTop: 14, gap: 14 },
   fade: { position: 'absolute', top: 0, left: 0, right: 0, height: 24 },
   fallback: { flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 12, padding: 10, borderRadius: 14, backgroundColor: 'rgba(5,52,110,0.6)' },
   fallbackText: { flex: 1, fontFamily: FONT.display, fontSize: 15, color: BRAND.white },

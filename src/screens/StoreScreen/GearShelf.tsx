@@ -190,6 +190,8 @@ export default function GearShelf({ items, setItems, nextRotationAt, intervalDay
   readonly loading?: boolean;
 }) {
   const bodyBottom = useLookBottom(BOTTOM_BAR_OVERHANG + 16);
+  // The toast clears today's overhang, or the kit footer's hump.
+  const toastLift = useLookBottom(BOTTOM_BAR_OVERHANG);
   const { player } = useContext(AuthContext);
   const { playSound: playSoundNow } = useContext(SoundEffectContext);
   const soundRef = useRef(playSoundNow);
@@ -369,7 +371,7 @@ export default function GearShelf({ items, setItems, nextRotationAt, intervalDay
       </ScrollView>
       {/* The shelf slides under the tab row through a short fade (no hard cut across the shopkeeper). */}
       <LinearGradient pointerEvents="none" colors={[BRAND.blue, 'rgba(7,104,185,0)']} style={styles.fade} />
-      <ShopToast message={toast} still={still} lift={BOTTOM_BAR_OVERHANG} />
+      <ShopToast message={toast} still={still} lift={toastLift} />
       {open && (
         <TryOnSheet item={open} set={null} todayIds={todayIds} still={still} onClose={() => setOpen(null)}
           onWish={wish} onPurchased={onPurchased} onWorn={onWorn} checkOwned={checkOwned}

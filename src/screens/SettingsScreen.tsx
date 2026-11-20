@@ -305,8 +305,8 @@ export default function SettingsScreen() {
       header={{ left: <LookBackButton onPress={async () => await refreshPlayer()} />, title: 'Settings', right: null }}>
       {pad => (<>
       <ScrollView
-        style={[styles.scroll, { marginTop: pad.top }]}
-        contentContainerStyle={[styles.scrollContent, { paddingBottom: pad.bottom }]}
+        style={[styles.scroll, pad.sticker ? null : { marginTop: pad.top }]}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: pad.bottom }, pad.sticker ? { paddingTop: 12 + pad.top } : null]}
         showsVerticalScrollIndicator={false}
       >
         <Section title="General" index={0}>

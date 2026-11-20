@@ -29,7 +29,7 @@ import {
   type RedeemErrorView,
   type RewardLine,
 } from './RedeemCoinCode/redeemCodeModel';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 /**
  * Redeem a code: type a coin or Shark Drop code (4 to 20 letters and numbers),
@@ -155,7 +155,7 @@ export default function RedeemCoinCodeScreen() {
       {pad => (<>
       <ImageBackground
         source={require('../../assets/images/screens/welcome/background.png')}
-        style={[styles.background, { marginTop: pad.top }]}
+        style={[styles.background, lookTop(pad)]}
         resizeMode="cover"
       >
         <ScrollView

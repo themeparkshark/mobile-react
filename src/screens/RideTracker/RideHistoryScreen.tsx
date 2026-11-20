@@ -8,6 +8,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { getPlayerRides, PlayerRideType } from '../../api/endpoints/player-rides';
@@ -82,6 +83,8 @@ type TimeTab = 'today' | 'all';
 const FAVORITES_FILTER_ID = -999; // sentinel for "Favorites" in park filter row
 
 export default function RideHistoryScreen() {
+  // Today's footer clearance, or the kit footer's room with the look on (one owner, never both).
+  const footerRoom = useLookBottom(FOOTER_CLEARANCE);
   const navigation = useNavigation<any>();
   const [allRides, setAllRides] = useState<PlayerRideType[]>([]);
   const [rides, setRides] = useState<PlayerRideType[]>([]);
@@ -248,7 +251,7 @@ export default function RideHistoryScreen() {
           data={rides}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
-          contentContainerStyle={styles.list}
+          contentContainerStyle={[styles.list, { paddingBottom: footerRoom }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
           onEndReached={() => void onEndReached()}
           onEndReachedThreshold={0.3}
@@ -320,7 +323,7 @@ const styles = StyleSheet.create({
   },
   filterContainer: { maxHeight: 54, flexGrow: 0, backgroundColor: '#e8f4fd' },
   filterRow: { paddingHorizontal: 16, gap: 8, paddingBottom: 10, paddingTop: 10 },
-  list: { paddingHorizontal: 16, paddingBottom: FOOTER_CLEARANCE },
+  list: { paddingHorizontal: 16 },
   emptyContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
   emptyEmoji: { fontSize: 60, fontFamily: 'Knockout' },
   emptyTitle: { 

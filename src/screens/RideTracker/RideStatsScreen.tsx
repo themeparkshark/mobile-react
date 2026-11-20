@@ -8,6 +8,7 @@ import {
   Animated,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation } from '@react-navigation/native';
 import { getRideStats, RideStatsType } from '../../api/endpoints/player-rides';
@@ -53,6 +54,8 @@ const StatCard: React.FC<StatCardProps> = React.memo(({ label, value, icon }) =>
 StatCard.displayName = 'StatCard';
 
 export default function RideStatsScreen() {
+  // Today's footer clearance, or the kit footer's room with the look on (one owner, never both).
+  const footerRoom = useLookBottom(FOOTER_CLEARANCE);
   const navigation = useNavigation<any>();
   const [stats, setStats] = useState<RideStatsType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,7 +80,7 @@ export default function RideStatsScreen() {
   return (
     <RideTrackerFrame title="Ride Stats" style={styles.container}>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: footerRoom }]}>
         {/* Big Stats. With no rides yet, three zero tiles are noise: the empty card goes first,
             so its LOG A RIDE button sits above the footer even on an iPhone SE. */}
         {stats.total_rides > 0 && (
@@ -193,7 +196,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
+  content: { padding: 16 },
   statGrid: { flexDirection: 'row', gap: 10, marginBottom: 24 },
   statCard: {
     flex: 1, 

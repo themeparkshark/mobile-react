@@ -14,7 +14,7 @@ import all from '../api/endpoints/pin-collections/all';
 import Loading from '../components/Loading';
 import PinCollectionModal from '../components/PinCollectionModal';
 import { PinCollectionType } from '../models/pin-collection-type';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 
@@ -193,15 +193,10 @@ export default function PinCollectionsScreen() {
       {loading && <Loading />}
       {!loading && (
         <View
-          style={{
-            flex: 1,
-            marginTop: pad.top,
-          }}
+          style={pad.sticker ? { flex: 1 } : { flex: 1, marginTop: pad.top }}
         >
           <ImageBackground
-            style={{
-              flex: 1,
-            }}
+            style={pad.sticker ? [{ flex: 1 }, lookTop(pad)] : { flex: 1 }}
             source={require('../../assets/images/water_background.png')}
           >
             {collectionsLoading && (

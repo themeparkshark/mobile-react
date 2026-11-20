@@ -3,6 +3,7 @@ import {
   View, Text, FlatList, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -44,6 +45,8 @@ const WishlistItem: React.FC<WishlistItemProps> = React.memo(({ ride, onRemove, 
 WishlistItem.displayName = 'WishlistItem';
 
 export default function RideWishlistScreen() {
+  // Today's footer clearance, or the kit footer's room with the look on (one owner, never both).
+  const footerRoom = useLookBottom(FOOTER_CLEARANCE);
   const navigation = useNavigation<any>();
   const [rides, setRides] = useState<WishlistRide[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,7 +99,7 @@ export default function RideWishlistScreen() {
               onPress={() => navigation.navigate('RideDetail', { rideId: item.id, rideName: item.name })}
             />
           )}
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: footerRoom }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
           ListEmptyComponent={
             <RideTrackerEmpty title="Your wishlist is empty" body="Tap the star on any ride to save it here."
@@ -136,7 +139,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
+  content: { padding: 16 },
   item: {
     flexDirection: 'row', 
     alignItems: 'center', 

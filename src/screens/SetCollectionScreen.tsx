@@ -54,7 +54,7 @@ import {
 } from './SetCollection/dexModel';
 import { ClaimResultCard, MilestonePickSheet } from './SetCollection/SetHuntSections';
 import { claimOutcome, wearNavigationParams, type ClaimOutcome, type MilestoneView } from './SetCollection/setHuntModel';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 type Detail = PrepItemSetDetailResponse['data'];
 
@@ -538,7 +538,7 @@ export default function SetCollectionScreen({ previewSets, previewDetails, previ
     <LookScreen footer legacyPad={{ top: -8, bottom: CTA_CLEARANCE }} header={{ left: <LookBackButton />, title: 'Collections', right: null }}>
       {pad => (<>
 
-      <View style={[styles.page, { marginTop: pad.top }]}>
+      <View style={[styles.page, lookTop(pad)]}>
         <Image source={BOOK_BG} style={StyleSheet.absoluteFill} contentFit="cover" priority="high" cachePolicy="memory" transition={0} />
         {/* Cream under the lower half, so a bounce past the last row never shows the water. */}
         <View pointerEvents="none" style={styles.sheetBack} />

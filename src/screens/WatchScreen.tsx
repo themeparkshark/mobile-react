@@ -17,7 +17,7 @@ import { SocialPostType } from '../models/social-post-type';
 import { BRAND, FONT, GameButton, GameDialog, GameIcon, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 import { UpperText } from '../ui/upper';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 export default function WatchScreen() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -270,7 +270,7 @@ export default function WatchScreen() {
   return (
     <LookScreen footer legacyPad={{ top: -8 }} header={{ left: <LookBackButton />, title: 'Watch', right: null }}>
       {pad => (<>
-      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? { marginTop: pad.top } : undefined}>
+      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? lookTop(pad) : undefined}>
         {loading ? (
           <View style={styles.loader}>
             <SharkLoader />
@@ -321,7 +321,7 @@ export default function WatchScreen() {
             extraData={[localWatched, unsaved]}
             estimatedItemSize={190}
             keyExtractor={(item) => item.id.toString()}
-            contentContainerStyle={{ paddingBottom: 110, paddingHorizontal: 8 }}
+            contentContainerStyle={{ paddingBottom: pad.sticker ? pad.bottom : 110, paddingHorizontal: 8 }}
             showsVerticalScrollIndicator={false}
             ListEmptyComponent={videos.length > 0 ? null : (
               <View style={styles.empty}>

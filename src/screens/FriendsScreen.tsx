@@ -42,7 +42,7 @@ import { Burst } from './social/SocialFx';
 import { effectiveStatus, initialTab, mergePage, searchHint, type FriendStatus, type FriendsTab } from './social/socialModel';
 import { SurfaceContext, clearStatus, setPendingIncoming, useFriendOverrides, usePendingIncoming } from './social/socialStore';
 import { UpperText } from '../ui/upper';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 const CREST = require('../../assets/images/screens/friends/noti.png');
 // The shark-and-envelope cut off its square tile (same art as the bell's request badge), so it sits in the tab like the heart.
@@ -88,7 +88,7 @@ export default function FriendsScreen({ route }: NativeStackScreenProps<ParamLis
   return (
     <LookScreen legacyPad={{ top: -8 }} header={{ left: <LookBackButton />, title: 'Friends', right: <View style={{ width: 44 }} /> }}>
       {pad => (<>
-      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? { marginTop: pad.top } : undefined}>
+      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? lookTop(pad) : undefined}>
         <View style={OFFSCREEN} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <InviteCard ref={inviteRef} inventory={player?.inventory} />
         </View>

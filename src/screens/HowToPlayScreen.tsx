@@ -29,7 +29,7 @@ import useUiReducedMotion from '../ui/useUiReducedMotion';
 import HowToDemo from './HowToPlay/HowToDemos';
 import HowToPlayMore from './HowToPlay/HowToPlayMore';
 import { StarBurst } from './SetCollection/DexParts';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 const VOICE: Readonly<Record<HowToArtKey, number>> = {
   find: require('../../assets/sounds/howto/vo-find.mp3'),
@@ -167,7 +167,7 @@ export default function HowToPlayScreen() {
     <LookScreen footer legacyPad={{ top: -8, bottom: BOTTOM_BAR_OVERHANG }} header={{ left: <LookBackButton onPress={more && focus == null ? () => setMore(false) : undefined} />, title: more ? 'More help' : 'How to Play', right: null }}>
       {pad => (<>
       {more ? <HowToPlayMore focus={moreFocus} /> : (
-        <View style={[styles.body, { marginTop: pad.top }]}>
+        <View style={[styles.body, lookTop(pad)]}>
           <Animated.ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}
             snapToInterval={interval} decelerationRate="fast" disableIntervalMomentum
             contentContainerStyle={{ paddingHorizontal: SIDE, gap: GAP }}

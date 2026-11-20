@@ -12,15 +12,24 @@
  * Lanes and critics see it on with EXPO_PUBLIC_STICKER_LOOK=1, honoured only in dev JS (__DEV__).
  * Store and OTA bundles are never dev JS, so a production build without the override always
  * draws today's look.
+ *
+ * The look is set ONCE per launch and never changes while the app is open: a change would swap
+ * every open screen's root and lose its scroll, its list and anything typed. The server's answer
+ * is saved (AsyncStorage `sticker_look_last`) and read before the first screen draws (Root's
+ * splash gate waits on useStickerLookReady), so a new answer takes effect on the next cold start.
  */
-import { useSyncExternalStore } from 'react';
-import { featureFlagsNow, onFeatureFlags } from '../../api/endpoints/platform/feature-flags';
+import { useEffect, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { onFeatureFlags } from '../../api/endpoints/platform/feature-flags';
 
 /** Key 1: off. Flipped in one update after Dustin sees the new look. */
 export const STICKER_LOOK_DEFAULT = false;
 
 /** The server flag's name (key 2). */
 export const STICKER_LOOK_FLAG = 'sticker_look';
+
+/** Where the last server answer waits for the next cold start. */
+export const STICKER_LOOK_STORE_KEY = 'sticker_look_last';
 
 function isDev(): boolean {
   return typeof __DEV__ !== 'undefined' && __DEV__ === true;
@@ -37,40 +46,74 @@ export function stickerLookFrom(keys: { readonly override: boolean; readonly fal
   return keys.fallback && keys.server === true;
 }
 
-let server: boolean | undefined;
-const listeners = new Set<() => void>();
-function readServer(): boolean | undefined {
-  if (server !== undefined) return server;
-  try {
-    const now = featureFlagsNow();
-    return now ? now.flags?.[STICKER_LOOK_FLAG] === true : undefined;
-  } catch {
-    return undefined;
-  }
+type Store = { readonly getItem: (key: string) => Promise<string | null>; readonly setItem: (key: string, value: string) => Promise<void> };
+
+/**
+ * One launch's look (tested with key 1 on). `on()` latches on its first read; `answer()` (each
+ * server reply) only saves for the next launch; `hydrate()` reads the saved answer and is needed
+ * only when the server can still decide (key 1 on, no override).
+ */
+export function lookSession(keys: { readonly fallback: boolean; readonly override: boolean }, store: Store) {
+  let saved: boolean | undefined;
+  let latched: boolean | undefined;
+  let lastWritten: boolean | undefined;
+  const needsStore = keys.fallback && !keys.override;
+  return {
+    needsStore,
+    async hydrate(): Promise<void> {
+      if (!needsStore || latched !== undefined) return;
+      try {
+        const raw = await store.getItem(STICKER_LOOK_STORE_KEY);
+        saved = raw === '1' ? true : raw === '0' ? false : undefined;
+      } catch {
+        saved = undefined;
+      }
+    },
+    on(): boolean {
+      if (latched === undefined) latched = stickerLookFrom({ override: keys.override, fallback: keys.fallback, server: saved });
+      return latched;
+    },
+    answer(next: boolean): void {
+      if (next === lastWritten) return;
+      lastWritten = next;
+      store.setItem(STICKER_LOOK_STORE_KEY, next ? '1' : '0').catch(() => undefined);
+    },
+  };
 }
+
+const session = lookSession({ fallback: STICKER_LOOK_DEFAULT, override: stickerLookOverride() }, AsyncStorage);
 try {
-  onFeatureFlags(payload => {
-    const next = payload?.flags?.[STICKER_LOOK_FLAG] === true;
-    if (next === server) return;
-    server = next;
-    // Only an answer that can change the look wakes the screens (key 1 off: nothing ever changes).
-    if (STICKER_LOOK_DEFAULT || stickerLookOverride()) listeners.forEach(listener => listener());
-  });
+  onFeatureFlags(payload => { session.answer(payload?.flags?.[STICKER_LOOK_FLAG] === true); });
 } catch {
   // The store is not there (a test harness): the look stays on its defaults.
 }
 
-/** The look now: true draws the Sticker Book chrome, false today's. */
+/** Reads the saved server answer once, before the first screen (a no-op while key 1 is off). */
+export function hydrateStickerLook(): Promise<void> {
+  return session.hydrate();
+}
+
+/** The look for this launch: true draws the Sticker Book chrome, false today's. Never changes once read. */
 export function stickerLookOn(): boolean {
-  return stickerLookFrom({ override: stickerLookOverride(), fallback: STICKER_LOOK_DEFAULT, server: readServer() });
+  return session.on();
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => { listeners.delete(listener); };
-}
-
-/** The look for a component; a later server answer changes it in place (only once key 1 is on). */
+/** The look for a component: the same answer for the whole launch. */
 export function useStickerLook(): boolean {
-  return useSyncExternalStore(subscribe, stickerLookOn, stickerLookOn);
+  return stickerLookOn();
+}
+
+/**
+ * Root's splash gate: true once the look is known. With key 1 off (or the lane override) it is
+ * true on the first render, so today's launch never waits on storage.
+ */
+export function useStickerLookReady(): boolean {
+  const [ready, setReady] = useState(() => !session.needsStore);
+  useEffect(() => {
+    if (ready) return;
+    let live = true;
+    void session.hydrate().finally(() => { if (live) setReady(true); });
+    return () => { live = false; };
+  }, [ready]);
+  return ready;
 }

@@ -4,6 +4,7 @@ import {
   RefreshControl, Animated, Easing, AccessibilityInfo, useWindowDimensions,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
@@ -222,6 +223,8 @@ export function emptySharkFor(screenHeight: number, room: number, words: number)
 
 // ─── Main ───
 export default function RideDetailScreen() {
+  // Today's footer clearance, or the kit footer's room with the look on (one owner, never both).
+  const footerRoom = useLookBottom(FOOTER_CLEARANCE);
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { rideId, rideName } = route.params;
@@ -348,7 +351,7 @@ export default function RideDetailScreen() {
         data={history}
         keyExtractor={item => item.id.toString()}
         renderItem={({ item }) => <HistoryEntry entry={item} onShare={setShareEntry} />}
-        contentContainerStyle={[s.listContent, history.length === 0 && s.listContentEmpty]}
+        contentContainerStyle={[s.listContent, { paddingBottom: footerRoom }, history.length === 0 && s.listContentEmpty]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={B.skyDark} />}
         ListHeaderComponent={
           <View>
@@ -493,7 +496,7 @@ const s = StyleSheet.create({
   metaPillText: { color: B.navy, fontSize: 13, fontFamily: 'Knockout' },
 
   // ─── Content ───
-  listContent: { paddingBottom: FOOTER_CLEARANCE },
+  listContent: {},
   // No rides yet: the empty page fills the space under the button (arrow on top, the shark grows into the rest).
   listContentEmpty: { flexGrow: 1 },
 

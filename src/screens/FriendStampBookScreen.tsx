@@ -17,7 +17,7 @@ import { stampRarity } from './stampbook/rarity';
 import { INK, MUTED_INK, PAPER, SLOT, SLOT_EDGE, tiltFor } from './stampbook/StampTile';
 import { UpperText } from '../ui/upper';
 import { SEABED_PLATE } from '../constants/backdrops';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop, useLookBottom } from '../ui/sticker/LookScreen';
 
 /** Last friend books this session: a reopen draws at once and refreshes behind (friends-only data, memory only). */
 const friendBooks = new Map<number, FriendBook>();
@@ -30,6 +30,7 @@ const FALLBACK = require('../../assets/images/stamps/stamp-fallback.png');
 export default function FriendStampBookScreen() {
   const { playerId, name } = (useRoute().params ?? {}) as { playerId?: number; name?: string };
   const insets = useSafeAreaInsets();
+  const bookBottom = useLookBottom(150 + insets.bottom);
   const { width } = useWindowDimensions();
   const [book, setBook] = useState<FriendBook | null>(() => (playerId ? friendBooks.get(playerId) ?? null : null));
   const [state, setState] = useState<'loading' | 'ready' | 'closed' | 'error'>(() => (playerId && friendBooks.has(playerId) ? 'ready' : 'loading'));
@@ -68,8 +69,8 @@ export default function FriendStampBookScreen() {
 
   return (
     <LookScreen footer header={{ left: <LookBackButton />, title: 'Stamp Book', right: null }}>
-      {() => (<>
-      <View style={styles.screen}>
+      {pad => (<>
+      <View style={[styles.screen, pad.sticker ? lookTop(pad) : null]}>
         <Image source={BACKGROUND} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
         {state !== 'ready' || !book ? (
           <View style={styles.state}>
@@ -89,7 +90,7 @@ export default function FriendStampBookScreen() {
             )}
           </View>
         ) : (
-          <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: 150 + insets.bottom }} showsVerticalScrollIndicator={false}>
+          <ScrollView contentContainerStyle={{ paddingTop: 12, paddingBottom: bookBottom }} showsVerticalScrollIndicator={false}>
             <View style={styles.coverWrap}>
               <View style={styles.coverLip} />
               <View style={styles.cover}>

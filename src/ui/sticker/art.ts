@@ -56,6 +56,9 @@ export const ART = {
 
 /** width / height of each file. */
 export const ART_RATIO = {
+  /** Alex's top bars (original-top-bar.png 3453 x 651, purple_topbar.png 3464 x 633); the theme's server bar is drawn at the original's. */
+  topBar: 3453 / 651,
+  purpleTopBar: 3464 / 633,
   arrow: 377 / 384,
   faq: 363 / 386,
   close: 1,

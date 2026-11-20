@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import { getRideAchievements, RideAchievementType } from '../../api/endpoints/player-rides';
 import { colors } from '../../design-system';
@@ -40,6 +41,8 @@ const AchievementCard: React.FC<AchievementCardProps> = React.memo(({ achievemen
 AchievementCard.displayName = 'AchievementCard';
 
 export default function RideAchievementsScreen() {
+  // Today's footer clearance, or the kit footer's room with the look on (one owner, never both).
+  const footerRoom = useLookBottom(FOOTER_CLEARANCE);
   const [achievements, setAchievements] = useState<RideAchievementType[]>([]);
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
@@ -63,7 +66,7 @@ export default function RideAchievementsScreen() {
       {loading || failed ? (
         <SharkLoader state={failed ? 'error' : 'loading'} title={failed ? "Achievements didn't load" : undefined} onRetry={load} />
       ) : (
-        <ScrollView contentContainerStyle={styles.content}>
+        <ScrollView contentContainerStyle={[styles.content, { paddingBottom: footerRoom }]}>
           {/* Progress */}
           <View style={styles.progressCard}>
             <Text style={styles.progressNum}>{unlocked.length}/{achievements.length}</Text>
@@ -122,7 +125,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
+  content: { padding: 16 },
   progressCard: {
     backgroundColor: '#FFFFFF', 
     borderRadius: 20, 

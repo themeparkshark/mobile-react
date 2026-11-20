@@ -20,7 +20,7 @@ import { isEarnedShelfArrival, resolveEarnedShelfSlot, type EarnedShelfArrival, 
 import TaskCoinModal from '../components/TaskCoinModal';
 import * as RootNavigation from '../RootNavigation';
 import { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -584,7 +584,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     <LookScreen footer legacyPad={{ top: -8, bottom: shelfEndClearance }}
       header={{ title: currentPark?.display_name ?? currentPark?.name, left: <LookBackButton />, right: <InformationModal id={InformationModalEnums.ParkScreen} /> }}>
       {pad => (<>
-      {loading && <ImageBackground style={{ flex: 1, marginTop: pad.top }}
+      {loading && <ImageBackground style={[{ flex: 1 }, lookTop(pad)]}
         source={require('../../assets/images/screens/park/background-new.png')}>
         {/* Same underwater park art while the shelf loads, never a grey page. */}
         <Loading />
@@ -601,15 +601,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
               (previous.width !== frameWidth || previous.height !== frameHeight)) closeArrival();
           arrival.notifyLayout();
         }}
-          style={{
-            flex: 1,
-            marginTop: pad.top,
-          }}
+          style={pad.sticker ? { flex: 1 } : { flex: 1, marginTop: pad.top }}
         >
           <ImageBackground
-            style={{
-              flex: 1,
-            }}
+            style={pad.sticker ? [{ flex: 1 }, lookTop(pad)] : { flex: 1 }}
             source={require('../../assets/images/screens/park/background-new.png')}
           >
             {/* T180: never a plain text box. No shelf yet: his shark with one button. An old shelf on screen: a slim

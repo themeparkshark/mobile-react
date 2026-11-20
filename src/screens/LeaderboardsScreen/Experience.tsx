@@ -12,6 +12,7 @@ import {
   experienceScore, podiumSlots, STANDINGS_EMPTY_COPY, standingsStatus, xpIncludesVipBonus, xpVipNote, type StandingsStatus,
 } from './standingsModel';
 import { standingsGeneration } from './standingsCache';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 
 const PAGE_SIZE_HINT = 15;
 
@@ -24,6 +25,8 @@ const cache: { players: PlayerType[]; page: number; more: boolean; generation: n
 const xpScore = (player: PlayerType) => experienceScore(player);
 
 export default function Experience() {
+  // The board's end clears the footer: today's 140, or the kit footer's room (one owner).
+  const boardBottom = useLookBottom(140);
   const { player } = useContext(AuthContext);
   const [players, setPlayers] = useState<PlayerType[]>(cache.players);
   const [status, setStatus] = useState<StandingsStatus>(cache.players.length ? 'ready' : 'loading');
@@ -78,7 +81,7 @@ export default function Experience() {
   const vipNote = cache.vipNote ?? xpVipNote(players, cache.vipBonus);
 
   return (
-    <ScrollView contentContainerStyle={{ paddingBottom: 140 }}>
+    <ScrollView contentContainerStyle={{ paddingBottom: boardBottom }}>
       <FloatingParticles count={10} />
       <StandingsPodium
         podium={slots.podium}

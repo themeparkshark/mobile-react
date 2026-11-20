@@ -36,6 +36,7 @@ import { isStandalonePreviewMode } from './utils/standalonePreview';
 import { ShareStudioHost } from './share';
 import { DEV_SCREENS, devInitialRoute } from './devRoutes';
 import { releaseNativeSplash } from './nativeSplash';
+import { useStickerLookReady } from './ui/sticker/look';
 import { addBreadcrumb } from './services/telemetry';
 import { markUserTouch } from './hooks/useUserIdle';
 import LevelUpMoment from './components/rewards/LevelUpMoment';
@@ -75,10 +76,12 @@ export default function App() {
   });
   // A font failure falls back to system fonts instead of a blank app.
   const fontsLoaded = fontsReady || !!fontError;
+  // The Sticker Book look is set once per launch, before the first screen (look.ts; instant while key 1 is off).
+  const lookReady = useStickerLookReady();
   useEffect(() => {
     // Opening on the launch scene: the native art hands off only once the JS art has drawn.
-    if (fontsLoaded) releaseNativeSplash({ waitForArt: initialRouteName === 'Splash' });
-  }, [fontsLoaded, initialRouteName]);
+    if (fontsLoaded && lookReady) releaseNativeSplash({ waitForArt: initialRouteName === 'Splash' });
+  }, [fontsLoaded, lookReady, initialRouteName]);
   useAxiosSetup();
   // One slow /feature-flags read never hides Daily 3, chests or the pass for the session (T095).
   useFeatureFlagWatch();
@@ -99,7 +102,7 @@ export default function App() {
   // Wait for fonts to load - but let crumbs load in background
   // SplashScreen will wait for crumbs before navigating
   // The native launch screen stays up until fonts are ready (nativeSplash.ts).
-  if (!fontsLoaded) return null;
+  if (!fontsLoaded || !lookReady) return null;
 
   return (
     <View style={{ flex: 1 }} onTouchStart={onAnyTouch} onTouchMove={onAnyTouch}>

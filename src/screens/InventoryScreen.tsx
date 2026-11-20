@@ -37,7 +37,7 @@ import { quietRetry } from '../api/quietRetry';
 import { tryAgainLine } from '../services/connectionCopy';
 import { explainMemberLock } from '../components/MemberLookHost';
 import { MEMBER_WEAR_COPY, memberWearLocked, refreshMemberLook, useMemberWearLock } from '../services/memberLook';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 /** What the player reads when a save does not go through (dressing-room.md 7.10). */
 export function lookNoticeCopy(notice: LookNotice): string {
@@ -257,8 +257,9 @@ export default function InventoryScreen() {
             source={require('../../assets/images/screens/park/background-new.png')}
             resizeMode="stretch"
             style={{
-              marginTop: pad.top,
-              height: 400,
+              // Look on: the art reaches the bar's drop and grows by the gap (LookScreen lookTop).
+              ...lookTop(pad),
+              height: 400 + (pad.sticker ? pad.top : 0),
               overflow: 'hidden',
               position: 'relative',
             }}

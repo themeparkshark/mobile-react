@@ -72,6 +72,7 @@ function journal() {
       if (name === 'expo-image') return { Image: 'Image' };
       if (name === '../../ui') return { GameIcon: 'GameIcon', GameButton: 'GameButton', SharkLoader: 'SharkLoader' };
       if (name === './RideTrackerFrame') return { default: 'RideTrackerFrame', __esModule: true };
+      if (name === '../../ui/sticker/LookScreen') return { useLookBottom: legacy => legacy };
       if (name === './RideTrackerEmpty') return { default: 'RideTrackerEmpty', __esModule: true };
       if (name === '../../ui/gameChip') return { GAME_CHIP: {} };
       if (name === '../../components/Wrapper') return { default: 'Wrapper', FOOTER_CLEARANCE: 92, __esModule: true };

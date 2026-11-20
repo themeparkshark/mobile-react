@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { fetchFeed, fetchPinned } from '../api/endpoints/social';
 import Avatar from '../components/Avatar';
 import { FOOTER_CLEARANCE } from '../components/Wrapper';
-import LookScreen from '../ui/sticker/LookScreen';
+import LookScreen, { lookTop } from '../ui/sticker/LookScreen';
 import { isTeam, TEAMS, type TeamId } from '../constants/teams';
 import TeamBadge from '../components/TeamBadge';
 import { outfitLayerUrls, sharkBaseLayers } from '../helpers/wardrobe';
@@ -304,7 +304,7 @@ export default function SocialScreen({ navigation }: { navigation: { navigate: (
     }}>
       {pad => (<>
 
-      <CleanScreenBackground style={pad.sticker ? [styles.body, { marginTop: pad.top }] : styles.body}>
+      <CleanScreenBackground style={pad.sticker ? [styles.body, lookTop(pad)] : styles.body}>
         <FlashList
           ref={listRef}
           data={status === 'ready' ? items : []}

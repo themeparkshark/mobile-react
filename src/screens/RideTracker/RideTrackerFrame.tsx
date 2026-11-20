@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
-import LookScreen, { LookBackButton } from '../../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../../ui/sticker/LookScreen';
 
 /**
  * The app's own chrome for every Ride Tracker page (on LookScreen since step 2a): the water header with its wave edge and
@@ -17,7 +17,7 @@ export default function RideTrackerFrame({ title, right, style, children }: {
 }) {
   return (
     <LookScreen footer header={{ left: <LookBackButton />, title, right }}>
-      {pad => <View style={[pad.sticker ? { flex: 1, marginTop: pad.top } : { flex: 1 }, style]}>{children}</View>}
+      {pad => <View style={[{ flex: 1 }, style, pad.sticker ? lookTop(pad) : null]}>{children}</View>}
     </LookScreen>
   );
 }

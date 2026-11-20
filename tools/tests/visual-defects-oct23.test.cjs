@@ -299,7 +299,8 @@ test('Ride Detail wears the Ride Tracker header: no web gradients, game buttons,
   assert.match(src, /<RideTrackerFrame title=\{headerTitle\} right=\{starButton\}/);
   assert.match(src, /<RideTrackerFrame title=\{headerTitle\} style=\{s\.container\}>\s*\{loadError/, 'loading uses the same frame');
   assert.match(src, /<GameButton label="Log this ride"/);
-  assert.match(src, /paddingBottom: FOOTER_CLEARANCE/);
+  assert.match(src, /const footerRoom = useLookBottom\(FOOTER_CLEARANCE\);/);
+  assert.match(src, /\{ paddingBottom: footerRoom \}/);
   // Step 2a: the frame hands `right` to LookScreen, whose today bar draws it in the right column.
   assert.match(read('src/screens/RideTracker/RideTrackerFrame.tsx'), /header=\{\{ left: <LookBackButton \/>, title, right \}\}/);
   assert.match(read('src/ui/sticker/LookScreen.tsx'), /<TopbarColumn stretch=\{false\}>\{right\}<\/TopbarColumn>/);
@@ -429,7 +430,7 @@ test('Ride Detail on an SE: a small community count is one row and the empty lin
   assert.match(src, /<GameIcon name="shark" size=\{emptySharkSize\} \/>/, 'the empty page has the shark, not a blank sheet');
   // The empty page fills the space under the button: an arrow up at LOG THIS RIDE, the line, the shark.
   assert.match(src, /emptyWrap: \{ flexGrow: 1, alignItems: 'center', justifyContent: 'flex-start'/);
-  assert.match(src, /contentContainerStyle=\{\[s\.listContent, history\.length === 0 && s\.listContentEmpty\]\}/);
+  assert.match(src, /contentContainerStyle=\{\[s\.listContent, \{ paddingBottom: footerRoom \}, history\.length === 0 && s\.listContentEmpty\]\}/);
   assert.match(src, /<LogPointer \/>/);
   assert.match(src, /pointer: \{ transform: \[\{ rotate: '-90deg' \}\] \}/);
   assert.match(src, /\{history\.length > 0 && <Text style=\{s\.sectionTitle\}>YOUR RIDE HISTORY<\/Text>\}/);

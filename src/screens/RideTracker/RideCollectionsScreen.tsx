@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, Pressable, StyleSheet, RefreshControl,
 } from 'react-native';
 import RideTrackerFrame from './RideTrackerFrame';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 import { FOOTER_CLEARANCE } from '../../components/Wrapper';
 import * as Haptics from 'expo-haptics';
 import { getRideCollections, RideCollection } from '../../api/endpoints/rides/collections';
@@ -74,6 +75,8 @@ const CollectionCard: React.FC<CollectionCardProps> = React.memo(({ collection, 
 CollectionCard.displayName = 'CollectionCard';
 
 export default function RideCollectionsScreen() {
+  // Today's footer clearance, or the kit footer's room with the look on (one owner, never both).
+  const footerRoom = useLookBottom(FOOTER_CLEARANCE);
   const navigation = useNavigation<any>();
   const [collections, setCollections] = useState<RideCollection[]>([]);
   const [loading, setLoading] = useState(true);
@@ -110,7 +113,7 @@ export default function RideCollectionsScreen() {
         <SharkLoader state={loading ? 'loading' : 'error'} title={loading ? undefined : "Ride sets didn't load"} onRetry={firstLoad} />
       ) : (
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: footerRoom }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#0EA5E9" />}
         >
           {collections.length === 0 ? (
@@ -161,7 +164,7 @@ const styles = StyleSheet.create({
     fontFamily: 'Shark',
     letterSpacing: 2,
   },
-  content: { padding: 16, paddingBottom: FOOTER_CLEARANCE },
+  content: { padding: 16 },
   // Collection card
   collCard: {
     backgroundColor: '#FFFFFF', 

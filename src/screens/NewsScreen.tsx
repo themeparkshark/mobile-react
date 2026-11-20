@@ -20,7 +20,7 @@ import { ImageBackground, InteractionManager, Keyboard, Pressable, RefreshContro
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import * as RootNavigation from '../RootNavigation';
 import { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
-import LookScreen from '../ui/sticker/LookScreen';
+import LookScreen, { lookTop } from '../ui/sticker/LookScreen';
 import { openExternal } from '../services/external';
 import { BRAND, GameIcon, RADIUS, SHADOW, SharkLoader } from '../ui';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
@@ -383,9 +383,9 @@ export default function NewsScreen() {
   return (
     <LookScreen footer legacyPad={{ top: -8, bottom: BOTTOM_BAR_OVERHANG + 24 }} header={{ title: 'Latest News' }}>
       {pad => (
-      <View style={{ marginTop: pad.top, flex: 1 }}>
-        <ImageBackground style={{ flex: 1 }} source={SEABED_PLATE}>
-          <View onLayout={e => setTopPillTop(e.nativeEvent.layout.height + 6)}>
+      <View style={{ marginTop: pad.sticker ? 0 : pad.top, flex: 1 }}>
+        <ImageBackground style={pad.sticker ? [{ flex: 1 }, lookTop(pad)] : { flex: 1 }} source={SEABED_PLATE}>
+          <View onLayout={e => setTopPillTop(e.nativeEvent.layout.y + e.nativeEvent.layout.height + 6)}>
           <NewsFilterBar filter={filter} park={park} searching={searching} query={query} endInset={showTop ? 60 : 0}
             onFilter={pickFilter} onPark={pickPark}
             onSearchOpen={() => setSearching(true)} onSearchClose={closeSearch} onQuery={setQuery} />
@@ -435,7 +435,7 @@ export default function NewsScreen() {
           )}
           {showTop && !toast && (
             <Animated.View entering={reduced ? undefined : FadeIn.duration(160)} exiting={reduced ? undefined : FadeOut.duration(120)}
-              style={{ position: 'absolute', right: 10, top: 12 }}>
+              style={{ position: 'absolute', right: 10, top: 12 + (pad.sticker ? pad.top : 0) }}>
               <GamePress accessibilityRole="button" accessibilityLabel="Back to the top" hitSlop={8}
                 onPress={() => { tap(); listRef.current?.scrollToOffset({ offset: 0, animated: !reduced }); }}
                 lip={5}

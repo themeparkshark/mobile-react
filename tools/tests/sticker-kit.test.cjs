@@ -294,6 +294,29 @@ test('the Header is never taller than today\'s top bar (status bar + 70) for the
   assert.doesNotMatch(header, /from 'react-native-svg'/, 'the straight band is views and RN images (server art through the image cache)');
 });
 
+test('the Header shows Alex\'s bar art only above its rim: natural aspect, top-anchored, at least crest / 0.6 tall', () => {
+  const hp = part('Header.tsx');
+  const art = loadTs('src/ui/sticker/art.ts', STUBS);
+  assert.equal(hp.ART_SHOWN, 0.6);
+  // [safe area top, width]: SE, 17 Pro, Pro Max, a wide tablet.
+  for (const [inset, width] of [[20, 375], [62, 402], [62, 440], [24, 1024]]) {
+    const crest = layout.headerCrest(inset);
+    for (const ratio of [art.ART_RATIO.topBar, art.ART_RATIO.purpleTopBar]) {
+      const box = plain(hp.headerArtBox(width, crest, ratio));
+      assert.ok(box.height >= crest / 0.6 - 1e-9, `${inset}/${width}: art ${box.height} under crest / 0.6`);
+      assert.ok(box.width >= width - 1e-9, 'the art always spans the band');
+      assert.ok(Math.abs(box.width / box.height - ratio) < 1e-9, 'natural aspect, never squeezed');
+      assert.ok(Math.abs(box.left - (width - box.width) / 2) < 1e-9, 'centred');
+    }
+  }
+  const header = source(path.join(dir, 'Header.tsx'));
+  assert.doesNotMatch(header, /crest \* 1\.38|height: crest \}/, 'no art squeezed into the band');
+  assert.match(header, /\.\.\.waterBox/);
+  assert.match(header, /\.\.\.artBox/);
+  // The title reads as the game's sign (caps, like TopbarText), and VoiceOver reads it as written.
+  assert.match(header, /label=\{title\}>\{title\.toUpperCase\(\)\}<\/StickerText>/);
+});
+
 test('the Footer takes its own space: band never taller than today, hump and Map icon inside its box', () => {
   const footer = part('Footer.tsx');
   for (const width of [320, 375, 390, 402, 440]) {
@@ -751,10 +774,22 @@ test('the gallery is a dev-only route, and live screens reach the kit only throu
 
 // ---------- the switch (step 2a) ----------
 
-const lookStubs = flags => ({
-  react: { useSyncExternalStore: (s, g) => g() },
-  '../../api/endpoints/platform/feature-flags': { featureFlagsNow: () => (flags ? { flags } : null), onFeatureFlags: () => () => {} },
-});
+const memoryStore = (initial = {}) => {
+  const data = { ...initial };
+  return { data, getItem: async k => (Object.hasOwn(data, k) ? data[k] : null), setItem: async (k, v) => { data[k] = v; } };
+};
+const lookStubs = (flags, store = memoryStore()) => {
+  const listeners = [];
+  return {
+    react: { useState: v => [typeof v === 'function' ? v() : v, () => {}], useEffect: () => {} },
+    '@react-native-async-storage/async-storage': { __esModule: true, default: store },
+    '../../api/endpoints/platform/feature-flags': {
+      featureFlagsNow: () => (flags ? { flags } : null),
+      onFeatureFlags: listener => { listeners.push(listener); if (flags) listener({ flags }); return () => {}; },
+    },
+    listeners,
+  };
+};
 
 test('the look switch: off by default, the server alone cannot turn it on, the override is dev JS only', () => {
   const look = (dev, env, flags) => loadTs('src/ui/sticker/look.ts', lookStubs(flags), { __DEV__: dev, process: { env } });
@@ -774,6 +809,48 @@ test('the look switch: off by default, the server alone cannot turn it on, the o
   assert.equal(stickerLookFrom({ override: false, fallback: true, server: true }), true);
   assert.equal(stickerLookFrom({ override: false, fallback: true, server: undefined }), false);
   assert.equal(stickerLookFrom({ override: false, fallback: false, server: true }), false);
+});
+
+test('the look is set once per launch: a later server answer waits for the next cold start', async () => {
+  const stubs = lookStubs(null);
+  const look = loadTs('src/ui/sticker/look.ts', stubs, { __DEV__: false, process: { env: {} } });
+  // Key 1 on (the flip), the saved answer from the last launch says on.
+  let store = memoryStore({ [look.STICKER_LOOK_STORE_KEY]: '1' });
+  let s = look.lookSession({ fallback: true, override: false }, store);
+  assert.equal(s.needsStore, true, 'Root waits for the saved answer only when the server can still decide');
+  await s.hydrate();
+  assert.equal(s.on(), true);
+  s.answer(false);
+  assert.equal(s.on(), true, 'an answer during the launch never changes the look');
+  await Promise.resolve();
+  assert.equal(store.data[look.STICKER_LOOK_STORE_KEY], '0', 'it is saved for the next launch');
+  s = look.lookSession({ fallback: true, override: false }, store);
+  await s.hydrate();
+  assert.equal(s.on(), false, 'the next cold start takes it');
+  // First launch after the flip (nothing saved yet): today's look, even when the server says on mid-launch.
+  store = memoryStore();
+  s = look.lookSession({ fallback: true, override: false }, store);
+  await s.hydrate();
+  assert.equal(s.on(), false);
+  s.answer(true);
+  assert.equal(s.on(), false);
+  // A read before hydrate latches too (Root's gate prevents it, but it can never flip afterwards).
+  s = look.lookSession({ fallback: true, override: false }, memoryStore({ [look.STICKER_LOOK_STORE_KEY]: '1' }));
+  assert.equal(s.on(), false);
+  await s.hydrate();
+  assert.equal(s.on(), false);
+  // Key 1 off (today) or the lane override: no storage read, no wait at launch.
+  assert.equal(look.lookSession({ fallback: false, override: false }, memoryStore()).needsStore, false);
+  assert.equal(look.lookSession({ fallback: true, override: true }, memoryStore()).needsStore, false);
+  // The module: key 1 is off in code, so the server's answer (here on) never reaches the look, and nothing subscribes.
+  const live = loadTs('src/ui/sticker/look.ts', lookStubs({ sticker_look: true }), { __DEV__: false, process: { env: {} } });
+  assert.equal(live.stickerLookOn(), false);
+  assert.equal(live.useStickerLook(), false);
+  assert.equal(live.useStickerLookReady(), true, 'today\'s launch never waits on storage');
+  const text = source(path.join(dir, 'look.ts'));
+  assert.doesNotMatch(text, /useSyncExternalStore|featureFlagsNow/, 'no live subscription: the look cannot change while the app is open');
+  const rootText = source(path.join(root, 'src/Root.tsx'));
+  assert.match(rootText, /if \(!fontsLoaded \|\| !lookReady\) return null;/, 'Root\'s splash gate waits for the look');
 });
 
 test('LookScreen with the switch off: today\'s numbers, today\'s bar and footer, the kit never loaded', () => {
@@ -825,6 +902,20 @@ const MIGRATED = [
   'src/screens/PinCollectionsScreen.tsx',
   'src/screens/RedeemCoinCodeScreen.tsx',
 ];
+/** Bodies drawn inside a moved screen (or around one) that keep a footer number: it goes through LookScreen too. */
+const FOOTER_BODIES = [
+  'src/screens/StoreScreen/GearShelf.tsx',
+  'src/screens/StoreScreen/ShopShelves.tsx',
+  'src/screens/StoreScreen/SuppliesShop.tsx',
+  'src/screens/RideTracker/RideDetailScreen.tsx',
+  'src/screens/RideTracker/RideHistoryScreen.tsx',
+  'src/screens/RideTracker/RideStatsScreen.tsx',
+  'src/screens/RideTracker/RideCollectionsScreen.tsx',
+  'src/screens/RideTracker/RideWishlistScreen.tsx',
+  'src/screens/RideTracker/RideAchievementsScreen.tsx',
+  'src/screens/LeaderboardsScreen/Experience.tsx',
+  'src/screens/LeaderboardsScreen/HomeHunt.tsx',
+];
 test('migrated screens take their bar, footer and body room from LookScreen', () => {
   for (const file of MIGRATED) {
     const text = source(path.join(root, file));
@@ -832,8 +923,17 @@ test('migrated screens take their bar, footer and body room from LookScreen', ()
     assert.doesNotMatch(text, /import Wrapper\b/, `${file} imports today's footer`);
     assert.doesNotMatch(text, /<(Topbar|Wrapper|BackButton)\b/, `${file} draws chrome by hand`);
     assert.match(text, /<LookScreen\b/, `${file} sits on LookScreen`);
-    // Today's footer numbers live only in LookScreen's legacyPad (deleted at the flip), never in a style.
-    for (const line of text.split('\n').filter(l => /FOOTER_CLEARANCE|BOTTOM_BAR_OVERHANG/.test(l) && !/^import /.test(l))) {
+    // The top room sits on the view that paints the screen's ground (padding with the look on), never a bare margin.
+    assert.doesNotMatch(text, /(?<!pad\.sticker \? null : )\{ marginTop: pad\.top \}|^\s+marginTop: pad\.top,$/m, `${file} puts the kit gap in a margin (world blue under the bar)`);
+  }
+  // Padding has one owner: today's footer numbers live only in legacyPad (deleted at the flip) or
+  // useLookBottom(...), which hands the kit footer's room over instead; never added on top of it.
+  for (const file of [...MIGRATED, ...FOOTER_BODIES]) {
+    const text = source(path.join(root, file));
+    // The home bar's own room (insets.bottom) counts only on a screen with the 5-icon footer.
+    const footed = FOOTER_BODIES.includes(file) || /<LookScreen footer\b/.test(text);
+    const lines = text.split('\n').filter(l => !/^import /.test(l) && (/FOOTER_CLEARANCE|BOTTOM_BAR_OVERHANG|NAV_COVER/.test(l) || footed && /(padding\w*|height): [^,}]*(\+ *insets\.bottom|insets\.bottom *\+)/.test(l)));
+    for (const line of lines) {
       assert.match(line, /legacyPad=|useLookBottom\(|^\s*const \w+ = /, `${file} keeps its own footer room: ${line.trim()}`);
     }
   }

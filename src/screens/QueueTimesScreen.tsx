@@ -40,7 +40,7 @@ import { UpperText } from '../ui/upper';
 import EdgeScrollHint, { useEdgeScrollHint } from '../components/EdgeScrollHint';
 import SearchField from './social/SearchField';
 import { HIT_SLOP } from '../ui/tokens';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 
 // --- Types ---
 type SortMode = 'wait-desc' | 'wait-asc' | 'name';
@@ -270,7 +270,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   const [attractions, setAttractions] = useState<WikiLiveEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [selectedPark, setSelectedPark] = useState<number>(route.params.park);
+  // A route with no park (a deep link, a dev jump) opens the first park in the list, never a red screen.
+  const [selectedPark, setSelectedPark] = useState<number>(route.params?.park ?? PARK_DISPLAY_ORDER[0].id);
   const [sortMode, setSortMode] = useState<SortMode>('wait-desc');
   const [filterMode, setFilterMode] = useState<FilterMode>('open');
   // Find a ride by name (T021: Pirates took 8 to 14 swipes). A search looks through every ride, open or not.
@@ -442,7 +443,7 @@ export default function QueueTimesScreen({ route }: { route: any }) {
   return (
     <LookScreen footer={{ previewMode: Boolean(previewEntries) }} legacyPad={{ top: -8, bottom: FOOTER_CLEARANCE }} header={{ left: <LookBackButton />, title: 'WAIT TIMES', right: <View style={{ width: 35 }} /> }}>
       {pad => (<>
-      <View style={[styles.container, { marginTop: pad.top }]}>
+      <View style={[styles.container, lookTop(pad)]}>
 
       {/* Park Selector */}
       <View style={styles.parkSelectorContainer}>

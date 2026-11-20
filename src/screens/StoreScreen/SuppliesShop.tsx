@@ -707,8 +707,8 @@ const st = StyleSheet.create({
   dropsHead: { fontFamily: FONT.display, fontSize: 16, color: '#ffd34d' },
   dropsText: { fontFamily: FONT.display, fontSize: 15, color: '#ffffff', lineHeight: 22 },
   center: { flex: 1, justifyContent: 'center' },
-  // The last card clears the footer's raised Map compass (T160).
-  scroll: { padding: 14, paddingBottom: BOTTOM_BAR_OVERHANG + 24, gap: 14 },
+  // The last card clears the footer's raised Map compass (T160): paddingBottom from useLookBottom.
+  scroll: { padding: 14, gap: 14 },
   wallet: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 8 },
   walletChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: BRAND.blue, borderRadius: 999,
     borderWidth: 3, borderColor: BRAND.white, paddingHorizontal: 10, paddingVertical: 3 },

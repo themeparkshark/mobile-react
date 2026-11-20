@@ -266,7 +266,8 @@ const styles = StyleSheet.create({
     borderWidth: 2, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
   ghostNext: { borderRadius: 40, borderWidth: 2, borderColor: '#ffd23f', borderStyle: 'dashed' },
   ghostMore: { fontFamily: 'Shark', fontSize: 18, color: '#ffffff', alignSelf: 'center', marginLeft: 6 },
-  content: { padding: 16, paddingBottom: 48, gap: 14 },
+  // paddingBottom: LookScreen's pad (one owner for the footer room).
+  content: { padding: 16, gap: 14 },
   summary: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff8e4', borderRadius: 18,
     borderWidth: 3, borderColor: '#ffffff', padding: 12, shadowColor: '#05346e', shadowOpacity: 0.22,
     shadowOffset: { width: 0, height: 4 }, shadowRadius: 8 },

@@ -21,7 +21,7 @@ import markAllAsRead from '../api/endpoints/me/notifications/markAllAsRead';
 import markAsRead from '../api/endpoints/me/notifications/markAsRead';
 import deleteNotification from '../api/endpoints/me/notifications/deleteNotification';
 import Notification, { NOTIFICATION_ROW_HEIGHT } from '../components/Notification';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop } from '../ui/sticker/LookScreen';
 import { NotificationContext } from '../context/NotificationProvider';
 import { useToast } from '../components/Toast';
 import { haptic } from '../gamekit/Haptics';
@@ -234,7 +234,7 @@ export default function NotificationsScreen() {
     <LookScreen legacyPad={{ top: -8 }} header={{ left: <LookBackButton />, title: 'Notifications', right: <View style={{ width: 44 }} /> }}>
       {pad => (<>
       <SurfaceContext.Provider value="bell">
-      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? { marginTop: pad.top } : undefined}>
+      <CleanScreenBackground underTopbar={!pad.sticker} style={pad.sticker ? lookTop(pad) : undefined}>
         {load === 'loading' && <SharkLoader state="loading" title="Checking your bell" />}
         {load === 'error' && (
           <SocialError title="Notifications didn't load"

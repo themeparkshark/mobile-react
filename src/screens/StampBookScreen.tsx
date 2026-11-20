@@ -52,7 +52,7 @@ import {
 import { UpperText } from '../ui/upper';
 import { stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
 import { SEABED_PLATE } from '../constants/backdrops';
-import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
+import LookScreen, { LookBackButton, lookTop, useLookBottom } from '../ui/sticker/LookScreen';
 
 const GAP = 9;
 const SIDE = 12;
@@ -80,6 +80,8 @@ export default function StampBookScreen() {
   const route = useRoute();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  // The book's end clears the footer: today's cover number, or the kit footer's room (one owner).
+  const bookBottom = useLookBottom(NAV_COVER + insets.bottom + 24);
   const focused = useIsFocused();
   const reducedMotion = useUiReducedMotion();
   const scroller = useRef<ScrollView>(null);
@@ -563,10 +565,10 @@ export default function StampBookScreen() {
 
   return (
     <LookScreen footer header={{ left: <LookBackButton />, title: 'Stamp Book', right: null }}>
-      {() => (<>
+      {pad => (<>
 
       <BookFxProvider value={fx}>
-        <View style={styles.screen} onTouchStart={fx.poke} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
+        <View style={[styles.screen, pad.sticker ? lookTop(pad) : null]} onTouchStart={fx.poke} onLayout={e => { fx.viewportH.value = e.nativeEvent.layout.height; }}>
           <Image source={BACKGROUND} style={StyleSheet.absoluteFill} contentFit="cover" contentPosition="top" />
           <CollectionSwitch active="stamps" />
 
@@ -621,7 +623,7 @@ export default function StampBookScreen() {
                   seenRef={seenRef} seenVersion={seenVersion} celebrating={celebrate === section.key} onOpen={open} />
               ))}
               </View>
-              <View style={{ height: NAV_COVER + insets.bottom + 24 }} />
+              <View style={{ height: bookBottom }} />
             </Animated.ScrollView>
           )}
           {celebrate && <Confetti width={width} height={height} seed={7} count={40} />}

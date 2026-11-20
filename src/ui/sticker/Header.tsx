@@ -24,7 +24,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import RoundButton from './RoundButton';
 import { PlaceProvider, useRefuseInPage } from './StickerContext';
 import StickerText from './StickerText';
-import { ART } from './art';
+import { ART, ART_RATIO } from './art';
 import { headerCrest, headerHeight } from './layout';
 import { WORLD } from './level';
 import { TEXT } from './textRoles';
@@ -39,6 +39,21 @@ export function headerPath(width: number, bottom: number): string {
 export function headerLayers(insetTop: number): { readonly water: number; readonly line: number; readonly edge: number; readonly drop: number } {
   const crest = headerCrest(insetTop);
   return { water: crest, line: crest + HEADER.line, edge: crest + HEADER.line + HEADER.edge, drop: crest + HEADER.line + HEADER.edge + HEADER.drop };
+}
+
+/**
+ * Alex's bar art keeps its rim curve (the wave Dustin turned down, Nov 19) below about 0.66 of
+ * its height. The band shows the art only above that: drawn at its natural aspect, anchored at
+ * the top, at least crest / ART_SHOWN tall, so the band's straight edge clips it before the rim.
+ */
+export const ART_SHOWN = 0.6;
+
+/** The art's box in the band (pure, tested): natural aspect, centred, top-anchored, the rim below the crest. */
+export function headerArtBox(width: number, crest: number, ratio: number): { readonly left: number; readonly width: number; readonly height: number } {
+  let height = crest / ART_SHOWN;
+  let w = height * ratio;
+  if (w < width) { w = width; height = w / ratio; }
+  return { left: (width - w) / 2, width: w, height };
 }
 
 export type HeaderVariant = 'water' | 'purple' | 'night';
@@ -80,6 +95,8 @@ function HeaderImpl({ title, onBack, backLabel = 'Back', onHelp, helpLabel = 'Ho
   const crest = lay.water;
   const top = insets.top;
   const water = variant === 'purple' ? ART.purpleTopBar : ART.topBar;
+  const waterBox = headerArtBox(width, crest, variant === 'purple' ? ART_RATIO.purpleTopBar : ART_RATIO.topBar);
+  const artBox = headerArtBox(width, crest, ART_RATIO.topBar);
   const leftNode = left ?? (onBack ? <RoundButton kind="back" accessibilityLabel={backLabel} size={HEADER.round} onPress={onBack} /> : null);
   const rightNode = right ?? (onHelp ? <RoundButton kind="help" accessibilityLabel={helpLabel} size={HEADER.round} onPress={onHelp} /> : null);
   const slot = leftNode || rightNode ? HEADER.slot : 0;
@@ -92,8 +109,8 @@ function HeaderImpl({ title, onBack, backLabel = 'Back', onHelp, helpLabel = 'Ho
         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: lay.edge, backgroundColor: INK.white }} />
         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: lay.line, backgroundColor: INK.navy }} />
         <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, height: crest, overflow: 'hidden', backgroundColor: INK.blue }}>
-          <Image source={water} resizeMode="stretch" fadeDuration={0} style={{ position: 'absolute', left: -width * 0.51, top: 0, width: width * 2.03, height: crest * 1.38 }} />
-          {art && variant !== 'purple' ? <Image source={art} resizeMode="cover" fadeDuration={0} style={{ position: 'absolute', left: 0, top: 0, width, height: crest }} /> : null}
+          <Image source={water} resizeMode="stretch" fadeDuration={0} style={{ position: 'absolute', top: 0, ...waterBox }} />
+          {art && variant !== 'purple' ? <Image source={art} resizeMode="cover" fadeDuration={0} style={{ position: 'absolute', top: 0, ...artBox }} /> : null}
           <LinearGradient colors={SHADE_STOPS} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />
           {variant === 'night' ? <View style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: SHADE.nightWash }} /> : null}
           {variant === 'night' ? <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: HEADER.nightLine, backgroundColor: INK.gold }} /> : null}
@@ -104,7 +121,8 @@ function HeaderImpl({ title, onBack, backLabel = 'Back', onHelp, helpLabel = 'Ho
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingTop: 2 }} pointerEvents="box-none">
               {title ? (
                 <View style={{ alignSelf: 'stretch' }} pointerEvents="none">
-                  <StickerText spec={TITLE} lineHeight={38} role="header" fit>{title}</StickerText>
+                  {/* The game's sign: caps like today's bar (TopbarText), read by VoiceOver as written. */}
+                  <StickerText spec={TITLE} lineHeight={38} role="header" fit label={title}>{title.toUpperCase()}</StickerText>
                 </View>
               ) : (
                 <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: GAP.wide }} pointerEvents="box-none">{children}</View>

@@ -17,9 +17,8 @@
  * "?" (InformationModal) switch only their art; navigation, sounds, labels and testIDs never change.
  */
 import { createContext, useContext, type ReactNode } from 'react';
-import { useWindowDimensions, type ImageSourcePropType } from 'react-native';
+import { type ImageSourcePropType } from 'react-native';
 import { Image } from 'expo-image';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Button from '../../components/Button';
 import Topbar, { BackButton } from '../../components/Topbar';
 import TopbarColumn from '../../components/Topbar/TopbarColumn';
@@ -36,7 +35,11 @@ export type ScreenPad = {
   readonly sticker: boolean;
 };
 
-const PadContext = createContext<ScreenPad | null>(null);
+/** The body's room, provided by LookScreen (today's half) and the kit half (LookSticker). */
+export const PadContext = createContext<ScreenPad | null>(null);
+
+/** Inside the kit Header's slots: the "?" draws the kit's help disc only there (never inside today's Topbar). */
+export const InStickerBar = createContext(false);
 
 /** The body's room on the LookScreen above (both looks), for bodies drawn by a child component. */
 export function useScreenPad(): ScreenPad {
@@ -44,12 +47,27 @@ export function useScreenPad(): ScreenPad {
 }
 
 /**
- * A body drawn by a child component (a shop shelf, a tab's list): its own bottom number from before
- * with the look off, the LookScreen's room over the kit footer with it on.
+ * A body's bottom room over the 5-icon footer: its own number from before with the look off, the
+ * LookScreen's room over the kit footer with it on. Inside a LookScreen it reads the screen's room
+ * (a shop shelf, a Standings tab). A footer screen that draws its own LookScreen lower in its tree
+ * (the Ride Tracker pages, through RideTrackerFrame) reads the kit footer's room directly.
+ * So a screen never adds today's footer clearance on top of the kit's.
  */
 export function useLookBottom(legacy: number): number {
-  const pad = useScreenPad();
-  return pad.sticker ? pad.bottom : legacy;
+  const pad = useContext(PadContext);
+  const on = useStickerLook();
+  if (pad) return pad.sticker ? pad.bottom : legacy;
+  return on ? sticker().stickerFooterBottom() : legacy;
+}
+
+/**
+ * The body's top room on the view that paints the screen's own ground (its colour or art). Off:
+ * today's margin (the tuck under today's curved bar). On: padding inside that view, so the
+ * screen's own colour or art meets the bar's drop and its content starts the kit's gap below it
+ * (no strip of world blue between the bar and the page).
+ */
+export function lookTop(pad: ScreenPad): { readonly marginTop?: number; readonly paddingTop?: number } {
+  return pad.sticker ? { paddingTop: pad.top } : { marginTop: pad.top };
 }
 
 export type LookHeader = {
@@ -117,19 +135,14 @@ export function TodayBar({ header }: { readonly header: LookHeader }) {
 
 export default function LookScreen(props: LookScreenProps) {
   const on = useStickerLook();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const { header, footer, legacyPad, before, testID, children } = props;
-  const pad = lookPad(on, legacyPad, () => sticker().stickerPad(!!header, !!footer, insets.top, insets.bottom, width));
-  const body = typeof children === 'function' ? children(pad) : children;
   if (on) {
+    // The kit half reads the safe areas and the width itself, so today's look never subscribes to them.
     const { StickerLookScreen } = sticker();
-    return (
-      <PadContext.Provider value={pad}>
-        <StickerLookScreen header={header} footer={footer} testID={testID}>{before}{body}</StickerLookScreen>
-      </PadContext.Provider>
-    );
+    return <StickerLookScreen header={header} footer={footer} testID={testID} before={before}>{children}</StickerLookScreen>;
   }
+  const pad = lookPad(false, legacyPad, () => ({ top: 0, bottom: 0 }));
+  const body = typeof children === 'function' ? children(pad) : children;
   const nav = typeof footer === 'object' ? footer : {};
   const inner = (
     <>
@@ -197,10 +210,14 @@ export function LookIconButton({ art, accessibilityLabel, onPress, dot = false, 
   );
 }
 
-/** The "?" in the Sticker Book bar, for InformationModal (null with the look off: it draws today's). */
+/**
+ * The "?" in the Sticker Book bar, for InformationModal: only inside the kit Header's slots. Null
+ * anywhere else (the look off, today's Topbar on a screen that has not moved, a body), where it
+ * draws today's.
+ */
 export function useLookHelp(): null | ((props: { readonly accessibilityLabel: string; readonly onPress: () => void }) => ReactNode) {
-  const on = useStickerLook();
-  if (!on) return null;
+  const inBar = useContext(InStickerBar);
+  if (!inBar) return null;
   const { StickerHelp } = sticker();
   return StickerHelp;
 }
