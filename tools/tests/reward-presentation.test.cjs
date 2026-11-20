@@ -312,7 +312,7 @@ test('after rung 3 a repeat win shows its Parts as one line, ready to level up; 
   assert.equal(view.motions.length,0);
   assert.ok(view.find(n=>n.props?.children==='Ready to level up'));
   assert.deepEqual(rowChips(view), [['Shark Coins', 10], ['Ride Parts', 2], ['Energy', 40], ['XP', 25]], 'fix W3 T048: the XP granted shows too');
-  assert.equal(view.find(n=>n.type==='./YellowButton').props.text,'NEXT COIN');
+  assert.equal(view.find(n=>n.type==='./YellowButton').props.text,'Back to Map', 'never NEXT COIN (Dustin, Nov 20)');
   wake(view);
   view.find(n=>n.props?.accessibilityLabel==='See my shelf').props.onPress(); assert.equal(opened,false);
 });

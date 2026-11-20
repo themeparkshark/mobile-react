@@ -318,7 +318,7 @@ export function weekLine(standings: unknown): string | null {
  * True when this win was today's Adventure coin and its line story is next (Adventure step 2):
  * the ticket is for this ride and park, its phase moved on to play, no line story is stamped yet, and
  * the ride really has a line now (a show like Great Moments with Mr. Lincoln, or a closed ride, has none:
- * the big button is NEXT COIN there). `hasLine` defaults to what ride detection knows (rideLines).
+ * the big button is BACK TO MAP there). `hasLine` defaults to what ride detection knows (rideLines).
  */
 export function adventureLineStoryNext(ticket: {
   readonly park_id: number; readonly phase: string; readonly play: unknown; readonly ride: { readonly task_id: number };
@@ -397,7 +397,7 @@ export function winButtonLabel(button: NextCoinButton, leaving: WinCardExit | nu
   return leaving === 'primary' && button.kind === 'line_story' ? 'One moment' : button.label;
 }
 
-/** The win card's big button: the next coin by name and distance, or today's Adventure line story. */
+/** The win card's big button: BACK TO MAP, or today's Adventure line story right after its coin. 'next' is retired. */
 export interface NextCoinButton {
   readonly kind: 'next' | 'line_story' | 'map';
   readonly label: string;
@@ -413,11 +413,7 @@ export function nextCoinButton(target: {
   if (target && wonTaskId != null && target.taskId === wonTaskId && target.reason === 'line_story') {
     return { kind: 'line_story', label: 'Play its line story', detail: null };
   }
-  if (target && target.taskId !== wonTaskId) {
-    const meters = typeof target.meters === 'number' && Number.isFinite(target.meters) ? Math.max(0, Math.round(target.meters)) : null;
-    const where = meters === null ? null : meters < 1000 ? `${meters} m` : `${(meters / 1000).toFixed(1)} km`;
-    return { kind: 'next', label: 'NEXT COIN', detail: [shortCoinName(target.name), where].filter(Boolean).join(', ') || null };
-  }
-  // No coin to point at (night, a resting park, every coin owned): the button never promises one.
+  // Every other win: BACK TO MAP (big) beside SEE MY SHELF. The card never names a next coin (Dustin, Nov 20: "we
+  // shouldn't suggest where they go it's their choice to play"), not even the player's own pick: the map shows it.
   return { kind: 'map', label: BACK_TO_MAP_LABEL, detail: null };
 }

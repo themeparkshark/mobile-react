@@ -569,7 +569,7 @@ test('round 5: Profile counts shelf coins in the shelf word with the coin pictur
   assert.match(stats, /label: 'Shelf Coins',\n\s*value: rideCoins,\n\s*iconIndex: 1,\n\s*gameIcon: 'coin'/);
   assert.doesNotMatch(stats, /player\.park_coins_count/);
   assert.doesNotMatch(stats, /label: 'Ride Coins'/);
-  assert.match(read('src/components/Tutorial/steps.ts'), /Then follow the glowing coin on the map\./);
+  assert.match(read('src/components/Tutorial/steps.ts'), /Then pick any coin on the map\./);
 });
 
 test('round 5: the park day story waits on top after park_day_done', () => {
