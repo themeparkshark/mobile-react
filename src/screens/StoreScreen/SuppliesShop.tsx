@@ -78,6 +78,7 @@ export function replayMessage(outcome: ShopReplayOutcome): { title: string; body
 }
 
 import type { SuppliesFocus } from './storeParams';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 export type { SuppliesFocus } from './storeParams';
 
 // Fix w3 T229: the shop's wallet shows the two things you spend here, Tickets and Shark Coins. Energy lives
@@ -168,6 +169,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const [landed, setLanded] = useState<{ grants: ShopGrants; art: PackArtKey } | null>(null);
   // Supplies always opens at its top (T155): a door's focus picks the hand-off card, never a scroll.
   const scroll = useRef<ScrollView>(null);
+  const bodyBottom = useLookBottom(BOTTOM_BAR_OVERHANG + 24);
   const [moreOpen, setMoreOpen] = useState(false);
 
   // Read-only: the Shark Shop's next new-gear days, from its own rotation (nothing to buy here).
@@ -268,7 +270,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const sellable = canBuy && catalog.enabled;
 
   return (
-    <ScrollView ref={scroll} contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
+    <ScrollView ref={scroll} contentContainerStyle={[st.scroll, { paddingBottom: bodyBottom }]} showsVerticalScrollIndicator={false}>
       <View style={st.wallet}>
         {WALLET.map(w => (
           // Each balance explains itself, like the map's pills.

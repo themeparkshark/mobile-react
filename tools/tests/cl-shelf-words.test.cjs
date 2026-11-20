@@ -249,12 +249,13 @@ test('the Community Center Finn tip runs once on the first visit, waiting its tu
   const center = read('src/screens/CommunityCenterScreen.tsx');
   assert.match(center, /useTutorialWhenReady\('community_center', !loading && !!center && !sheetUp\)/);
   const shop = read('src/screens/StoreScreen.tsx');
-  assert.match(shop, /<Wrapper>[\s\S]*<\/Wrapper>/, 'the 5-icon footer is kept');
+  // Step 2a: the footer comes from LookScreen (today's Wrapper with the look switch off).
+  assert.match(shop, /<LookScreen footer>[\s\S]*<\/LookScreen>/, 'the 5-icon footer is kept');
   assert.doesNotMatch(shop, /shop-bottom-back|SHOP_BACK_STRIP/, 'no second back button in a bottom bar');
-  assert.equal((shop.match(/<BackButton \/>/g) ?? []).length, 2, 'one back button per layout: the title bar or the tab row (v2), never both');
-  assert.match(shop, /\{v2 \? <View style=\{\{ width: 35 \}\} \/> : <BackButton \/>\}/);
-  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /paddingBottom: BOTTOM_BAR_OVERHANG \+ 16/, 'the gear shelf clears the Map compass');
-  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /paddingBottom: BOTTOM_BAR_OVERHANG \+ 24/);
+  assert.equal((shop.match(/<LookBackButton \/>/g) ?? []).length, 2, 'one back button per layout: the title bar or the tab row (v2), never both');
+  assert.match(shop, /left: v2 \? <View style=\{\{ width: 35 \}\} \/> : <LookBackButton \/>,/);
+  assert.match(read('src/screens/StoreScreen/GearShelf.tsx'), /useLookBottom\(BOTTOM_BAR_OVERHANG \+ 16\)/, 'the gear shelf clears the Map compass');
+  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /useLookBottom\(BOTTOM_BAR_OVERHANG \+ 24\)/);
 });
 
 test('one word per thing in the shelf-words files: no Mastery, no RIDE COINS, no Rescue Pass, no home finds', () => {

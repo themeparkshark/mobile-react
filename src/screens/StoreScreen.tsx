@@ -30,10 +30,7 @@ import Reanimated, { type SharedValue, useAnimatedStyle, useDerivedValue, useSha
 import { clockOffset, formatCoins } from '../helpers/shopShelves';
 import StoreCountdown from '../components/StoreCountdown';
 import InformationModal from '../components/InformationModal';
-import Wrapper from '../components/Wrapper';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
+import LookScreen, { LookBackButton, LookBar } from '../ui/sticker/LookScreen';
 import { AuthContext } from '../context/AuthProvider';
 import { CurrencyContext } from '../context/CurrencyProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -274,7 +271,7 @@ function ShopTabs({ tab, onChange, coins, onWishlist, withBack = false }: {
   const wishes = useWishCount();
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', marginRight: coins == null ? 0 : 12 }}>
-    {withBack && <View style={{ marginLeft: 12, marginTop: 10 }}><BackButton /></View>}
+    {withBack && <View style={{ marginLeft: 12, marginTop: 10 }}><LookBackButton /></View>}
     <View style={[tabStyles.row, coins == null ? null : { flex: 1, marginRight: 8 }, withBack && { marginLeft: 8 }]} accessibilityRole="tablist">
       {(['gear', 'supplies'] as const).map(key => (
         <Pressable key={key} onPress={() => onChange(key)} style={[tabStyles.tab, tab === key && tabStyles.tabOn]}
@@ -514,28 +511,25 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       <WishlistSheet visible={wishlistOpen} still={shopStill} onClose={() => setWishlistOpen(false)}
         onOpenItem={id => setFocusRequest(r => ({ id, nonce: (r?.nonce ?? 0) + 1 }))} />
       {/* The normal 5-icon footer stays on the Shark Shop (T160): one back button (top left), never a second bar. */}
-      <Wrapper>
+      <LookScreen footer>
+      {pad => (
       <View style={{ flex: 1, overflow: 'hidden', backgroundColor: floor }}
         onLayout={e => setBoxH(e.nativeEvent.layout.height)}>
       <Reanimated.View style={v2 ? [{ position: 'absolute', top: 0, left: 0, right: 0, height: (boxH || winH) + fold }, stackStyle] : { flex: 1 }}>
       <Reanimated.View style={v2 ? titleStyle : undefined}
         onLayout={e => { if (!barH) setBarH(e.nativeEvent.layout.height); }}>
       {/* The vault keeps the house top bar (navy, not the legacy purple one): the shelves carry the midnight. */}
-      <Topbar purple={(currentStore?.is_secret_store ?? false) && !secretShelves} night={secretShelves || (!!routeSecret && status === 'loading')}>
-        <TopbarColumn stretch={false}>
-          {v2 ? <View style={{ width: 35 }} /> : <BackButton />}
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>{secretShelves || (routeSecret && status === 'loading') ? 'Secret Shop' : currentStore && isEventShop(currentStore) ? HALLOWEEN_SHOP_NAME
-            : status === 'away' ? HALLOWEEN_SHOP_NAME : currentStore?.name ?? (sharkShop ? 'Shark Shop' : '')}</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false}>
-          <InformationModal id={InformationModalEnums.StoreScreen} />
-        </TopbarColumn>
-      </Topbar>
+      <LookBar header={{
+        purple: (currentStore?.is_secret_store ?? false) && !secretShelves,
+        night: secretShelves || (!!routeSecret && status === 'loading'),
+        left: v2 ? <View style={{ width: 35 }} /> : <LookBackButton />,
+        title: secretShelves || (routeSecret && status === 'loading') ? 'Secret Shop' : currentStore && isEventShop(currentStore) ? HALLOWEEN_SHOP_NAME
+          : status === 'away' ? HALLOWEEN_SHOP_NAME : currentStore?.name ?? (sharkShop ? 'Shark Shop' : ''),
+        right: <InformationModal id={InformationModalEnums.StoreScreen} />,
+      }} />
       </Reanimated.View>
       {sharkShop && (
-        <View style={{ backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
+        <View style={pad.sticker ? { backgroundColor: BRAND.blue } : { backgroundColor: BRAND.blue, marginTop: -8, paddingTop: 8 }}>
           <ShopTabs tab={tab} onChange={setTab} coins={v2 || classicGear ? Number(player?.coins ?? 0) : null}
             onWishlist={() => setWishlistOpen(true)} withBack={v2} />
         </View>
@@ -701,7 +695,8 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       {/* Buy hand-off into the Set Complete reveal: navy over everything, header included. */}
       {shopHandoff && <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: REVEAL_NAVY, zIndex: 50 }]} />}
       </View>
-      </Wrapper>
+      )}
+      </LookScreen>
     </>
   );
 }

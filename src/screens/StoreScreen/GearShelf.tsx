@@ -22,6 +22,7 @@ import Animated, { FadeIn, FadeInUp } from 'react-native-reanimated';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BOTTOM_BAR_OVERHANG } from '../../components/Wrapper';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 import { addToWishlist, getWishlist, removeFromWishlist } from '../../api/endpoints/me/wishlist';
 import { AuthContext } from '../../context/AuthProvider';
 import { SoundEffectContext } from '../../context/SoundEffectProvider';
@@ -188,6 +189,7 @@ export default function GearShelf({ items, setItems, nextRotationAt, intervalDay
   /** More catalog pages may still arrive (a focus request waits for them). */
   readonly loading?: boolean;
 }) {
+  const bodyBottom = useLookBottom(BOTTOM_BAR_OVERHANG + 16);
   const { player } = useContext(AuthContext);
   const { playSound: playSoundNow } = useContext(SoundEffectContext);
   const soundRef = useRef(playSoundNow);
@@ -298,7 +300,7 @@ export default function GearShelf({ items, setItems, nextRotationAt, intervalDay
   return (
     <View style={{ flex: 1 }}>
       {/* The last row clears the footer's raised Map compass (the footer sits under the shop, T160). */}
-      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: BOTTOM_BAR_OVERHANG + 16 }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
+      <ScrollView contentContainerStyle={[styles.scroll, { paddingBottom: bodyBottom }]} showsVerticalScrollIndicator={false} scrollEventThrottle={64}
         // A shelf shorter than the screen still asks for the next page (performance r8: page 2 never loaded).
         onContentSizeChange={(_, h) => { if (h < winH + 240 && !nearEnd.current) { nearEnd.current = true; onEndReached?.(); } else if (h >= winH + 240) nearEnd.current = false; }}
         onTouchStart={wake} onScrollBeginDrag={wake}

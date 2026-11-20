@@ -806,6 +806,7 @@ const MIGRATED = [
   'src/screens/ProfileScreen.tsx',
   'src/screens/CoinShelfScreen.tsx',
   'src/screens/ParkScreen.tsx',
+  'src/screens/StoreScreen.tsx',
 ];
 test('migrated screens take their bar, footer and body room from LookScreen', () => {
   for (const file of MIGRATED) {

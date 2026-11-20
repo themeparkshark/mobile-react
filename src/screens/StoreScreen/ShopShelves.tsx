@@ -61,6 +61,7 @@ import { isSecretItem } from '../../fx/registry';
 import { ShopProfile } from './shopProfile';
 import { leavingRibbon, leavingSay, visibleLeaving } from '../../helpers/shopLifecycle';
 import { wishStore } from './wishStore';
+import { useLookBottom } from '../../ui/sticker/LookScreen';
 
 const SCREEN_W = Dimensions.get('window').width;
 const GAP = 12;
@@ -672,6 +673,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
 
   // Shelf jump bar: each shelf's top in the scroll content, the active one follows the scroll.
   const scrollRef = useAnimatedRef<Animated.ScrollView>();
+  const bodyBottom = useLookBottom(40);
   const shelfY = useSharedValue(0);
   const maxY = useSharedValue(Number.POSITIVE_INFINITY);
   const tops = useSharedValue<number[]>([]);
@@ -778,7 +780,7 @@ export default function ShopShelves({ today, setToday, onRefresh, offset, focusR
         ) : (<>
         <JumpBar chips={chips} tops={tops} scrollY={shelfY} maxY={maxY} onJump={jump} />
         <View style={{ flex: 1 }}>
-        <Animated.ScrollView ref={scrollRef} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}
+        <Animated.ScrollView ref={scrollRef} contentContainerStyle={[styles.scroll, { paddingBottom: bodyBottom }]} showsVerticalScrollIndicator={false}
           onLayout={e => { viewH.value = e.nativeEvent.layout.height; }} onScrollBeginDrag={wake} onTouchStart={wake}
           onScroll={scrollHandler} scrollEventThrottle={16}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={BRAND.white} />}>
