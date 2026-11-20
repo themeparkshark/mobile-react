@@ -18,11 +18,9 @@ import CoinShelfArrival from '../components/CoinShelfArrival';
 import useEarnedShelfArrival from '../hooks/useEarnedShelfArrival';
 import { isEarnedShelfArrival, resolveEarnedShelfSlot, type EarnedShelfArrival, type ShelfSection } from '../services/collection/earnedShelf';
 import TaskCoinModal from '../components/TaskCoinModal';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
 import * as RootNavigation from '../RootNavigation';
-import Wrapper, { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
+import { BOTTOM_BAR_OVERHANG } from '../components/Wrapper';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 import { AuthContext } from '../context/AuthProvider';
 import { LocationContext } from '../context/LocationProvider';
 import useCrumbs from '../hooks/useCrumbs';
@@ -583,21 +581,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   ));
 
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <BackButton />
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>
-            {currentPark?.display_name ?? currentPark?.name}
-          </TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false}>
-          <InformationModal id={InformationModalEnums.ParkScreen} />
-        </TopbarColumn>
-      </Topbar>
-      {loading && <ImageBackground style={{ flex: 1, marginTop: -8 }}
+    <LookScreen footer legacyPad={{ top: -8, bottom: shelfEndClearance }}
+      header={{ title: currentPark?.display_name ?? currentPark?.name, left: <LookBackButton />, right: <InformationModal id={InformationModalEnums.ParkScreen} /> }}>
+      {pad => (<>
+      {loading && <ImageBackground style={{ flex: 1, marginTop: pad.top }}
         source={require('../../assets/images/screens/park/background-new.png')}>
         {/* Same underwater park art while the shelf loads, never a grey page. */}
         <Loading />
@@ -616,7 +603,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
         }}
           style={{
             flex: 1,
-            marginTop: -8,
+            marginTop: pad.top,
           }}
         >
           <ImageBackground
@@ -693,7 +680,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                 </View>
                 <View
                   onLayout={event => { checklistOffset.current = event.nativeEvent.layout.y; }}
-                  style={{ paddingHorizontal: 16, paddingBottom: shelfEndClearance }}
+                  style={{ paddingHorizontal: 16, paddingBottom: pad.bottom }}
                 >
                   {shownTab === 'rides' && permanentTasks.length > 0 && (
                     <View style={{ marginBottom: 16 }}>
@@ -891,7 +878,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
         </View>
         </Reanimated.View>
       )}
-    </Wrapper>
+      </>)}
+    </LookScreen>
   );
 }
 

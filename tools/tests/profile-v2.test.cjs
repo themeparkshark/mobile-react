@@ -88,8 +88,10 @@ test('shortcut labels never wrap and the row never hides a badge off screen', ()
 
 test('the page scrolls clear of the bottom bar', () => {
   const profile = read('src/screens/ProfileScreen.tsx');
-  const pad = Number(/paddingBottom: (\d+),\n\s+\}\}\n\s+>\n\s+<ImageBackground/.exec(profile)?.[1] ?? 0);
+  // Step 2a: LookScreen owns the number (today's 120 with the look off); the page's content takes it.
+  const pad = Number(/<LookScreen footer legacyPad=\{\{ top: -?\d+, bottom: (\d+) \}\}/.exec(profile)?.[1] ?? 0);
   assert.ok(pad >= 110, `bottom padding ${pad}`);
+  assert.match(profile, /paddingBottom: pad\.bottom,\n\s+\}\}\n\s+>\n\s+<ImageBackground/);
 });
 
 test('VIP and Verified are solid badges with a meaning line, never a fading pulse', () => {

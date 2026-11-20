@@ -16,10 +16,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { ImageBackground, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { StackActions, useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
-import Wrapper from '../components/Wrapper';
-import Topbar, { BackButton } from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
+import LookScreen, { LookBackButton } from '../ui/sticker/LookScreen';
 import ShelfCoin from '../components/collection/ShelfCoin';
 import ParkShelfArtwork from '../components/ParkShelfArtwork';
 import { AuthContext } from '../context/AuthProvider';
@@ -162,17 +159,14 @@ export default function CoinShelfScreen({ route }: {
 
   const loading = !preview && !collection.loaded && !collection.error;
   return (
-    <Wrapper>
-      <Topbar>
-        <TopbarColumn stretch={false}><BackButton /></TopbarColumn>
-        <TopbarColumn><TopbarText>Ride Coins</TopbarText></TopbarColumn>
-        <TopbarColumn stretch={false}><View style={{ width: 40 }} /></TopbarColumn>
-      </Topbar>
-      <ImageBackground source={require('../../assets/images/water_background.png')} resizeMode="cover" style={{ flex: 1 }}>
+    <LookScreen footer legacyPad={{ top: 0, bottom: 48 }}
+      header={{ title: 'Ride Coins', left: <LookBackButton />, right: <View style={{ width: 40 }} /> }}>
+      {pad => (
+      <ImageBackground source={require('../../assets/images/water_background.png')} resizeMode="cover" style={pad.sticker ? { flex: 1, paddingTop: pad.top } : { flex: 1 }}>
         <CollectionSwitch active="coins" />
         {loading ? <SharkLoader onRetry={() => void collection.reload(true)} />
           : collection.error && coins.length === 0 ? <SharkLoader state="error" onRetry={() => void collection.reload(true)} />
-          : <ScrollView contentContainerStyle={styles.content}
+          : <ScrollView contentContainerStyle={[styles.content, { paddingBottom: pad.bottom }]}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#ffffff" />}>
           <View style={styles.summary}>
             <GameIcon name="coins" size={44} />
@@ -259,7 +253,8 @@ export default function CoinShelfScreen({ route }: {
           })}
         </ScrollView>}
       </ImageBackground>
-    </Wrapper>
+      )}
+    </LookScreen>
   );
 }
 

@@ -3,6 +3,7 @@ import { Animated, Easing, Pressable, Text } from 'react-native';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { helpSheetForInfoModal, type HelpSheetId } from '../services/help/helpSheets';
 import { BRAND } from '../ui';
+import { useLookHelp } from '../ui/sticker/LookScreen';
 import HelpSheet from './help/HelpSheet';
 
 /**
@@ -19,18 +20,28 @@ export default function InformationModal({ id, sheet }: {
   const [visible, setVisible] = useState(false);
   const reduced = useReducedGameMotion();
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  // The Sticker Book look (off by default) draws Alex's "?" disc; same label, same press, same sheet.
+  const StickerHelp = useLookHelp();
 
   useEffect(() => {
-    if (reduced || visible) return;
+    if (reduced || visible || StickerHelp) return;
     const loop = Animated.loop(Animated.sequence([
       Animated.timing(pulseAnim, { toValue: 1.1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
       Animated.timing(pulseAnim, { toValue: 1, duration: 1500, easing: Easing.inOut(Easing.sin), useNativeDriver: true }),
     ]));
     loop.start();
     return () => loop.stop();
-  }, [pulseAnim, reduced, visible]);
+  }, [pulseAnim, reduced, visible, StickerHelp]);
 
   const content = helpSheetForInfoModal(id, sheet ?? 'basics');
+  if (StickerHelp) {
+    return (
+      <>
+        <StickerHelp accessibilityLabel={`${content.name} help`} onPress={() => setVisible(true)} />
+        <HelpSheet visible={visible} sheet={content} onClose={() => setVisible(false)} />
+      </>
+    );
+  }
 
   return (
     <>

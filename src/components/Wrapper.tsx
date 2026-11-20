@@ -89,8 +89,8 @@ export const FOOTER_TABS = [
 export type FooterTab = (typeof FOOTER_TABS)[number] & { readonly permission?: PermissionEnums };
 
 /**
- * What the footer does, shared by today's bar (Wrapper) and the sticker look's Footer (Screen in
- * src/ui/sticker/LookScreen.tsx), so both take the same taps the same way: the Standings warm-up,
+ * What the footer does, shared by today's bar (Wrapper) and the sticker look's Footer (LookSticker in
+ * the kit folder), so both take the same taps the same way: the Standings warm-up,
  * the open tab, the Profile badge, permissions, the tab-reselect scroll and the catch guard.
  */
 export function useFooterTabs({ previewMode = false, onNavigate }: { readonly previewMode?: boolean; readonly onNavigate?: (screen: string) => void }) {

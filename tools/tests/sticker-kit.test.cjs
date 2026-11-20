@@ -725,7 +725,7 @@ test('every pressable has a role, a VoiceOver label and its state', () => {
   assert.equal(tokens.BUTTON.minTouch, 44);
 });
 
-test('the gallery is a dev-only route, and no screen a player can reach imports the kit', () => {
+test('the gallery is a dev-only route, and live screens reach the kit only through the switch', () => {
   const load = (dev, env = {}) => loadTs('src/devRoutes.tsx', {}, { __DEV__: dev, process: { env } });
   assert.ok(load(true).DEV_SCREENS.some(s => s.name === 'StickerGallery'));
   for (const env of [{}, { EXPO_PUBLIC_MOTION_CAPTURE: 'BoxRevealPreview' }, { EXPO_PUBLIC_PERF_CAPTURE: '1' }, { EXPO_PUBLIC_SHARE_WALK: '1' }]) {
@@ -735,13 +735,93 @@ test('the gallery is a dev-only route, and no screen a player can reach imports 
   let hits = '';
   try { hits = execFileSync('git', ['grep', '-l', 'ui/sticker', '--', 'src'], { cwd: root, encoding: 'utf8' }).trim(); } catch { hits = ''; }
   const outside = hits.split('\n').filter(Boolean).filter(f => !f.startsWith('src/ui/sticker/') && f !== 'src/devRoutes.tsx');
-  assert.deepEqual(outside, []);
+  // Step 2a: a live file may import the switch (look) and LookScreen, nothing else of the kit.
+  for (const file of outside) {
+    const specs = [...source(path.join(root, file)).matchAll(/from '([^']*ui\/sticker[^']*)'/g)].map(m => m[1]);
+    assert.ok(specs.length > 0, `${file} names the kit outside an import`);
+    for (const spec of specs) assert.match(spec, /ui\/sticker\/(LookScreen|look)$/, `${file} imports ${spec}`);
+  }
+  // LookScreen loads only today's parts and the switch; the kit half is required only when the look is on.
+  const lookScreen = source(path.join(dir, 'LookScreen.tsx'));
+  const staticKit = [...lookScreen.matchAll(/^import [^;]*from '\.\/([^']+)'/gm)].map(m => m[1]);
+  assert.deepEqual(staticKit, ['look'], 'LookScreen imports no kit part at load');
+  assert.match(lookScreen, /require\('\.\/LookSticker'\)/);
+  assert.equal([...lookScreen.matchAll(/\bsticker\(\)/g)].length >= 4, true);
 });
 
-/** Files that moved onto the kit get the kit's palette rule too (empty until step 2 starts). */
-const MIGRATED = [];
-test('migrated screens hold no colour outside the kit tokens', () => {
+// ---------- the switch (step 2a) ----------
+
+const lookStubs = flags => ({
+  react: { useSyncExternalStore: (s, g) => g() },
+  '../../api/endpoints/platform/feature-flags': { featureFlagsNow: () => (flags ? { flags } : null), onFeatureFlags: () => () => {} },
+});
+
+test('the look switch: off by default, the server alone cannot turn it on, the override is dev JS only', () => {
+  const look = (dev, env, flags) => loadTs('src/ui/sticker/look.ts', lookStubs(flags), { __DEV__: dev, process: { env } });
+  assert.equal(look(false, {}, null).STICKER_LOOK_DEFAULT, false);
+  assert.equal(look(false, {}, null).STICKER_LOOK_FLAG, 'sticker_look');
+  // A production build: never dev JS. No override, a server answer of either kind: today's look.
+  assert.equal(look(false, {}, null).stickerLookOn(), false);
+  assert.equal(look(false, {}, { sticker_look: true }).stickerLookOn(), false);
+  assert.equal(look(false, { EXPO_PUBLIC_STICKER_LOOK: '1' }, null).stickerLookOn(), false);
+  assert.equal(look(false, { EXPO_PUBLIC_STICKER_LOOK: '1', EXPO_PUBLIC_STUDIO_MUTE: '1' }, null).stickerLookOn(), false);
+  // Dev JS: off unless the lane asks for it.
+  assert.equal(look(true, {}, { sticker_look: true }).stickerLookOn(), false);
+  assert.equal(look(true, { EXPO_PUBLIC_STICKER_LOOK: '1' }, null).stickerLookOn(), true);
+  assert.equal(look(true, { EXPO_PUBLIC_STICKER_LOOK: '0' }, null).stickerLookOn(), false);
+  // The flip (step 6) needs both keys.
+  const { stickerLookFrom } = look(false, {}, null);
+  assert.equal(stickerLookFrom({ override: false, fallback: true, server: true }), true);
+  assert.equal(stickerLookFrom({ override: false, fallback: true, server: undefined }), false);
+  assert.equal(stickerLookFrom({ override: false, fallback: false, server: true }), false);
+});
+
+test('LookScreen with the switch off: today\'s numbers, today\'s bar and footer, the kit never loaded', () => {
+  const { lookPad } = loadTs('src/ui/sticker/LookScreen.tsx', {
+    react: { createContext: v => ({ Provider: 'P', _v: v }), useContext: () => null },
+    'react-native': anything('rn'), 'expo-image': anything('img'), 'react-native-safe-area-context': anything('safe'),
+    '../../components/Button': anything('button'), '../../components/Topbar': anything('topbar'),
+    '../../components/Topbar/TopbarColumn': anything('col'), '../../components/Topbar/TopbarText': anything('text'),
+    '../../components/Wrapper': anything('wrapper'), './look': { useStickerLook: () => false },
+    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'F' },
+  });
+  let asked = 0;
+  const kit = () => { asked += 1; return { top: 12, bottom: 140 }; };
+  assert.deepEqual(plain(lookPad(false, { top: -8, bottom: 120 }, kit)), { top: -8, bottom: 120, sticker: false });
+  assert.deepEqual(plain(lookPad(false, undefined, kit)), { top: 0, bottom: 0, sticker: false });
+  assert.equal(asked, 0, 'the kit is never asked with the switch off');
+  assert.deepEqual(plain(lookPad(true, { top: -8, bottom: 120 }, kit)), { top: 12, bottom: 140, sticker: true });
+  const text = source(path.join(dir, 'LookScreen.tsx'));
+  // Off: today's Wrapper around today's Topbar and the body, and today's back arrow.
+  assert.match(text, /\{footer \? <Wrapper previewMode=\{nav\.previewMode\} onNavigate=\{nav\.onNavigate\}>\{inner\}<\/Wrapper> : inner\}/);
+  assert.match(text, /if \(!on\) return <BackButton onPress=/);
+  assert.match(text, /if \(!on\) return <TodayBar header=\{header\} \/>;/);
+});
+
+/**
+ * Files whose chrome moved onto LookScreen (step 2a). They draw no Topbar, Wrapper or back arrow of
+ * their own: the bar, the footer and the body's top and bottom room come from LookScreen.
+ */
+const MIGRATED = [
+  'src/screens/ProfileScreen.tsx',
+  'src/screens/CoinShelfScreen.tsx',
+  'src/screens/ParkScreen.tsx',
+];
+test('migrated screens take their bar, footer and body room from LookScreen', () => {
   for (const file of MIGRATED) {
+    const text = source(path.join(root, file));
+    assert.doesNotMatch(text, /from '[./]*components\/Topbar(\/TopbarColumn|\/TopbarText)?'/, `${file} imports today's bar`);
+    assert.doesNotMatch(text, /import Wrapper\b/, `${file} imports today's footer`);
+    assert.doesNotMatch(text, /<(Topbar|Wrapper|BackButton)\b/, `${file} draws chrome by hand`);
+    assert.match(text, /<LookScreen\b/, `${file} sits on LookScreen`);
+    assert.doesNotMatch(text, /FOOTER_CLEARANCE/, `${file} keeps its own footer room`);
+  }
+});
+
+/** Files whose body was repainted onto the kit (step 3 on): no colour outside the kit tokens. Empty in step 2a. */
+const PAINTED = [];
+test('repainted screens hold no colour outside the kit tokens', () => {
+  for (const file of PAINTED) {
     const text = source(path.join(root, file));
     assert.doesNotMatch(text, /#[0-9a-fA-F]{3,8}\b|rgba?\(|hsla?\(/, `${file} holds a colour`);
     assert.doesNotMatch(text, /\bINK\.|\bSHADE\./, `${file} builds a box in kit colours`);

@@ -26,9 +26,9 @@ export const CURRENCY: Record<CurrencyKind, { readonly art: ImageSourcePropType 
   coins: { art: ART.coins, ratio: ART_RATIO.coins, height: 42, over: 16, noun: 'coins' },
   energy: { art: ART.energy, ratio: ART_RATIO.energy, height: 36, over: 8, noun: 'energy' },
   tickets: { art: ART.ticket, ratio: ART_RATIO.ticket, height: 30, over: 18, noun: 'tickets' },
-  // Keys and park coins are server art: the caller passes `art`.
+  // Keys and the park's ride coin are server art: the caller passes `art`.
   keys: { art: null, ratio: 1.3, height: 36, over: 14, noun: 'keys' },
-  parkCoin: { art: null, ratio: 1, height: 38, over: 14, noun: 'park coins' },
+  parkCoin: { art: null, ratio: 1, height: 38, over: 14, noun: 'ride coins' },
   tries: { art: ART.retry, ratio: ART_RATIO.retry, height: 34, over: 14, noun: 'extra tries' },
 };
 

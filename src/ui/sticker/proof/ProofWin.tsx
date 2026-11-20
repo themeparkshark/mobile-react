@@ -48,7 +48,7 @@ const noop = () => undefined;
 const TOTAL = 35;
 const GOAL = 26;
 const WON = 'Walt Statue';
-const NEXT = 'Tiki Room';
+const NEXT = 'Enchanted Tiki Room';
 type ChipKey = 'coins' | 'energy' | 'tickets';
 const PRIZES = [
   { key: 'coins', art: ART.coins, ratio: ART_RATIO.coins, count: 10, name: 'Shark Coins', chip: 'coins' as ChipKey },
@@ -213,7 +213,7 @@ function WalkingBar() {
       above={(
         <Row justify="between" align="end" gap="base">
           <Body align="left" lines={1} role="none">{`${found} of ${TOTAL} coins`}</Body>
-          <Body size="small" soft align="right" lines={1} role="none" style={{ flexShrink: 1 }}>{`${winsLeft(found, GOAL)} more wins for Bronze`}</Body>
+          <Body size="small" soft align="right" lines={1} role="none" style={{ flexShrink: 1 }}>{`Bronze: ${winsLeft(found, GOAL)} more wins`}</Body>
         </Row>
       )} />
   );

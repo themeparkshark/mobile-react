@@ -20,7 +20,6 @@ import getParks from '../api/endpoints/me/visited-parks';
 import getStores from '../api/endpoints/stores/stores';
 import { getStamps } from '../api/endpoints/me/stamps';
 import { clearStampDotCache, readStampDotCache, stampClaimableCount, writeStampDotCache } from '../components/profile/stampDot';
-import Button from '../components/Button';
 import Experience from '../components/Experience';
 import FeaturedRideCoinCard from '../components/FeaturedRideCoinCard';
 import FriendPlayer from '../components/FriendPlayer';
@@ -41,11 +40,8 @@ import TitleUndoBar from '../components/profile/TitleUndoBar';
 import type { EarnedTitle } from '../components/profile/titleModel';
 import ProfileEventChip from '../components/profile/ProfileEventChip';
 import useCardOnScreen from '../components/profile/useCardOnScreen';
-import Topbar from '../components/Topbar';
-import TopbarColumn from '../components/Topbar/TopbarColumn';
-import TopbarText from '../components/Topbar/TopbarText';
 import VisitedParks from '../components/VisitedParks';
-import Wrapper from '../components/Wrapper';
+import LookScreen, { LookIconButton } from '../ui/sticker/LookScreen';
 import YellowButton from '../components/YellowButton';
 import GameIcon from '../ui/GameIcon';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -309,57 +305,40 @@ export default function ProfileScreen() {
   }
 
   return (
-    <Wrapper>
-      <TitleSheet visible={titleSheet} title={player.title} onClose={() => setTitleSheet(false)}
-        onChanged={() => refreshPlayer()} onRemoved={previous => setUndoTitle(previous)} />
-      <Topbar>
-        <TopbarColumn stretch={false}>
-          <Button
+    <LookScreen footer legacyPad={{ top: -8, bottom: 120 }}
+      before={<TitleSheet visible={titleSheet} title={player.title} onClose={() => setTitleSheet(false)}
+        onChanged={() => refreshPlayer()} onRemoved={previous => setUndoTitle(previous)} />}
+      header={{
+        title: player.screen_name,
+        left: (
+          <LookIconButton
             onPress={() => {
               RootNavigation.navigate('Notifications');
             }}
-            showRedCircle={!!notificationCount}
+            dot={!!notificationCount}
             accessibilityLabel={notificationCount ? `Notifications, ${notificationCount} new` : 'Notifications'}
-          >
-            <Image
-              style={{
-                width: 35,
-                height: 35,
-                alignSelf: 'center',
-              }}
-              contentFit="contain"
-              source={require('../../assets/images/screens/profile/notifications.png')}
-            />
-          </Button>
-        </TopbarColumn>
-        <TopbarColumn>
-          <TopbarText>{player.screen_name}</TopbarText>
-        </TopbarColumn>
-        <TopbarColumn stretch={false}>
-          <Button
+            words="Notifications"
+            count={notificationCount}
+            noun="new"
+            art={require('../../assets/images/screens/profile/notifications.png')}
+          />
+        ),
+        right: (
+          <LookIconButton
             onPress={() => {
               RootNavigation.navigate('Settings');
             }}
             accessibilityLabel="Settings"
-          >
-            <Image
-              style={{
-                width: 35,
-                height: 35,
-                alignSelf: 'center',
-              }}
-              contentFit="contain"
-              source={require('../../assets/images/screens/profile/settings.png')}
-            />
-          </Button>
-        </TopbarColumn>
-      </Topbar>
-      {player && (
+            art={require('../../assets/images/screens/profile/settings.png')}
+          />
+        ),
+      }}>
+      {pad => player && (
         <ScrollView
           ref={scrollViewRef}
           style={{
             flex: 1,
-            marginTop: -8,
+            marginTop: pad.top,
             backgroundColor: '#dff4ff',
           }}
           refreshControl={
@@ -371,8 +350,8 @@ export default function ProfileScreen() {
             ref={levelCard.contentRef}
             onLayout={levelCard.remeasure}
             style={{
-              // Clear the bottom bar and its raised Explore button.
-              paddingBottom: 120,
+              // Clear the bottom bar and its raised Explore button (LookScreen owns the number).
+              paddingBottom: pad.bottom,
             }}
           >
             <ImageBackground
@@ -739,6 +718,6 @@ export default function ProfileScreen() {
           </View>
         </ScrollView>
       )}
-    </Wrapper>
+    </LookScreen>
   );
 }
