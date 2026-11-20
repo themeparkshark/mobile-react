@@ -84,6 +84,8 @@ function hooksRuntime() {
         inst.effects.push({ slot, fn });
       }
     },
+    // The gate sends its body to a sheet in a layout effect (fix pass w5): after render, like useEffect here.
+    useLayoutEffect(fn, deps) { return React.useEffect(fn, deps); },
   };
   async function settle() {
     for (let round = 0; round < 50; round++) {
@@ -690,11 +692,14 @@ test('N02: every sheet host gives its contents the overlay, and draws its layers
   assert.match(door, /<SheetOverlay\.Provider value=\{setOverlay\}>/);
   assert.match(door, /\{children\}\s*\{overlays\.map\(item => <SheetOverlayLayer key=\{`\$\{item\.key\}\.\$\{item\.gen\}`\} leaving=\{item\.leaving\}>/);
   const layer = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/ui/SheetOverlayLayer.tsx'), 'utf8');
-  assert.match(layer, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents=\{leaving \? 'none' : 'auto'\}/,
-    'never see-through to taps while up (an opacity 0 view is skipped by the hit test), let through at once when leaving');
-  assert.match(layer, /useEffect\(\(\) => \{\s*shown\.value = withTiming\(leaving \? 0 : 1/, 'the layer fades itself in on its own mount');
+  // Fix pass w5 (W4-SMOKE-2): the outer view takes every touch while up AND while leaving (a fading gate is still drawn);
+  // only its own buttons rest while it leaves, and the held tap goes to the sheet under it once the layer is gone.
+  assert.match(layer, /<View style=\{StyleSheet\.absoluteFill\} pointerEvents=\{released \? 'none' : 'auto'\} accessibilityViewIsModal=\{!leaving\}/,
+    'never see-through to taps while up (an opacity 0 view is skipped by the hit test), nor while it leaves');
+  assert.match(layer, /pointerEvents=\{leaving \? 'none' : 'auto'\}>\{children\}/);
+  assert.match(layer, /useEffect\(\(\) => \{\s*if \(!leaving\) setReleased\(false\);\s*shown\.value = withTiming\(leaving \? 0 : 1/, 'the layer fades itself in on its own mount');
   const gateSrc = require('node:fs').readFileSync(require('node:path').join(__dirname, '..', '..', 'src/components/GrownUpGate.tsx'), 'utf8');
-  assert.match(gateSrc, /if \(!presenting \|\| inSheetRef\.current\) return;\s*fadeIn\(\);/,
+  assert.match(gateSrc, /if \(!presenting \|\| inSheetRef\.current \|\| inTreeRef\.current\) return;\s*fadeIn\(\);/,
     'in a sheet the gate never runs its own fade (it could end before the layer existed and leave the gate invisible)');
   const { withOverlay, overlayDrop } = loadTs('src/ui/sheetOverlay.ts', { react: { createContext: v => ({ v }), useContext: c => c.v } });
   const keys = l => Array.from(l, i => `${i.key}.${i.gen}${i.node ?? ''}${i.leaving ? '-' : ''}`);

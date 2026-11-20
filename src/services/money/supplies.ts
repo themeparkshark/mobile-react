@@ -9,6 +9,7 @@
  */
 import { useEffect, useState } from 'react';
 import { askGrownUpOutcome, type GateReason } from '../../components/GrownUpGate';
+import { pressTrace } from '../../ui/pressTrace';
 import { getShop, type ShopCatalog, type ShopGrants, type ShopProduct } from '../../api/endpoints/me/shop';
 import { trackMoney } from './track';
 import { buyShopProduct, loadShopPrices, storeAvailable, type ShopPrice, type ShopPurchaseOutcome } from '../purchases';
@@ -128,6 +129,7 @@ export function packBuyInProgress(): boolean {
  */
 export async function buyPack(product: ShopProduct, options: { onStart?: () => void; placement?: string } = {}):
   Promise<ShopPurchaseOutcome | { status: 'declined' | 'busy' | 'unshown' }> {
+  pressTrace('money.buy', () => `${options.placement ?? 'supplies'} busy=${buying}`);
   if (buying) return { status: 'busy' };
   const catalog = state.catalog;
   const where = options.placement ?? 'supplies';

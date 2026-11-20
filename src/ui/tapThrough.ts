@@ -37,12 +37,16 @@ const MAP_PROPS = ['coordinate', 'region', 'initialRegion', 'onRegionChangeCompl
  * The press a hit lands on: the nearest ancestor with an onPress, unless it is disabled, inside another sheet, or a
  * map. Pure, so it is tested without a phone.
  */
-export function pressTargetFromChain(hit: ChainNode | null | undefined): { onPress: (event: unknown) => void; depth: number } | null {
+/** Host views that hold a sheet's own subtree: a native sheet, or an in-tree sheet's window overlay (ui/sheetHost.ts). */
+const SHEET_HOSTS = ['RCTModalHostView', 'RNSFullWindowOverlay'];
+
+export function pressTargetFromChain(hit: ChainNode | null | undefined, options: { readonly withinSheet?: boolean } = {}): { onPress: (event: unknown) => void; depth: number } | null {
   let node = hit ?? null;
   let target: { onPress: (event: unknown) => void; depth: number } | null = null;
   for (let depth = 0; node && depth < 400; depth++, node = node.return ?? null) {
-    // A hit inside a sheet's own subtree is on that sheet, not on the screen under it.
-    if (node.tag === HOST_COMPONENT && node.type === 'RCTModalHostView') return null;
+    // A hit inside a sheet's own subtree is on that sheet, not on the screen under it (unless the press is meant for
+    // that very sheet: a tap held by a leaving layer inside it, ui/SheetOverlayLayer.tsx).
+    if (node.tag === HOST_COMPONENT && SHEET_HOSTS.includes(node.type as string)) { if (options.withinSheet) break; return null; }
     const props = node.memoizedProps;
     if (!target && depth < MAX_DEPTH && props) {
       if (MAP_PROPS.some(key => key in props)) return null;
@@ -77,6 +81,56 @@ export function replayEvent(x: number, y: number, now: number): unknown {
 
 type FindNodeAtPoint = (node: unknown, x: number, y: number, callback: (hit: ChainNode | null) => void) => void;
 
+/** The renderer's fiber behind a host view (React Native's own public-instance field, read as the inspector does). */
+export function internalHandle(host: unknown): ChainNode | null {
+  if (!host) return null;
+  const h = host as { __internalInstanceHandle?: ChainNode; _internalInstanceHandle?: ChainNode };
+  return h._internalInstanceHandle ?? h.__internalInstanceHandle ?? null;
+}
+
+/** The renderer's newest shadow node behind a host fiber (what the hit test starts from). */
+export function shadowOf(host: ChainNode | null | undefined): unknown {
+  return (host?.stateNode as { node?: unknown } | undefined)?.node ?? null;
+}
+
+/** The nearest host view above a hit that assistive tech reads as one element (a button), as a public instance. */
+export function accessibleFromChain(hit: ChainNode | null | undefined): unknown {
+  let node = hit ?? null;
+  for (let depth = 0; node && depth < MAX_DEPTH; depth++, node = node.return ?? null) {
+    if (node.tag === HOST_COMPONENT && SHEET_HOSTS.includes(node.type as string)) return null;
+    if (node.tag === HOST_COMPONENT && node.memoizedProps?.accessible === true) {
+      return (node.stateNode as { canonical?: { publicInstance?: unknown } } | undefined)?.canonical?.publicInstance ?? null;
+    }
+  }
+  return null;
+}
+
+/** React Native's Fabric hit test, when this build has it. */
+export function fabricFindNodeAtPoint(): FindNodeAtPoint | null {
+  const ui = (globalThis as { nativeFabricUIManager?: { findNodeAtPoint?: FindNodeAtPoint } }).nativeFabricUIManager;
+  return typeof ui?.findNodeAtPoint === 'function' ? ui.findNodeAtPoint.bind(ui) : null;
+}
+
+/**
+ * Press what is under (x, y) inside one sheet's own contents (a tap a leaving layer held until it was gone). Point in
+ * window points; `root` is the host fiber of the sheet's content view, which sits at the window's top left.
+ */
+export function pressInside(root: ChainNode | null | undefined, x: number, y: number, find: FindNodeAtPoint | null = fabricFindNodeAtPoint(), now: number = Date.now()): 'pending' | 'no_hit_test' {
+  const shadow = shadowOf(root);
+  if (!find || !shadow) return 'no_hit_test';
+  try {
+    find(shadow, x, y, hit => {
+      const target = pressTargetFromChain(hit, { withinSheet: true });
+      pressTrace('tapThrough.inside', () => `x=${Math.round(x)} y=${Math.round(y)} target=${target ? `depth${target.depth}` : 'none'}`);
+      if (!target) return;
+      try { target.onPress(replayEvent(x, y, now)); } catch (error) { pressTrace('tapThrough.error', () => String(error)); }
+    });
+  } catch {
+    return 'no_hit_test';
+  }
+  return 'pending';
+}
+
 /** One kept tap: the first that landed on a leaving top-level sheet. */
 export interface KeptTap { x: number; y: number; at: number; claimed: boolean }
 
@@ -93,6 +147,8 @@ export function createTapThrough(deps: {
       if (!screenRoot) screenRoot = rootHostFromChain(from);
     },
     hasScreenRoot: () => screenRoot !== null,
+    /** The screen's root host (the hit test's start for anything on the screen under every sheet). */
+    screenRoot: () => screenRoot,
     /** A tap on a leaving top-level sheet; the first one is kept until that sheet is gone. */
     keep(x: number, y: number): KeptTap {
       const tap: KeptTap = { x, y, at: now(), claimed: false };
@@ -131,9 +187,4 @@ export function createTapThrough(deps: {
 }
 
 /** The app's one: React Native's Fabric hit test, when this build has it. */
-export const tapThrough = createTapThrough({
-  findNodeAtPoint: () => {
-    const ui = (globalThis as { nativeFabricUIManager?: { findNodeAtPoint?: FindNodeAtPoint } }).nativeFabricUIManager;
-    return typeof ui?.findNodeAtPoint === 'function' ? ui.findNodeAtPoint.bind(ui) : null;
-  },
-});
+export const tapThrough = createTapThrough({ findNodeAtPoint: fabricFindNodeAtPoint });
