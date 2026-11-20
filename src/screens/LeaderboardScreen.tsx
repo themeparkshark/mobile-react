@@ -25,8 +25,8 @@ import { onStandingsDemo, startStandingsDemo } from './LeaderboardsScreen/standi
 import { defaultStandingsTab, initialStandingsV2Tab, standingsV2Tabs, tabPillGeometry, type StandingsV2Tab } from './LeaderboardsScreen/standingsV2Model';
 import useUiReducedMotion from '../ui/useUiReducedMotion';
 
-// Fix w3 T219: Standings sits on the plain seabed plate, never the backdrop with coin piles.
-import { SEABED_PLATE as STANDINGS_SEABED } from '../constants/backdrops';
+// Standings sits on its own OTA 2 underwater plate under Alex's barrels (Dustin, Nov 19).
+import { STANDINGS_PLATE } from '../constants/backdrops';
 
 const whooshSound = require('../../assets/sounds/whoosh.mp3');
 
@@ -140,7 +140,7 @@ function StandingsShell({ children }: { readonly children: React.ReactNode }) {
         </TopbarColumn>
       </Topbar>
       <View style={{ marginTop: -8, flex: 1 }}>
-        <ImageBackground style={{ flex: 1 }} source={STANDINGS_SEABED}>
+        <ImageBackground style={{ flex: 1 }} source={STANDINGS_PLATE}>
           {children}
         </ImageBackground>
       </View>
@@ -206,7 +206,7 @@ function StandingsV2({ meId, onMissing }: { readonly meId: number; readonly onMi
         setActiveTab(index);
       }} />
       {/* The three boards stay mounted (hidden when not chosen), so a tab switch never paints a
-          blank frame: faces, podium and rows are already decoded. */}
+          blank frame: faces, barrels and rows are already decoded. */}
       {/* collapsable={false}: the panes' zIndex must stay inside this view. When it was flattened
           (Fabric), the visible pane's zIndex 1 out-ranked the nav bar, so the board's cream, rows
           and dock drew over the raised compass and nav icons (r7). */}
@@ -267,7 +267,7 @@ function LegacyStandings() {
           style={{
             flex: 1,
           }}
-          source={STANDINGS_SEABED}
+          source={STANDINGS_PLATE}
         >
           <StandingsTabs tabs={tabs} dot={resultsWaiting} active={activeTab} onChange={index => {
             if (activeTab !== index) playSound(whooshSound);

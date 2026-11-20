@@ -169,10 +169,15 @@ test('T128: the shelf opens on the tab holding your coins, fades in once, and Fi
   assert.match(park, /const first = openingTab\(split, limitedShelf, ownedNormal, tabs, glowTaskId\(newest, ownedNormal\)\);/);
 });
 
-test('T219: Standings, News and the Stamp Books sit on the plain seabed plate, never the coin-pile backdrop', () => {
-  assert.match(read('src/constants/backdrops.ts'), /SEABED_PLATE = require\('\.\.\/\.\.\/assets\/images\/screens\/park\/background-new\.png'\)/);
-  for (const file of ['src/screens/LeaderboardScreen.tsx', 'src/screens/NewsScreen.tsx', 'src/screens/StampBookScreen.tsx', 'src/screens/FriendStampBookScreen.tsx']) {
-    assert.doesNotMatch(read(file), /standings-bg\.png/, file);
+test('T219: News and the Stamp Books sit on the plain seabed plate; Standings keeps its OTA 2 plate (Dustin, Nov 19)', () => {
+  const plates = read('src/constants/backdrops.ts');
+  assert.match(plates, /SEABED_PLATE = require\('\.\.\/\.\.\/assets\/images\/screens\/park\/background-new\.png'\)/);
+  assert.match(plates, /STANDINGS_PLATE = require\('\.\.\/\.\.\/assets\/images\/screens\/leaderboard\/standings-bg\.png'\)/);
+  for (const file of ['src/screens/NewsScreen.tsx', 'src/screens/StampBookScreen.tsx', 'src/screens/FriendStampBookScreen.tsx']) {
+    assert.doesNotMatch(read(file), /standings-bg\.png|STANDINGS_PLATE/, file);
     assert.match(read(file), /SEABED_PLATE/, file);
   }
+  const standings = read('src/screens/LeaderboardScreen.tsx');
+  assert.equal((standings.match(/source=\{STANDINGS_PLATE\}/g) || []).length, 2, 'both Standings shells');
+  assert.doesNotMatch(standings, /SEABED_PLATE/);
 });
