@@ -5,6 +5,7 @@ import {
 } from '../../api/endpoints/me/task-attempts';
 import { writeTaskAttemptCheckpoint, type TaskAttemptCheckpoint } from './checkpoint';
 import type { GroupKind } from '../lineplay/lineGroup';
+import { flushBegan } from './began';
 
 /**
  * The core-loop extras of a start (the same game on TRY AGAIN, picture games
@@ -21,6 +22,9 @@ export function startExtras(checkpoint: Pick<TaskAttemptCheckpoint, 'retryOf' | 
 
 /** Recover an existing paid challenge; never create a second request ID. */
 export async function recoverTaskAttempt(checkpoint: TaskAttemptCheckpoint): Promise<TaskAttemptResponse> {
+  // T6 (arcade plan): a began mark saved before a crash or a dead zone lands first, so the server reads this try as
+  // played before anything reopens it (never a free replay).
+  await flushBegan().catch(() => undefined);
   const result = checkpoint.attemptId
     ? await getTaskAttempt(checkpoint.attemptId)
     : await startTaskAttempt(

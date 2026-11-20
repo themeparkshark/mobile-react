@@ -267,7 +267,7 @@ test('TRY AGAIN sends retry_of (the same game) and every paid try sends picture_
   assert.equal('retry_of' in sent[0] || 'picture_only' in sent[0], false, 'a plain start is exactly the old request');
   assert.equal(sent[1].retry_of, 77);
   assert.equal(sent[1].picture_only, 1);
-  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', { './began': { flushBegan: async () => undefined },
     '../../api/endpoints/me/task-attempts': {}, './checkpoint': {},
   });
   assert.deepEqual([...recovery.startExtras({})], []);
@@ -679,7 +679,7 @@ test('after a trivia loss with Picture games on, TRY AGAIN sends retry_of and pi
     '../../../utils/toast': { showToast() {} },
   });
   const writes = [];
-  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', { './began': { flushBegan: async () => undefined },
     '../../api/endpoints/me/task-attempts': api,
     './checkpoint': { writeTaskAttemptCheckpoint: async cp => { writes.push(cp); } },
   });

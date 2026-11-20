@@ -198,6 +198,9 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)tickets\/getTicketsModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/tickets/getTicketsModel.ts');
       if (/(^|\/)tickets\/coinCardPriceModel$/.test(name)) return require('./ts-module.cjs').loadTs('src/components/tickets/coinCardPriceModel.ts');
       if (/(^|\/)tickets\/arcadeMode$/.test(name)) return { useArcadeEconomy: () => false, arcadeEconomyNow: () => false, noteArcadeAnswer() {} };
+      if (/(^|\/)task-attempt\/began$/.test(name)) return { markBegan: async () => undefined, beganHere: () => false, flushBegan: async () => undefined };
+      if (/(^|\/)help\/HelpProvider$/.test(name)) return { useHelp: () => ({ hasSeenTip: () => true, markTipSeen() {}, tipsReady: true }) };
+      if (/(^|\/)help\/helpTopics$/.test(name)) return { gameIntroTip: kind => `game_intro_${kind}` };
       if (/(^|\/)collection\/limitedCoins$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/collection/limitedCoins.ts');
       if (name.includes('assets/')) return name;
       return { default: name };

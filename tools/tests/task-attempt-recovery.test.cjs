@@ -20,6 +20,7 @@ vm.runInNewContext(code, {
       getTaskAttempt: async id => { calls.get.push(id); return { attempt: { id, status: 'started' } }; },
       startTaskAttempt: async (...args) => { calls.start.push(args); return { attempt: { id: 123, status: 'started' } }; },
     };
+    if (name === './began') return { flushBegan: async () => { calls.flush = (calls.flush ?? 0) + 1; } };
     if (name === './checkpoint') return {
       writeTaskAttemptCheckpoint: async value => {
         calls.write.push(value);

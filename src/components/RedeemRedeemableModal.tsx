@@ -49,6 +49,9 @@ import { getTicketsRows, type GetTicketsRowKind } from './tickets/getTicketsMode
 import { getTicketSources, type TicketSources } from '../api/endpoints/me/task-attempts';
 import { askGrownUp } from './GrownUpGate';
 import { noteArcadeAnswer, useArcadeEconomy } from './tickets/arcadeMode';
+import { beganHere, markBegan } from '../services/task-attempt/began';
+import { useHelp } from './help/HelpProvider';
+import { gameIntroTip } from '../services/help/helpTopics';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
 import {
   challengeButtonLabel, challengeFreeSteps, challengeNextStep, challengeStepLine, challengeTitle,
@@ -648,6 +651,17 @@ export default function RedeemRedeemableModal({
         noteArcadeAnswer(result);
         if (!alive) return;
         if (!spendingRef.current) {
+          // T6 (arcade plan): a try whose round 1 already started is a played game. Reopened after a force-quit it is
+          // a loss (its Parts are paid), never a free replay. A try that never began resumes for free, as before.
+          const began = result.attempt.status === 'started'
+            && (!!result.attempt.began_at || beganHere(result.attempt.id));
+          if (began) {
+            const lost = await resolveTaskAttempt(result.attempt.id, 'loss');
+            noteArcadeAnswer(lost);
+            if (!alive) return;
+            applyAttemptStateRef.current(lost.attempt);
+            return;
+          }
           applyAttemptStateRef.current(result.attempt);
           if (result.attempt.status === 'started') setFlowState('wheel');
         }
@@ -1045,6 +1059,23 @@ export default function RedeemRedeemableModal({
   // T4 (arcade plan, Nov 20 2026): a Ticket is spent win or lose. No VIP try, no ad try, no free retry the app
   // offers on its own: only a Ticket today's server really gave back (first_coin_ticket_returned) plays free.
   const arcade = useArcadeEconomy();
+  // T6 (arcade plan): round 1 starting on screen is the began mark. A first meeting with a game shows its how-to card
+  // first (MiniGameSelector), so whether one is ahead is read before the game goes live; then the mark waits for the
+  // kid's first touch on the game (the card's own START), so shutting the app on the how-to card leaves the try unbegun.
+  const { hasSeenTip } = useHelp();
+  const introAheadRef = useRef(false);
+  if (flowState !== 'minigame' && selectedGame) introAheadRef.current = !hasSeenTip(gameIntroTip(selectedGame));
+  const beganSentRef = useRef<number | null>(null);
+  const sendBegan = useCallback(() => {
+    const id = attemptRef.current?.id ?? null;
+    if (!id || attemptRef.current?.status !== 'started' || beganSentRef.current === id) return;
+    beganSentRef.current = id;
+    pressTrace('card.began', () => String(id));
+    void markBegan(id);
+  }, []);
+  useEffect(() => {
+    if (flowState === 'minigame' && !introAheadRef.current) sendBegan();
+  }, [flowState, sendBegan]);
   // T232: when the server says TRY AGAIN deals another game (retry_game), the Setting Up card names it.
   const retryGameName = flowState === 'retrying' ? retryNextGameRef.current : retryGameNameFor(attemptRef.current);
 
@@ -1677,7 +1708,10 @@ export default function RedeemRedeemableModal({
               the punch ends; it becomes visible, and its count starts, when the punch hands over. */}
           {selectedGame && ((flowState === 'spinning' && (punchCard || earlyGameRef.current === selectedGame)) || flowState === 'minigame' || (flowState === 'postwin' && !winCovered) || boardKept) && (
             <View style={[styles.minigameContainer, boardOutset, boardHidden && (flowState === 'replay' ? styles.replayVeil : styles.prewarm)]}
-              onTouchStart={pressTraceOn ? () => pressTrace('board.touch', () => flowStateRef.current) : undefined}
+              onTouchStart={() => {
+                if (pressTraceOn) pressTrace('board.touch', () => flowStateRef.current);
+                if (flowStateRef.current === 'minigame') sendBegan();
+              }}
               pointerEvents={boardHeld ? 'none' : 'auto'}>
               <RideChallengeContext.Provider value={true}>
               <MiniGameSelector

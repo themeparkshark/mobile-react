@@ -148,7 +148,7 @@ test('T196 T197 T199: Beat the Buzzer on a coin plays the server\'s dealt round 
   assert.equal(trivia.triviaCrewFor({ kind: 'friends', players: [] }, false), 'friends');
   assert.equal(trivia.triviaCrewFor(null, false), null);
 
-  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', { './began': { flushBegan: async () => undefined },
     '../../api/endpoints/me/task-attempts': {}, './checkpoint': {},
   });
   assert.deepEqual(JSON.parse(JSON.stringify(recovery.startExtras({}))), [], 'a plain start sends the old request');
