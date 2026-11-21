@@ -194,3 +194,20 @@ test('P11: Still in line while away for 4 more minutes ends the wait quietly; ba
   // I left the line: no ride logged (endNow(false)), the Parts stay.
   assert.match(screen, /if \(state !== 'complete'\) void session\.endNow\(false\)\.catch\(finishFailed\);/);
 });
+
+test('app-tickets ask: the park day grant toast waits while PLAY! is up, so it never covers PLAY!\'s caption', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /<TicketGrantMoment calm=\{[^}]*&& !playRideShown\} \/>/);
+});
+
+test('app-tickets asks: the top card never says NEXT COIN; PLAY!\'s price never falls back to 1; Get Tickets SEE opens NEAR ME on I can play now', () => {
+  const explore = read('src/screens/ExploreScreen.tsx');
+  assert.match(explore, /ticketCost=\{task\.ticket_cost \?\? tripGoalData\?\.wallet\.ticket_cost\}/);
+  assert.doesNotMatch(explore, /ticketCost=\{[^}]*\?\? 1\}/);
+  assert.match(explore, /setNearMe\(\{ canPlay: nearMeParam === 'can_play' \}\)/);
+  const base = { parkName: 'Disneyland', ridesResting: false, allOwned: false, tickets: 3, freeStep: null, queueTicketsOn: false, adventureDots: null };
+  for (const state of ['pick', 'walk', 'here', 'resting', 'arrive', 'need_ticket', 'claim']) {
+    const copy = C.guideCardCopy(state, state === 'walk' || state === 'here' ? { taskId: 1, name: 'Dumbo', source: 'callout', reason: 'picked', meters: 40 } : null, base);
+    assert.doesNotMatch(`${copy.kicker} ${copy.title} ${copy.line ?? ''}`, /NEXT COIN|Next coin/i, state);
+  }
+});
