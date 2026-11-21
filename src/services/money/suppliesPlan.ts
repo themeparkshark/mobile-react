@@ -76,13 +76,32 @@ export function outdoneOnTickets(p: ShopProduct, products: readonly ShopProduct[
     && (amount(q, prices) ?? Infinity) <= price && (q.grants.tickets ?? 0) > (p.grants.tickets ?? 0));
 }
 
-export function planSupplies({ products, prices, focus, wallet, priced }: {
+/**
+ * The hand-off pack for a door that came for Tickets: the smallest pack that covers what the player is short of
+ * (Get Tickets says how many), else the smallest pack. Cheapest first; for the same price, more Tickets.
+ * When no pack covers the shortfall, the biggest one leads (it gets the player closest).
+ */
+export function handoffTicketPack(cands: readonly ShopProduct[], prices: PriceMap, short?: number | null): ShopProduct | null {
+  const live = cands.filter(p => p.available);
+  const byPrice = (a: ShopProduct, b: ShopProduct) => ((amount(a, prices) ?? 99) - (amount(b, prices) ?? 99))
+    || ((b.grants.tickets ?? 0) - (a.grants.tickets ?? 0));
+  if (typeof short === 'number' && short > 0) {
+    const covering = live.filter(p => (p.grants.tickets ?? 0) >= short).sort(byPrice);
+    if (covering.length > 0) return covering[0];
+    return [...live].sort((a, b) => ((b.grants.tickets ?? 0) - (a.grants.tickets ?? 0)) || byPrice(a, b))[0] ?? null;
+  }
+  return [...live].sort(byPrice)[0] ?? null;
+}
+
+export function planSupplies({ products, prices, focus, wallet, priced, short }: {
   products: readonly ShopProduct[];
   prices: PriceMap;
   focus?: string | null;
   wallet: Partial<Record<ShopCurrency, number>>;
   /** Whether Apple priced this product (an unpriced product is never a dead card). */
   priced: (p: ShopProduct) => boolean;
+  /** Opened from Get Tickets short this many Tickets: the hand-off is the smallest pack that covers it. */
+  short?: number | null;
 }): SuppliesPlan {
   const live = products.filter(priced).filter((p, _i, all) => !outdoneOnTickets(p, all, prices));
   const bySection = (key: ShopProduct['section']) => live.filter(p => p.section === key);
@@ -93,10 +112,7 @@ export function planSupplies({ products, prices, focus, wallet, priced }: {
   // Tickets-only pick counts as a pack: the cheapest card that gives the most Tickets for that price).
   const handoffCands = need === 'tickets' ? [...bySection('tickets'), ...bySection('featured').filter(p => isDeal(p) && ticketsOnly(p))]
     : need ? bySection(need) : [];
-  const handoffPack = need
-    ? handoffCands.filter(p => p.available).sort((a, b) => ((amount(a, prices) ?? 99) - (amount(b, prices) ?? 99))
-      || ((b.grants.tickets ?? 0) - (a.grants.tickets ?? 0)))[0] ?? null
-    : null;
+  const handoffPack = need ? handoffTicketPack(handoffCands, prices, need === 'tickets' ? short : null) : null;
   const handoff = need ? { need, out: (wallet[NEED_KEY[need]] ?? 0) <= 0, pack: handoffPack } : null;
 
   const starter = featured.find(p => isStarter(p) && p.available);

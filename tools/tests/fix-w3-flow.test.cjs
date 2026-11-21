@@ -18,12 +18,13 @@ const flight = loadTs('src/components/rewards/claimFlightModel.ts');
 const rideTry = loadTs('src/gamekit/results/rideTry.ts');
 
 /* T029: every loss card has a forward button that plays. */
-test('T029 a paid loss with Tickets left offers TRY AGAIN for 1 Ticket, says how many are left and the next coin', () => {
+test('T029 a paid loss with Tickets left offers TRY AGAIN for 1 Ticket and says how many are left; it never names a next coin', () => {
   const plan = loss.lossNext({ freeRetry: false, vipRetry: false, tickets: 3, ticketCost: 1, nextCoin: { name: 'Tiki Room', meters: 60.4 } });
   assert.equal(plan.kind, 'paid_retry');
   assert.equal(plan.label, 'Try Again');
   assert.equal(plan.note, '1 Ticket');
-  assert.deepEqual(plain(plan.footnotes.map(n => n.text)), ['You have 3 Tickets', 'Next coin: Tiki Room, 60 m']);
+  assert.deepEqual(plain(plan.footnotes.map(n => n.text)), ['You have 3 Tickets']);
+  assert.doesNotMatch(read('src/components/rewards/lossNext.ts'), /Next coin/);
 });
 
 test('T029 a free retry or a VIP try comes first; at 0 Tickets the way on is the free ways, never only the map', () => {
@@ -187,7 +188,7 @@ test('T033 a saved try the server says was won comes back as its win card; lost 
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /if \(!open \|\| flowState !== 'claim-error' \|\| proofRejected\)/, 'Checking your score asks again by itself');
   assert.match(modal, /card: \{ name: taskName, coin_url:/, 'the coin card rides in the checkpoint');
-  assert.match(read('src/components/RedeemModal.tsx'), /void findPendingWin\(player\.id\)/);
+  assert.match(read('src/components/RedeemModal.tsx'), /void findPendingWin\(player\.id, undefined, park\?\.id \?\? null\)/);
 });
 
 /* T037, T065: a ride win plays as one coin moment. */

@@ -135,6 +135,11 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
           : <CoinSocket size={size} coinUrl={task.coin_url} goal={isGoal} />)}
       </Pressable>
 
+      {/* P13 (bug 24): on the new architecture a Modal takes its frame origin from the nearest real native parent.
+          The shelf slot's wrappers are layout only and get flattened, so the card and its backdrop opened shifted by
+          the slot's place on the shelf (a right-hand slot put Not now off screen). This anchor is a real view at the
+          slot's own origin, so the card always opens centered on the screen and its backdrop covers all of it. */}
+      <View collapsable={false} pointerEvents="box-none" style={styles.modalAnchor}>
       <Modal
         isVisible={layer.present}
         onModalHide={() => {
@@ -157,6 +162,9 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1,
           alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }}
           showsVerticalScrollIndicator={false}>
+          {/* P13: the scroll view fills the sheet, so a tap beside the card lands here, never on the backdrop under
+              it. This layer behind the card closes it, like the backdrop. */}
+          <Pressable testID="unfound-coin-outside" accessible={false} style={StyleSheet.absoluteFill} onPress={() => setVisible(false)} />
           <View style={{ alignItems: 'center', width: '85%', zIndex: 10 }}>
             <Ribbon text={copy.ribbon} />
 
@@ -265,11 +273,14 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
           </View>
         </ScrollView>
       </Modal>
+      </View>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  /** A real (never flattened) zero-size view at the trigger's top left: the Modal's frame starts at 0, 0 of it. */
+  modalAnchor: { position: 'absolute', top: 0, left: 0, width: 0, height: 0 },
   secondary: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: '#e4f7ff', borderWidth: 2, borderColor: '#ffffff', borderBottomWidth: 4, borderBottomColor: '#9ccbe9',
     borderRadius: 14, paddingVertical: 11, marginTop: 10 },

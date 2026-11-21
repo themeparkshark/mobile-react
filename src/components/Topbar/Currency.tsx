@@ -17,6 +17,7 @@ import { glossaryKeyForName } from '../../services/help/glossary';
 import countText from '../../helpers/countText';
 import { UpperText } from '../../ui/upper';
 import { useCoverArt } from '../map/mapCover';
+import { openGetTickets } from '../tickets/getTicketsOpen';
 
 interface CurrencyProps {
   /** Remote icon URL or a bundled require(); falls back to the gold coin. */
@@ -224,6 +225,8 @@ export default function Currency({ image, count, name, flyTarget, coverArt = fal
   const term = glossaryKeyForName(name);
   // Known currencies open the "What's this?" sheet; anything else keeps the name tooltip.
   const handlePress = () => {
+    // The map's Ticket pill opens Get Tickets (the free ways first); with no map up, its glossary card as before.
+    if (flyTarget === 'tickets' && openGetTickets()) return;
     if (term) { explain(term, { count }); return; }
     setShowTooltip(prev => !prev);
   };

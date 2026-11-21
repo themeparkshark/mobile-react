@@ -16,7 +16,7 @@ const ROW_ICON: Readonly<Record<GetTicketsRowKind, GameIconName>> = {
   claim: 'star', line: 'line', trail: 'gift', near: 'coin', pick: 'heart', grownups: 'lock',
 };
 
-export default function GetTicketsPanel({ price, tickets, have, rows, footer, busy, onRow, coinUri }: {
+export default function GetTicketsPanel({ price, tickets, have, rows, footer, busy, onRow, coinUri, saved }: {
   readonly price: number | null;
   readonly tickets: number;
   readonly have: string;
@@ -27,6 +27,8 @@ export default function GetTicketsPanel({ price, tickets, have, rows, footer, bu
   readonly onRow: (kind: GetTicketsRowKind) => void;
   /** The coin this card is about, beside the price (when the big coin picture gives its room to the rows). */
   readonly coinUri?: string | null;
+  /** P14: this coin's saved Parts line ("9 Parts saved. Win it to grow it."), from the server only. */
+  readonly saved?: string | null;
 }) {
   return <View style={styles.panel} testID="get-tickets">
     <View style={styles.head}>
@@ -36,6 +38,9 @@ export default function GetTicketsPanel({ price, tickets, have, rows, footer, bu
         <TicketPips price={price} held={tickets} size="button" />
         <Text style={styles.have}>{withNumberFont(have)}</Text>
       </View>
+      {saved ? <View style={styles.saved} accessible accessibilityLabel={saved}>
+        <GameIcon name="parts" size={20} /><Text style={styles.savedText}>{withNumberFont(saved)}</Text>
+      </View> : null}
     </View>
     {rows.map(row => <View key={row.kind} style={styles.row} accessible={!row.action} accessibilityLabel={row.action ? undefined : row.a11y}>
       <View style={styles.icon}><GameIcon name={ROW_ICON[row.kind]} size={26} /></View>
@@ -61,6 +66,8 @@ const styles = StyleSheet.create({
   price: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   coin: { width: 40, height: 40 },
   have: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft },
+  saved: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  savedText: { fontFamily: FONT.body, fontSize: 15, color: BRAND.navy },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.white, borderRadius: 14, borderWidth: 2.5,
     borderColor: BRAND.navy, paddingVertical: 4, paddingHorizontal: 8, minHeight: 46 },
   icon: { width: 30, alignItems: 'center' },

@@ -42,7 +42,7 @@ import LossParts from './tickets/LossParts';
 import LossActions from './tickets/LossActions';
 import GetTicketsPanel from './tickets/GetTicketsPanel';
 import CoinCardPrice from './tickets/CoinCardPrice';
-import { coinCardPrice } from './tickets/coinCardPriceModel';
+import { coinCardPrice, howStripLabel } from './tickets/coinCardPriceModel';
 import TicketPips from './tickets/TicketPips';
 import { limitedDayLabel } from '../services/collection/limitedCoins';
 import { getTicketsRows, type GetTicketsRowKind } from './tickets/getTicketsModel';
@@ -763,7 +763,9 @@ export default function RedeemRedeemableModal({
       ...(crew ? { crew } : {}),
       // The coin's card rides along (T033): a win whose answer was lost can still show its card from the map.
       card: { name: taskName, coin_url: (redeemable?.model as TaskType | undefined)?.coin_url ?? null,
-        coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience },
+        coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience,
+        // P19: the park whose map started it; its win card never comes back on another park's map.
+        ...(park?.id ? { park_id: park.id } : {}) },
     };
     redealStartRef.current = false;
     try {
@@ -838,7 +840,7 @@ export default function RedeemRedeemableModal({
     } finally {
       spendingRef.current = false;
     }
-  }, [location, redeemable, player?.id, taskType, taskId, taskName, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint]);
+  }, [location, redeemable, player?.id, taskType, taskId, taskName, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint, park?.id]);
 
   // T038: Picture games turned on from the Beat the Buzzer card at this try's start (a child who cannot read
   // yet): the same attempt is dealt again as a picture game (a new request id, picture_only; the server swaps
@@ -1339,7 +1341,9 @@ export default function RedeemRedeemableModal({
   const cardPrice = coinCardPrice({ game: redeemable?.deal?.game ?? null, price: cardModel?.ticket_cost,
     winParts: cardModel?.ride_parts_reward ?? null, arcade,
     leavesOn: cardModel?.limited?.active ? limitedDayLabel(cardModel.limited.ends_on ?? null) : null,
-    boards: redeemable?.deal?.game === 'memory' ? cardTries?.shells ?? null : null });
+    boards: redeemable?.deal?.game === 'memory' ? cardTries?.shells ?? null : null,
+    // P14: the server's parts_waiting for a coin not won yet (S21); missing on today's server, so no line.
+    partsWaiting: (cardModel as { parts_waiting?: unknown } | null | undefined)?.parts_waiting });
   // T7: Get Tickets. The arcade server says which free ways work right now (ticket_sources); today's server sends
   // none, so the rows fall back to the Stamp Book read and the line Ticket switch.
   const ticketWays = getTicketsRows({ price: ticketCost > 0 ? ticketCost : null, tickets: playerTickets, sources: ticketSources,
@@ -1473,7 +1477,7 @@ export default function RedeemRedeemableModal({
                   {/* How it works, as one picture strip in the card's header (a Ticket, a game, the coin), so
                       the button below never moves (the old tip pushed SPEND down the first time). */}
                   {isTaskType && <View style={styles.howStrip} accessible
-                    accessibilityLabel="One Ticket buys one game. Win the game to win this coin.">
+                    accessibilityLabel={howStripLabel(ticketCost)}>
                     {freeBadge === 'free' ? <GameIcon name="gift" size={30} /> : freeBadge === 'extra' ? <TicketGift size={30} />
                       : <GameIcon name="ticket" size={30} />}
                     <GameIcon name="arrow" size={18} />
@@ -1586,7 +1590,7 @@ export default function RedeemRedeemableModal({
                         {/* T7 (arcade plan): Get Tickets. Only the free ways that work right now, the grown-up row last. */}
                         {needTicket && <GetTicketsPanel price={ticketCost > 0 ? ticketCost : null} tickets={playerTickets} coinUri={arcade ? coinUri : null}
                           have={ticketWays.have} rows={ticketWays.rows} footer={ticketWays.footer}
-                          busy={claiming ? 'claim' : null} onRow={onGetTicketsRow} />}
+                          busy={claiming ? 'claim' : null} onRow={onGetTicketsRow} saved={cardPrice.waiting?.text ?? null} />}
                         {needTicket && <Pressable onPress={safeClose} accessibilityRole="button" accessibilityLabel={BACK_TO_MAP}
                           style={({ pressed }) => [styles.mapLink, pressed && { opacity: 0.7 }]} hitSlop={8}>
                           <GameIcon name="map" size={20} />

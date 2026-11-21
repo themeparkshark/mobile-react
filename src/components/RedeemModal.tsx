@@ -9,6 +9,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { useRung } from '../services/reveal/revealLadder';
 import { playBadge, stampClaimSources, type PlayBadge } from './rewards/challengeCopy';
 import { getStamps } from '../api/endpoints/me/stamps';
+import GetTicketsSheet from './tickets/GetTicketsSheet';
 import TicketGift from './rewards/TicketGift';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { nearbyOpportunityOpen, nearbyRideClosedReason, type NearbyClosedReason } from '../screens/ExploreScreen/mapOpportunityTiming';
@@ -122,7 +123,8 @@ export default function RedeemModal({
     let alive = true;
     let again: ReturnType<typeof setTimeout> | null = null;
     pendingBusy.current = true;
-    void findPendingWin(player.id).then(({ win, unsure }) => {
+    // P19: only a win started on this park's map comes back here (its own numbers, its own shelf).
+    void findPendingWin(player.id, undefined, park?.id ?? null).then(({ win, unsure }) => {
       if (!alive) return;
       if (win) {
         setQuickStart(false);
@@ -133,7 +135,7 @@ export default function RedeemModal({
       }
     }).catch(() => undefined).finally(() => { pendingBusy.current = false; });
     return () => { alive = false; if (again) clearTimeout(again); };
-  }, [modalVisible, player?.id, pendingLook]);
+  }, [modalVisible, player?.id, pendingLook, park?.id]);
   // Secret coins arrive with coin levels (rung 3, blueprint 5.13): before that a secret spot offers nothing.
   const coinLevels = useRung('coin_levels');
   const secretLocked = redeemable?.type === 'secret_task' && !coinLevels.open;
@@ -299,6 +301,8 @@ export default function RedeemModal({
 
   return (
     <>
+      {/* The coinless Get Tickets sheet's one host on the map (the top card's GET TICKETS, the header Ticket pill). */}
+      <GetTicketsSheet atPark={!!park} />
       {redeemable && available && (
         <Animated.View style={entrance}>
           <Animated.View ref={pillRef} collapsable={false} style={{ transform: [{ scale: press }] }}

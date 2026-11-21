@@ -13,6 +13,8 @@ export type StoreParams = {
   readonly secret?: boolean;
   /** Wishlist push deep link: open this item's try-on. */
   readonly focus_item?: number;
+  /** Opened from Get Tickets: Tickets the player is short of (0 or absent: no coin, so the smallest pack leads). */
+  readonly short?: number;
 };
 
 const FOCI: readonly SuppliesFocus[] = ['tickets', 'coins', 'rescue', 'featured'];
@@ -32,5 +34,8 @@ export function storeParams(raw: unknown): StoreParams {
     ...(focus ? { focus } : null),
     ...(p.secret === true ? { secret: true } : null),
     ...(item ? { focus_item: item } : null),
+    // Only Get Tickets says how many Tickets are missing: Supplies lists the smallest pack that covers it first.
+    ...(p.from === 'get_tickets' && typeof p.short === 'number' && Number.isFinite(p.short) && p.short > 0
+      ? { short: Math.min(999, Math.floor(p.short)) } : null),
   };
 }

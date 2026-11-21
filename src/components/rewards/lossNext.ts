@@ -7,8 +7,8 @@
  *   paid_retry  Tickets in hand: TRY AGAIN for 1 Ticket, "You have N" said under it
  *   ways        no Ticket left: the free ways to play (claim, free try, the line, a practice game)
  * The map is always the small second button. The line under the buttons says
- * what is next: Tickets left, earned Tickets waiting, or the next coin and how
- * far it is. Pure, no React, no em dashes.
+ * what is next: Tickets left or earned Tickets waiting. It never names a coin to
+ * go to: the player picks (Nov 20, the app never picks a ride). Pure, no React, no em dashes.
  */
 import type { GameIconName } from '../../ui/iconNames';
 import { VIP_RETRY_ACTION } from './lostTryCard';
@@ -25,8 +25,6 @@ export interface LossNextInput {
   readonly ticketCost: number;
   /** Earned Tickets waiting to be claimed (Stamp Book), when known. */
   readonly claimableTickets?: number | null;
-  /** The guide's next coin (never the one just lost), when it has one. */
-  readonly nextCoin?: { readonly name: string; readonly meters: number | null } | null;
 }
 
 export interface LossNext {
@@ -52,21 +50,19 @@ export function lossNext(input: LossNextInput): LossNext {
   const cost = Math.max(1, whole(input.ticketCost) || 1);
   const tickets = whole(input.tickets);
   const claimable = whole(input.claimableTickets);
-  const next = input.nextCoin && input.nextCoin.name ? input.nextCoin : null;
-  const nextLine = next ? { icon: 'coin' as GameIconName, text: [`Next coin: ${next.name}`, distanceText(next.meters)].filter(Boolean).join(', ') } : null;
   const ticketWord = (n: number) => `${n} ${n === 1 ? 'Ticket' : 'Tickets'}`;
   if (input.freeRetry) {
-    return { kind: 'free_retry', label: 'Try Again', icons: ['retry'], a11yLabel: 'Try again. No new Ticket.', footnotes: nextLine ? [nextLine] : [] };
+    return { kind: 'free_retry', label: 'Try Again', icons: ['retry'], a11yLabel: 'Try again. No new Ticket.', footnotes: [] };
   }
   if (input.vipRetry) {
     return { kind: 'vip_retry', label: VIP_RETRY_ACTION.label, icons: [...VIP_RETRY_ACTION.icons], note: VIP_RETRY_ACTION.note,
-      a11yLabel: VIP_RETRY_ACTION.a11yLabel, footnotes: nextLine ? [nextLine] : [] };
+      a11yLabel: VIP_RETRY_ACTION.a11yLabel, footnotes: [] };
   }
   if (tickets >= cost) {
     return {
       kind: 'paid_retry', label: 'Try Again', icons: ['retry'], note: ticketWord(cost),
       a11yLabel: `Try again for ${ticketWord(cost)}. You have ${ticketWord(tickets)}.`,
-      footnotes: [{ icon: 'ticket', text: `You have ${ticketWord(tickets)}` }, ...(nextLine ? [nextLine] : [])],
+      footnotes: [{ icon: 'ticket', text: `You have ${ticketWord(tickets)}` }],
     };
   }
   return {
@@ -74,6 +70,6 @@ export function lossNext(input: LossNextInput): LossNext {
     a11yLabel: claimable > 0 ? `${ticketWord(claimable)} are waiting for you. Claim them and play.` : 'See the free ways to play.',
     footnotes: claimable > 0
       ? [{ icon: 'ticket', text: `${claimable} free ${claimable === 1 ? 'Ticket is' : 'Tickets are'} waiting` }]
-      : nextLine ? [nextLine] : [],
+      : [],
   };
 }
