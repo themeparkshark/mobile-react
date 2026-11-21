@@ -68,7 +68,7 @@ import { LinePlayMovementContext, shouldPauseForMovement } from './LinePlayMovem
 import { RideChallengeContext } from './RideChallengeContext';
 import { noteRideTry } from './results/rideTry';
 import { ShellFrameContext } from './ShellFrameContext';
-import { RetryRoundContext, StageDealtContext, StageDrawnContext, StageHoldContext } from './StageHoldContext';
+import { RetryRoundContext, RoundStartContext, StageDealtContext, StageDrawnContext, StageHoldContext } from './StageHoldContext';
 import { GrownUpGateSlot } from '../components/GrownUpGate';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import GameIcon, { type GameIconName } from '../ui/GameIcon';
@@ -648,6 +648,10 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
     // the count (a new onStart each render) never restarts the 3-2-1.
     const onStartRef = useRef(onStart);
     onStartRef.current = onStart;
+    // The ride challenge's round-start mark (RoundStartContext): told at GO, once per try.
+    const roundStart = useContext(RoundStartContext);
+    const roundStartRef = useRef(roundStart);
+    roundStartRef.current = roundStart;
     const beginPlay = useCallback(() => {
       if (startedRef.current) return;
       // w5 N04: a kept board counts while its try's deal is on the way; play opens only on the dealt try (its seed,
@@ -663,6 +667,7 @@ export const GameShellV2 = forwardRef<GameShellV2Handle, GameShellV2Props>(
       playedOnceRef.current = true;
       pressTrace('shell.play', () => gameIdRef.current);
       setPhase('playing');
+      try { roundStartRef.current?.(); } catch { /* a mark never stops play */ }
       onStartRef.current();
     }, []);
 
