@@ -190,7 +190,7 @@ test('the challenge card: "Win the X coin", the how-it-works picture strip in it
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /<Ribbon text=\{isTaskType \? title : 'Congratulations'\} \/>/);
   assert.match(modal, /const title = challengeTitle\(taskType, taskName\);/);
-  assert.match(modal, /style=\{styles\.howStrip\} accessible\n\s+accessibilityLabel="One Ticket buys one game\. Win the game to win this coin\."/);
+  assert.match(modal, /style=\{styles\.howStrip\} accessible\n\s+accessibilityLabel=\{howStripLabel\(ticketCost\)\}/);
   assert.match(modal, /howStrip: \{[^}]*height: 40/, 'a fixed height: the button never moves');
   assert.doesNotMatch(modal, /OneTimeTip id="ride_challenge"/, 'no tip that pushes the button down');
   assert.match(modal, /show: rideRewardTask\.coins > 0 \}/);

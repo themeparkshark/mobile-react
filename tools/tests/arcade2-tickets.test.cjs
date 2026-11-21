@@ -154,3 +154,12 @@ test('Supplies opened from Get Tickets lists the smallest pack that covers the s
   assert.match(read('src/screens/StoreScreen.tsx'), /<SuppliesShop focus=\{focus\} short=\{shortTickets\} \/>/);
   assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /planSupplies\(\{ products: catalog\.products, prices, focus, wallet, priced, short \}\)/);
 });
+
+test('integration rule break 2: the coin card read aloud says this coin\'s own price', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const m = loadTs('src/components/tickets/coinCardPriceModel.ts');
+  assert.equal(m.howStripLabel(3), '3 Tickets buy one game, win or lose. Win the game to win this coin.');
+  assert.equal(m.howStripLabel(1), 'One Ticket buys one game, win or lose. Win the game to win this coin.');
+  assert.equal(m.howStripLabel(null), 'Tickets buy one game, win or lose. Win the game to win this coin.');
+  assert.doesNotMatch(read('src/components/RedeemRedeemableModal.tsx'), /One Ticket buys one game/);
+});

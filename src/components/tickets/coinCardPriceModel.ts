@@ -64,3 +64,10 @@ export function coinCardPrice(input: CoinCardPriceInput): CoinCardPrice {
     waiting: partsWaitingLine(input.partsWaiting),
   };
 }
+
+/** The coin card's picture strip, read aloud: this coin's own price, never a fixed one (integration rule break 2). */
+export function howStripLabel(price: unknown): string {
+  const n = servedTicketPrice(price);
+  const cost = n == null ? 'Tickets buy' : n === 1 ? 'One Ticket buys' : `${n} Tickets buy`;
+  return `${cost} one game, win or lose. Win the game to win this coin.`;
+}

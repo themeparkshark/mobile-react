@@ -42,7 +42,7 @@ import LossParts from './tickets/LossParts';
 import LossActions from './tickets/LossActions';
 import GetTicketsPanel from './tickets/GetTicketsPanel';
 import CoinCardPrice from './tickets/CoinCardPrice';
-import { coinCardPrice } from './tickets/coinCardPriceModel';
+import { coinCardPrice, howStripLabel } from './tickets/coinCardPriceModel';
 import TicketPips from './tickets/TicketPips';
 import { limitedDayLabel } from '../services/collection/limitedCoins';
 import { getTicketsRows, type GetTicketsRowKind } from './tickets/getTicketsModel';
@@ -1477,7 +1477,7 @@ export default function RedeemRedeemableModal({
                   {/* How it works, as one picture strip in the card's header (a Ticket, a game, the coin), so
                       the button below never moves (the old tip pushed SPEND down the first time). */}
                   {isTaskType && <View style={styles.howStrip} accessible
-                    accessibilityLabel="One Ticket buys one game. Win the game to win this coin.">
+                    accessibilityLabel={howStripLabel(ticketCost)}>
                     {freeBadge === 'free' ? <GameIcon name="gift" size={30} /> : freeBadge === 'extra' ? <TicketGift size={30} />
                       : <GameIcon name="ticket" size={30} />}
                     <GameIcon name="arrow" size={18} />
