@@ -141,3 +141,19 @@ test('P1: NEAR ME and "Which coin?" are hosted by CalmModal at the window\'s bot
   assert.match(sheet, /<CalmModal visible=\{visible\}/);
   assert.doesNotMatch(sheet, /from 'react-native-modal'/);
 });
+
+test('P3: PLAY IN LINE only where there is a line: a show, fountain, walk-through or food cart offers none', () => {
+  const ride = type => ({ rideId: 816, rideType: type });
+  for (const none of ['show', 'walk_through', 'restaurant', 'transport', 'other']) {
+    assert.equal(C.calloutLineOffer(ride(none), 265, 265, 'here'), null, none);
+    assert.equal(C.lineRideType(none), false, none);
+  }
+  for (const line of ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride']) {
+    assert.equal(C.calloutLineOffer(ride(line), 66, 66, 'here').label, 'PLAY IN LINE', line);
+  }
+  // Today's catalog with no type: the offer stays as it was.
+  assert.equal(C.calloutLineOffer({ rideId: 5 }, 66, 66, 'here').label, 'PLAY IN LINE');
+  const times = read('src/screens/QueueTimesScreen.tsx');
+  assert.match(times, /const canStartSession = queuePlayPolicy\(entry\.status\)\.canPlay && lineRideType\(rideType\);/);
+  assert.match(times, /rideType=\{rideTypes\.get\(item\.name\) \?\? null\}/);
+});
