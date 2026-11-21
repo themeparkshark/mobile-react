@@ -4,6 +4,7 @@
  * picture, a few words and one button. Ends with "Tomorrow at any park: +3". No countdown, no red,
  * no pack art; the grown-up row asks the grown-up gate before Supplies opens.
  */
+import { Image } from 'expo-image';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import GameIcon, { type GameIconName } from '../../ui/GameIcon';
 import { BRAND, FONT } from '../../ui/tokens';
@@ -15,7 +16,7 @@ const ROW_ICON: Readonly<Record<GetTicketsRowKind, GameIconName>> = {
   claim: 'star', line: 'line', trail: 'gift', near: 'coin', pick: 'heart', grownups: 'lock',
 };
 
-export default function GetTicketsPanel({ price, tickets, have, rows, footer, busy, onRow }: {
+export default function GetTicketsPanel({ price, tickets, have, rows, footer, busy, onRow, coinUri }: {
   readonly price: number | null;
   readonly tickets: number;
   readonly have: string;
@@ -24,11 +25,14 @@ export default function GetTicketsPanel({ price, tickets, have, rows, footer, bu
   /** A row is working (claiming): its button waits. */
   readonly busy?: GetTicketsRowKind | null;
   readonly onRow: (kind: GetTicketsRowKind) => void;
+  /** The coin this card is about, beside the price (when the big coin picture gives its room to the rows). */
+  readonly coinUri?: string | null;
 }) {
   return <View style={styles.panel} testID="get-tickets">
     <View style={styles.head}>
       <Text style={styles.title}>GET TICKETS</Text>
       <View style={styles.price}>
+        {coinUri ? <Image source={{ uri: coinUri }} style={styles.coin} contentFit="contain" /> : null}
         <TicketPips price={price} held={tickets} size="button" />
         <Text style={styles.have}>{withNumberFont(have)}</Text>
       </View>
@@ -55,6 +59,7 @@ const styles = StyleSheet.create({
   head: { alignItems: 'center', gap: 2 },
   title: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   price: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  coin: { width: 40, height: 40 },
   have: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.white, borderRadius: 14, borderWidth: 2.5,
     borderColor: BRAND.navy, paddingVertical: 4, paddingHorizontal: 8, minHeight: 46 },

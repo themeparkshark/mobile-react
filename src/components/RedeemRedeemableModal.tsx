@@ -1488,7 +1488,8 @@ export default function RedeemRedeemableModal({
                     borderColor: 'rgba(0, 0, 0, .6)', borderLeftWidth: 2, borderRightWidth: 2, borderBottomWidth: 2,
                     borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
                   }}>
-                    <Box
+                    {/* T7: short on Tickets, Get Tickets takes the big coin's room (the card fits an SE); its header shows the coin. */}
+                    {!(needTicket && arcade) && <Box
                       background={require('../../assets/images/screens/explore/starburst.png')}
                       image={({
                         task: { uri: (redeemable.model as TaskType).coin_url },
@@ -1506,7 +1507,7 @@ export default function RedeemRedeemableModal({
                       }[redeemable.type]}
                       type={redeemable.type}
                       pulse
-                    />
+                    />}
                     {/* T137: a coin face that reads like a typo ("O2H") says what it is the first time it is seen. */}
                     {isTaskType && !!faceNote && <Text style={styles.faceNote} numberOfLines={1} adjustsFontSizeToFit
                       minimumFontScale={0.8} maxFontSizeMultiplier={1.2}>{faceNote}</Text>}
@@ -1583,7 +1584,7 @@ export default function RedeemRedeemableModal({
                           </View>}
                         </View>}
                         {/* T7 (arcade plan): Get Tickets. Only the free ways that work right now, the grown-up row last. */}
-                        {needTicket && <GetTicketsPanel price={ticketCost > 0 ? ticketCost : null} tickets={playerTickets}
+                        {needTicket && <GetTicketsPanel price={ticketCost > 0 ? ticketCost : null} tickets={playerTickets} coinUri={arcade ? coinUri : null}
                           have={ticketWays.have} rows={ticketWays.rows} footer={ticketWays.footer}
                           busy={claiming ? 'claim' : null} onRow={onGetTicketsRow} />}
                         {needTicket && <Pressable onPress={safeClose} accessibilityRole="button" accessibilityLabel={BACK_TO_MAP}
