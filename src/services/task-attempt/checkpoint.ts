@@ -32,6 +32,8 @@ export interface CheckpointCard {
   readonly coin_url?: string | null;
   readonly coins?: number;
   readonly experience?: number;
+  /** P19: the park whose map started this try. A won try's card comes back only on that park's map. */
+  readonly park_id?: number;
 }
 
 function cleanCard(card: unknown): CheckpointCard | null {
@@ -42,6 +44,7 @@ function cleanCard(card: unknown): CheckpointCard | null {
     ...(typeof c.coin_url === 'string' && c.coin_url.length < 2000 ? { coin_url: c.coin_url } : {}),
     ...(Number.isFinite(c.coins) ? { coins: c.coins } : {}),
     ...(Number.isFinite(c.experience) ? { experience: c.experience } : {}),
+    ...(Number.isInteger(c.park_id) && (c.park_id as number) > 0 ? { park_id: c.park_id } : {}),
   };
 }
 

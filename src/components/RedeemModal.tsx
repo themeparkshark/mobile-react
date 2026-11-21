@@ -122,7 +122,8 @@ export default function RedeemModal({
     let alive = true;
     let again: ReturnType<typeof setTimeout> | null = null;
     pendingBusy.current = true;
-    void findPendingWin(player.id).then(({ win, unsure }) => {
+    // P19: only a win started on this park's map comes back here (its own numbers, its own shelf).
+    void findPendingWin(player.id, undefined, park?.id ?? null).then(({ win, unsure }) => {
       if (!alive) return;
       if (win) {
         setQuickStart(false);
@@ -133,7 +134,7 @@ export default function RedeemModal({
       }
     }).catch(() => undefined).finally(() => { pendingBusy.current = false; });
     return () => { alive = false; if (again) clearTimeout(again); };
-  }, [modalVisible, player?.id, pendingLook]);
+  }, [modalVisible, player?.id, pendingLook, park?.id]);
   // Secret coins arrive with coin levels (rung 3, blueprint 5.13): before that a secret spot offers nothing.
   const coinLevels = useRung('coin_levels');
   const secretLocked = redeemable?.type === 'secret_task' && !coinLevels.open;

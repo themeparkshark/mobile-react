@@ -68,17 +68,29 @@ export function pendingTryAction(status: string | null | undefined): 'show_win' 
 }
 
 /**
+ * P19 (bug 8): a won try's card comes back only on the map of the park that started it, so it always shows its own
+ * park's numbers and opens its own shelf. A card with no park (saved by an older build) cannot prove where it belongs
+ * and stays put. `here` undefined means the caller does not filter (tests of the older rule).
+ */
+export function winBelongsHere(cardParkId: number | null | undefined, here: number | null | undefined): boolean {
+  if (here === undefined) return true;
+  return typeof cardParkId === 'number' && here != null && cardParkId === here;
+}
+
+/**
  * The newest saved try the server says was won and that still carries its coin's card, or null. Every read is
  * best effort: a failed one keeps the checkpoint for the next look (`unsure` says so, so the map can look again).
+ * A win from another park is kept for that park's map (it ages out with its checkpoint).
  */
-export async function findPendingWin(playerId: number | null | undefined, skipTaskIds: ReadonlySet<number> = new Set()):
-  Promise<{ win: PendingWin | null; unsure: boolean }> {
+export async function findPendingWin(playerId: number | null | undefined, skipTaskIds: ReadonlySet<number> = new Set(),
+  parkId?: number | null): Promise<{ win: PendingWin | null; unsure: boolean }> {
   if (playerId == null) return { win: null, unsure: false };
   let unsure = false;
   let saved: TaskAttemptCheckpoint[];
   try { saved = await listTaskAttemptCheckpoints(playerId); } catch { return { win: null, unsure: true }; }
   for (const checkpoint of saved) {
     if (checkpoint.attemptId == null || skipTaskIds.has(checkpoint.taskId)) continue;
+    if (checkpoint.card && !winBelongsHere(checkpoint.card.park_id, parkId)) continue;
     if (shownWins.has(checkpoint.attemptId)) {
       await removeTaskAttemptCheckpoint(checkpoint.playerId, checkpoint.taskType, checkpoint.taskId).catch(() => undefined);
       continue;
@@ -102,6 +114,7 @@ export function pendingWinRedeemable(win: PendingWin): { type: 'task' | 'secret_
   return {
     type: win.checkpoint.taskType,
     model: { id: win.checkpoint.taskId, name: card.name, coin_url: card.coin_url ?? null, coins: card.coins ?? 0,
-      experience: card.experience ?? 0, ticket_cost: 1, times_completed: 1 },
+      experience: card.experience ?? 0, ticket_cost: win.attempt.ticket_cost, times_completed: 1,
+      ...(typeof card.park_id === 'number' ? { park_id: card.park_id } : {}) },
   };
 }

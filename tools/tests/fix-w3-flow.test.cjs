@@ -187,7 +187,7 @@ test('T033 a saved try the server says was won comes back as its win card; lost 
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /if \(!open \|\| flowState !== 'claim-error' \|\| proofRejected\)/, 'Checking your score asks again by itself');
   assert.match(modal, /card: \{ name: taskName, coin_url:/, 'the coin card rides in the checkpoint');
-  assert.match(read('src/components/RedeemModal.tsx'), /void findPendingWin\(player\.id\)/);
+  assert.match(read('src/components/RedeemModal.tsx'), /void findPendingWin\(player\.id, undefined, park\?\.id \?\? null\)/);
 });
 
 /* T037, T065: a ride win plays as one coin moment. */

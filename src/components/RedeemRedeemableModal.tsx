@@ -763,7 +763,9 @@ export default function RedeemRedeemableModal({
       ...(crew ? { crew } : {}),
       // The coin's card rides along (T033): a win whose answer was lost can still show its card from the map.
       card: { name: taskName, coin_url: (redeemable?.model as TaskType | undefined)?.coin_url ?? null,
-        coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience },
+        coins: (redeemable?.model as TaskType | undefined)?.coins, experience: (redeemable?.model as TaskType | undefined)?.experience,
+        // P19: the park whose map started it; its win card never comes back on another park's map.
+        ...(park?.id ? { park_id: park.id } : {}) },
     };
     redealStartRef.current = false;
     try {
@@ -838,7 +840,7 @@ export default function RedeemRedeemableModal({
     } finally {
       spendingRef.current = false;
     }
-  }, [location, redeemable, player?.id, taskType, taskId, taskName, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint]);
+  }, [location, redeemable, player?.id, taskType, taskId, taskName, applyAttemptState, playSound, refreshPlayer, clearAttemptCheckpoint, park?.id]);
 
   // T038: Picture games turned on from the Beat the Buzzer card at this try's start (a child who cannot read
   // yet): the same attempt is dealt again as a picture game (a new request id, picture_only; the server swaps
