@@ -74,3 +74,17 @@ test('P20 no pack and no VIP line inside any win card', () => {
   const hits = execSync("grep -rln \"placement=\\\"first_win\\\"\\|placement=\\\"win_vip\\\"\" src || true").toString().trim().split('\n').filter(Boolean);
   assert.deepEqual(hits, ['src/screens/MoneyPreviewScreen.tsx']);
 });
+
+test('P14 the coin card names the Parts already saved for a coin not won, only from the server', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const m = loadTs('src/components/tickets/coinCardPriceModel.ts');
+  const base = { game: 'tap', price: 3, winParts: 4, arcade: true };
+  assert.deepEqual(JSON.parse(JSON.stringify(m.coinCardPrice({ ...base, partsWaiting: 3 }).waiting)), { parts: 3, text: '3 Parts saved. Win it to grow it.' });
+  assert.equal(m.coinCardPrice({ ...base, partsWaiting: 1 }).waiting.text, '1 Part saved. Win it to grow it.');
+  assert.equal(m.coinCardPrice({ ...base, partsWaiting: 0 }).waiting, null, 'none saved: no line');
+  assert.equal(m.coinCardPrice(base).waiting, null, 'today\'s server sends no field: no line');
+  assert.equal(m.coinCardPrice({ ...base, partsWaiting: 'x' }).waiting, null);
+  const view = read('src/components/tickets/CoinCardPrice.tsx');
+  assert.match(view, /\{model\.waiting && <View style=\{styles\.waiting\}[^]*?<GameIcon name="parts"/);
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /partsWaiting: \(cardModel as \{ parts_waiting\?: unknown \} \| null \| undefined\)\?\.parts_waiting/);
+});

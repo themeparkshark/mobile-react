@@ -50,6 +50,11 @@ export default function CoinCardPrice({ model, held, coinUri }: {
         </View>
       </View>}
     </View>
+    {/* P14: Parts already saved for this coin (from its line, or a lost try) wait in its slot until the win. */}
+    {model.waiting && <View style={styles.waiting} accessible accessibilityLabel={model.waiting.text}>
+      <GameIcon name="parts" size={22} />
+      <Text style={styles.waitingText}>{withNumberFont(model.waiting.text)}</Text>
+    </View>}
     {model.price != null && <View style={styles.price}>
       <TicketPips price={model.price} held={held} size="card" showNumber tone="onDark" />
     </View>}
@@ -76,6 +81,8 @@ const styles = StyleSheet.create({
   prizeArt: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 30 },
   coin: { width: 28, height: 28 },
   prizeNum: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
+  waiting: { flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'stretch', justifyContent: 'center' },
+  waitingText: { fontFamily: FONT.body, fontSize: 15, color: BRAND.white, flexShrink: 1 },
   price: { alignItems: 'center' },
   leaves: { fontFamily: FONT.body, fontSize: 15, color: BRAND.white },
 });

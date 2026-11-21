@@ -1341,7 +1341,9 @@ export default function RedeemRedeemableModal({
   const cardPrice = coinCardPrice({ game: redeemable?.deal?.game ?? null, price: cardModel?.ticket_cost,
     winParts: cardModel?.ride_parts_reward ?? null, arcade,
     leavesOn: cardModel?.limited?.active ? limitedDayLabel(cardModel.limited.ends_on ?? null) : null,
-    boards: redeemable?.deal?.game === 'memory' ? cardTries?.shells ?? null : null });
+    boards: redeemable?.deal?.game === 'memory' ? cardTries?.shells ?? null : null,
+    // P14: the server's parts_waiting for a coin not won yet (S21); missing on today's server, so no line.
+    partsWaiting: (cardModel as { parts_waiting?: unknown } | null | undefined)?.parts_waiting });
   // T7: Get Tickets. The arcade server says which free ways work right now (ticket_sources); today's server sends
   // none, so the rows fall back to the Stamp Book read and the line Ticket switch.
   const ticketWays = getTicketsRows({ price: ticketCost > 0 ? ticketCost : null, tickets: playerTickets, sources: ticketSources,

@@ -4,6 +4,7 @@
  *   - Win: the coin and its Parts (1, 2 or 4); Lose: its Parts (the price, arcade server only)
  *   - the price as Ticket pictures with the number beside them for grown-ups
  *   - a limited coin's leave date, as a date (never a countdown)
+ *   - P14: the Parts already saved for this coin (the server's parts_waiting), "3 Parts saved. Win it to grow it."
  * Nothing is guessed: no dealt game hides the game row, no served price hides the pictures.
  */
 import { servedTicketPrice } from './ticketPipsModel';
@@ -21,6 +22,8 @@ export interface CoinCardPriceInput {
   readonly leavesOn?: string | null;
   /** Boards in one game (Memory Match deals 3), from the server's deal. */
   readonly boards?: number | null;
+  /** P14: Parts the player holds for this coin before winning it (task.parts_waiting); missing hides the row. */
+  readonly partsWaiting?: unknown;
 }
 
 export interface CoinCardPrice {
@@ -31,6 +34,16 @@ export interface CoinCardPrice {
   readonly leaves: string | null;
   /** "One game, 3 boards" with one picture per board (T9), or null for a one-board game. */
   readonly boards: { readonly count: number; readonly text: string } | null;
+  /** P14: Parts already saved in this coin's slot, or null (none, or a server that does not send them). */
+  readonly waiting: { readonly parts: number; readonly text: string } | null;
+}
+
+/** P14 (bug 4, 23): the coin card's saved Parts line, from the server's parts_waiting only (never guessed). */
+export function partsWaitingLine(value: unknown): { parts: number; text: string } | null {
+  const n = typeof value === 'number' ? value : typeof value === 'string' && value.trim() !== '' ? Number(value) : NaN;
+  if (!Number.isFinite(n) || n < 1) return null;
+  const parts = Math.floor(n);
+  return { parts, text: `${partsWord(parts)} saved. Win it to grow it.` };
 }
 
 const partsWord = (n: number) => `${n} Part${n === 1 ? '' : 's'}`;
@@ -48,5 +61,6 @@ export function coinCardPrice(input: CoinCardPriceInput): CoinCardPrice {
     leaves: input.leavesOn ? `Leaves ${input.leavesOn}` : null,
     boards: typeof input.boards === 'number' && input.boards > 1
       ? { count: Math.min(5, Math.floor(input.boards)), text: `One game, ${Math.min(5, Math.floor(input.boards))} boards` } : null,
+    waiting: partsWaitingLine(input.partsWaiting),
   };
 }
