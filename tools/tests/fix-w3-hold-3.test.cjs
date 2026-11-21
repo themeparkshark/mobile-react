@@ -187,7 +187,7 @@ test('T137: the O2H face is explained where it is first seen: the WIN card and t
   assert.equal(facts.coinFaceNote('Haunted Mansion', 8), null, 'a face that reads fine gets no extra line');
   const card = strip(read('src/components/RedeemRedeemableModal.tsx'));
   assert.match(card, /const faceNote = redeemable\?\.type === 'task' \? coinFaceNote\(taskName, park\.id\) : null;/);
-  assert.match(card, /pulse\s*\/>\s*(\{\}\s*)?\{isTaskType && !!faceNote && <Text style=\{styles\.faceNote\}/);
+  assert.match(card, /pulse\s*\/>\}?\s*(\{\}\s*)?\{isTaskType && !!faceNote && <Text style=\{styles\.faceNote\}/);
   const slot = strip(read('src/components/UnfoundCoinModal.tsx'));
   assert.match(slot, /<RideFactLine rideName=\{task\.name\} parkId=\{parkId\} onDark/);
   assert.match(strip(read('src/screens/ParkScreen.tsx')), /<UnfoundCoinModal task=\{task\}[\s\S]{0,200}parkId=\{Number\(park\)\}/);
