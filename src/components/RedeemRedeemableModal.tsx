@@ -1348,7 +1348,7 @@ export default function RedeemRedeemableModal({
   // none, so the rows fall back to the Stamp Book read and the line Ticket switch.
   const ticketWays = getTicketsRows({ price: ticketCost > 0 ? ticketCost : null, tickets: playerTickets, sources: ticketSources,
     stampTickets: (claimable ?? []).reduce((sum, source) => sum + source.tickets, 0), rideHasLine: lineRide,
-    queueTicketsOn, affordableNear: null, canPick: taskType === 'task' && taskId != null && guideTarget?.taskId !== taskId,
+    queueTicketsOn, affordableNear: null, canPick: taskType === 'task' && taskId != null && guide.plan() !== taskId,
     storeOn: storeAvailable() && !previewOnly, arcade });
   const onGetTicketsRow = (kind: GetTicketsRowKind) => {
     pressTrace('card.ticketWays', () => kind);
@@ -1721,6 +1721,8 @@ export default function RedeemRedeemableModal({
                 taskName={taskName}
                 preferredGame={selectedGame}
                 attemptSeed={attemptRef.current?.seed}
+                // The began mark at the game's own GO (app-parts round-start), so a how-to card is never the start.
+                onRoundStart={sendBegan}
                 rewardMode="task-attempt"
                 // T060 (play-teach): the coin being played for, so the game's HUD shows its own coin art.
                 coinImageUrl={coinUri ?? undefined}
