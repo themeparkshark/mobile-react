@@ -176,3 +176,21 @@ test('P14: an unwon slot wears the server\'s parts_waiting badge (S21); a missin
   assert.equal(M.partsWaiting({}), 0, 'today\'s server: no badge');
   assert.equal(M.partsWaiting({ parts_waiting: 0 }), 0, 'won: the Parts are the coin\'s own');
 });
+
+test('P11: Still in line while away for 4 more minutes ends the wait quietly; back in the line zone it never does', () => {
+  const S = loadTs('src/services/lineplay/rideStep.ts');
+  const zone = { latitude: 33.8121, longitude: -117.919, radiusMeters: 80 };
+  const away = { latitude: 33.8121 + 300 / 111320, longitude: -117.919 };
+  const inside = { latitude: 33.8121 + 20 / 111320, longitude: -117.919 };
+  const at = 1_000_000;
+  assert.equal(S.STILL_IN_LINE_AWAY_MS, 240_000);
+  assert.equal(S.stillInLineTimedOut({ answeredAt: at, now: at + 239_000, here: away, zone }), false);
+  assert.equal(S.stillInLineTimedOut({ answeredAt: at, now: at + 240_000, here: away, zone }), true);
+  assert.equal(S.stillInLineTimedOut({ answeredAt: at, now: at + 600_000, here: inside, zone }), false, 'still in line for real');
+  assert.equal(S.stillInLineTimedOut({ answeredAt: null, now: at + 600_000, here: away, zone }), false, 'nobody said Still in line');
+  assert.equal(S.stillInLineTimedOut({ answeredAt: at, now: at + 600_000, here: null, zone }), false, 'no fix: never ends on a guess');
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /if \(stillInLineTimedOut\(\{ answeredAt: stillInLineAt\.current, now: Date\.now\(\), here, zone \}\)\) \{\n\s+stillInLineAt\.current = null;\n\s+session\.beginEnding\(false, 'left_queue'\);/);
+  // I left the line: no ride logged (endNow(false)), the Parts stay.
+  assert.match(screen, /if \(state !== 'complete'\) void session\.endNow\(false\)\.catch\(finishFailed\);/);
+});
