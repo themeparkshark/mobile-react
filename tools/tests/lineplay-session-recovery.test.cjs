@@ -71,6 +71,7 @@ function makeHarness(saved, server, chapter = null, readResponse = null, questSu
     './bonusRounds': require('./helpers/lineplay-bonus-rounds.cjs'),
     './triviaDeck': { primeTriviaDeck: async (...args) => { calls.triviaPrimed.push(args); } },
     './triviaHistory': { primeTriviaHistory: async (...args) => { (calls.triviaHistoryPrimed ??= []).push(args); } },
+    './lineStatus': require('./helpers/line-status.cjs'),
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(JSON.parse(JSON.stringify(value))); },

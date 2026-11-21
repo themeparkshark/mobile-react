@@ -22,6 +22,7 @@ vm.runInNewContext(code, {
       startTaskAttempt: async (...args) => { calls.start.push(args); return { attempt: { id: 123, status: 'started' } }; },
     };
     if (name === './began') return { flushBegan: async () => { calls.flush = (calls.flush ?? 0) + 1; }, beganHere: id => id === 999 };
+    if (name === './lineStatus') return require('./helpers/line-status.cjs');
     if (name === './checkpoint') return {
       writeTaskAttemptCheckpoint: async value => {
         calls.write.push(value);

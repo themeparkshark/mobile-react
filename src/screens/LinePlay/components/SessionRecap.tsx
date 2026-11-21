@@ -31,6 +31,8 @@ import { parkDayLine, recapRows, type RecapRewardsInput } from '../../../service
 import type { RecapGo } from '../../../services/lineplay/rideStep';
 import { UpperText } from '../../../ui/upper';
 import { recapCoinLine } from '../../../services/lineplay/waitScreen';
+import { coinPlayableNow, LINE_WORDS, savedPartsLine } from '../../../services/lineplay/lineStatus';
+import { useLineStatus } from '../../../services/lineplay/useLineStatus';
 
 const QUEUE_STAMP_IMAGE = require('../../../../assets/images/stamps/stamp-09.png');
 const QUEUE_RECAP_SHARK = require('../../../../assets/images/screens/lineplay/queue-recap-shark.png');
@@ -237,6 +239,12 @@ export default function SessionRecap({
   const leftQueue = waitTimed && endReason === 'left_queue';
   // "I left the line" (manual) is a wrapped-up wait too, never "time played". Games only is neither.
   const wrappedUp = waitTimed && (leftQueue || endReason === 'manual');
+  // The server's word on this wait: it moved to another ride (one line at a time), or the ride is resting.
+  const lineStatus = useLineStatus();
+  const moved = lineStatus.movedToAnotherLine;
+  // Bug 22: "Win it on your way out" only when the map will offer PLAY (ride open, coin not won, still here).
+  const coinPlayable = coinPlayableNow({ coinMissing: coinState === 'unowned', status: lineStatus,
+    leftLine: endReason === 'left_queue' || endReason === 'manual' });
   const enter = (index: number) => reducedMotion ? undefined : FadeInDown.delay(420 + index * 90).springify().damping(14);
   let stat = 0;
   const shownStats = recapStats({ activityCount, earnedEnergy, experience, partsCount, ticketsEarned, rewardsConfirmed,
@@ -248,7 +256,7 @@ export default function SessionRecap({
     <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.recapCard, { paddingBottom: FOOTER_CLEARANCE }]}>
       <LinearGradient colors={['#13a8e9', '#0879ca', '#0768b9']} style={styles.recapHero}>
         <View style={styles.recapHeroCopy}>
-          <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : wrappedUp ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
+          <Text style={styles.recapKicker}>{rideUp ? 'YOUR RIDE’S UP!' : wrappedUp || moved ? 'WAIT WRAPPED UP' : 'LINEPLAY COMPLETE'}</Text>
           <Text style={styles.recapRide} numberOfLines={2}>{rideName}</Text>
           {/* The wait is said once: the timed wait against the sign when there is one, else the minutes. */}
           {!waitTimed ? (
@@ -266,7 +274,7 @@ export default function SessionRecap({
             <>
               <Text style={styles.recapTime} accessibilityLabel={`${wholeMinutes} minutes`}>
                 {minutes} min</Text>
-              <Text style={styles.recapSub}>{rideUp || wrappedUp ? 'in line, all saved' : 'time played'}</Text>
+              <Text style={styles.recapSub}>{rideUp || wrappedUp || moved ? 'in line, all saved' : 'time played'}</Text>
             </>
           )}
         </View>
@@ -307,7 +315,30 @@ export default function SessionRecap({
         </Animated.View>
       )}
 
-      {!waitTimed && (
+      {moved && (
+        // Bug 13: another line started for this player, so this wait ended there. Plain words, what it kept below.
+        <Animated.View entering={enter(0)} style={styles.keepsake} accessible
+          accessibilityLabel={`${LINE_WORDS.movedTitle} ${LINE_WORDS.movedBody}`}>
+          <View style={styles.keepsakeBadge}><GameIcon name="line" size={34} /></View>
+          <View style={styles.keepsakeCopy}>
+            <Text style={styles.keepsakeTitle}>{LINE_WORDS.movedTitle}</Text>
+            <Text style={styles.keepsakeHint}>{LINE_WORDS.movedBody}</Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {!waitTimed && lineStatus.rideResting && (
+        <Animated.View entering={enter(0)} style={styles.keepsake} accessible
+          accessibilityLabel={`${LINE_WORDS.restingTitle} ${LINE_WORDS.restingBody}`}>
+          <View style={styles.keepsakeBadge}><GameIcon name="line" size={34} /></View>
+          <View style={styles.keepsakeCopy}>
+            <Text style={styles.keepsakeTitle}>{LINE_WORDS.restingTitle}</Text>
+            <Text style={styles.keepsakeHint}>{LINE_WORDS.restingBody}</Text>
+          </View>
+        </Animated.View>
+      )}
+
+      {!waitTimed && !lineStatus.rideResting && (
         // Honest about the wait: nothing was timed away from the line, so nothing claims it was.
         <Animated.View entering={enter(0)} style={styles.keepsake} accessible
           accessibilityLabel="Wait not timed. Your wait counts only in the ride's line.">
@@ -366,7 +397,7 @@ export default function SessionRecap({
           )}
           <Text style={styles.goTitle}>{go.label}</Text>
           {coinState === 'unowned' && partsCount > 0 && (
-            <Text style={styles.coinNextBody}>Parts are saved for this coin. Win it on your way out.</Text>
+            <Text style={styles.coinNextBody}>{savedPartsLine(coinPlayable)}</Text>
           )}
           <GameButton label={go.button} icon={go.kind === 'level_up' ? 'coin' : go.kind === 'shelf' ? 'coins' : 'arrow'}
             fullWidth onPress={onGo} style={styles.goButton} accessibilityLabel={go.label} />

@@ -22,6 +22,8 @@ import { bonusDoneToday, nextBonusSeconds, ringInfoCopy, ringPill, visiblePips,
 import { detailsSignLine, minutesWords, waitSourceHint, waitStamps, type WaitStamp } from '../../../services/lineplay/waitScreen';
 import WaitStampBadge from './waitscreen/WaitStampBadge';
 import LineTicketFill from './LineTicketFill';
+import { coinPlayableNow, lineStatusWords } from '../../../services/lineplay/lineStatus';
+import { useLineStatus } from '../../../services/lineplay/useLineStatus';
 
 /** A detail line with its art, never an emoji. */
 function HintLine({ icon, children }: { icon: GameIconName; children: string }) {
@@ -158,8 +160,12 @@ export function calmPartsLine(input: { elapsedSeconds: number; earned: number; i
   return `${inLine} · first Part at ${Math.max(1, Math.round(input.intervalSeconds / 60))} min`;
 }
 
-/** No coin yet: the line's Parts wait in its slot (core loop must-fix 8). */
+/**
+ * No coin yet: the line's Parts wait in its slot (core loop must-fix 8). The promise to win it on the way out is
+ * made only when the map will offer PLAY (bug 22, lineStatus.coinPlayableNow); otherwise COIN_SAVED_LINE.
+ */
 export const COIN_MISSING_LINE = 'Parts are saved for this coin. Win it on your way out.';
+export const COIN_SAVED_LINE = 'Its Parts are saved in its slot.';
 
 /**
  * Details under the coin hero: at most three short lines (the sign's time, your
@@ -347,11 +353,16 @@ export default function WaitCard({
   const atSessionCap = potentialParts >= sessionPartCap;
   const atDailyCap = partsRemainingToday === 0;
   const atCap = atSessionCap || atDailyCap;
+  // The server's line answers in kid words (closed ride, coin at its top look, the caps, a closed-app gap).
+  const lineStatus = useLineStatus();
+  const statusWords = completed ? null : lineStatusWords(lineStatus, {
+    atDailyCap: rewardTrackingAvailable && atDailyCap, atSessionCap: rewardTrackingAvailable && atSessionCap, ticketAvailable });
+  const coinPlayable = coinPlayableNow({ coinMissing, status: lineStatus, lineRewardsReady });
   const earnedLabel = `${creditedParts ?? 0} earned Part${creditedParts === 1 ? '' : 's'}`;
   const entranceAgeMinutes = entranceWaitObservedAt == null ? null :
     Math.max(0, Math.floor((Date.now() - entranceWaitObservedAt) / 60_000));
   const entranceFresh = entranceAgeMinutes != null && entranceAgeMinutes < 10;
-  const ringProgress = !rewardTrackingAvailable ? 0
+  const ringProgress = !rewardTrackingAvailable || lineStatus.coinAtTop || lineStatus.rideResting ? 0
     : atCap ? 1 : Math.max(0, Math.min(1, countdown.progressSeconds / interval));
   const earned = creditedParts ?? 0;
   // Marathon and Night marks live in Details, not on the coin. Only worked out while Details is open.
@@ -369,7 +380,7 @@ export default function WaitCard({
   // Games still work everywhere; say plainly when this ride pays no Parts.
   const noPartsHere = !completed && !rewardTrackingAvailable && (lineRewardsReady === false || rewardUnavailable);
   // One plain status line; the fine print lives behind the details toggle.
-  const headline = completed ? 'Wait complete' : paused
+  const headline = statusWords && !paused ? statusWords.headline : completed ? 'Wait complete' : paused
     ? 'Paused'
     : !rewardTrackingAvailable
       ? lineRewardsReady === false || rewardUnavailable ? 'No Parts here. Play anytime!'
@@ -380,7 +391,7 @@ export default function WaitCard({
             // No coin yet: the same calm line, with the Parts saved for this coin; "Win it on your way out" is
             // in Details and the recap.
             : calmPartsLine({ elapsedSeconds, earned, intervalSeconds: interval, coinMissing });
-  const subline = completed ? 'Your game recap is ready below.' : paused
+  const subline = statusWords && !paused ? statusWords.subline : completed ? 'Your game recap is ready below.' : paused
     ? pauseReason === 'manual' ? 'Time near the ride still counts. Tap play when you’re ready.' : 'Time near the ride still counts.'
     : !rewardTrackingAvailable
       ? lineRewardsReady === false || rewardUnavailable
@@ -394,13 +405,14 @@ export default function WaitCard({
         : countdown.needsCheck ? 'Keep playing. Stay near the ride to keep earning.'
           : countdown.checking ? 'Keep playing. It shows up soon.'
           // No coin yet: the card's one line counts the Parts saved; Details says where they go.
-          : coinMissing ? COIN_MISSING_LINE
+          : coinMissing ? (coinPlayable ? COIN_MISSING_LINE : COIN_SAVED_LINE)
             : 'Stay near the ride to earn more Parts.';
 
   // With the coin hero the one line already says it ("In line 3 min · first Part at 10 min"), so Details
   // never repeats it. A missing coin keeps its own sentence on the card and the minutes go to Details.
   /** The card's one line is the calm line itself (minutes and Parts): nothing is added to it or read twice. */
-  const calmLine = rewardTrackingAvailable && !completed && !paused && !atCap && !countdown.needsCheck && !countdown.checking;
+  const calmLine = rewardTrackingAvailable && !completed && !paused && !atCap && !countdown.needsCheck && !countdown.checking &&
+    !statusWords;
   // A missing coin's Details still says where its Parts go (the one sentence that is not on the card).
   const sublineInHeadline = Boolean(hero) && calmLine && !coinMissing;
 
@@ -439,8 +451,11 @@ export default function WaitCard({
           {hero && rewardTrackingAvailable ? null : !rewardTrackingAvailable ? <GameIcon name="line" size={34} />
             : <Image source={require('../../../../assets/images/ride-parts.png')} style={styles.compactGem} />}
           <View style={styles.compactCopy} accessible accessibilityLabel={compactCopyLabel({ hero: hero != null, earned, headline, subline: calmLine ? '' : subline })}>
-            <KidText style={styles.compactHeadline} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${
-              !hero && rewardTrackingAvailable && !coinMissing && !calmLine ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>
+            {/* A server line answer is two short sentences said together, never cut to one line. */}
+            {statusWords && !paused ? <KidText style={styles.compactHeadline} numberOfLines={2} adjustsFontSizeToFit
+              minimumFontScale={0.85}>{`${headline} ${subline}`}</KidText>
+            : <KidText style={styles.compactHeadline} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.85}>{`${headline}${
+              !hero && rewardTrackingAvailable && !coinMissing && !calmLine ? ` · ${earned} Part${earned === 1 ? '' : 's'}` : ''}`}</KidText>}
             {/* One sentence: "No Parts here. Play anytime!" is the headline itself (no second note line). */}
             {bonusOn && <View style={styles.bonusRow}>
               {bonusDone ? <Text style={styles.bonusDone} numberOfLines={1}>Bonus Parts done at this ride today</Text>

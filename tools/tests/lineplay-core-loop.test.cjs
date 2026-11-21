@@ -53,7 +53,7 @@ test('no seconds countdown text anywhere in src/screens/LinePlay', () => {
     'In line 3 min · first Part at 10 min');
   const waitCard = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(waitCard, /calmPartsLine\(\{ elapsedSeconds, earned, intervalSeconds: interval, coinMissing \}\)/);
-  assert.match(waitCard, /: coinMissing \? COIN_MISSING_LINE/);
+  assert.match(waitCard, /: coinMissing \? \(coinPlayable \? COIN_MISSING_LINE : COIN_SAVED_LINE\)/);
   assert.match(waitCard, /const sublineInHeadline = Boolean\(hero\) && calmLine && !coinMissing;/);
   assert.doesNotMatch(card.ticketHint(true, 0, 600), /\d:\d\d/);
   assert.equal(card.fmt(450), '7 min');

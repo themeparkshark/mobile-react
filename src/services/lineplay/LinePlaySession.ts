@@ -60,6 +60,7 @@ import {
 import { getLinePlayChapter, type LinePlayChapter } from './chapters';
 import { recordAdaptiveEpisode, selectAdaptiveEpisode } from './episodeRotation';
 import { readCheckpoint, writeCheckpoint, removeCheckpoint, type LinePlayCheckpoint } from './checkpoint';
+import { CLOSED_GAP_MS, CLOSED_GAP_NOTICE_MS, countedWaitSeconds, publishLineStatus, type LineStatus } from './lineStatus';
 import { createCrewRelay, isCrewRelayProgress, type CrewRelayProgress } from './crewRelay';
 import { crewGridHasLine } from './crewGrid';
 import { activateQueueBackgroundHeartbeat, deactivateQueueBackgroundHeartbeat,
@@ -659,6 +660,16 @@ export class LinePlaySession {
   private rewardUnavailable = false;
   /** T081: this ride has no line (a show or walk-through): games only, no line story, no timed wait. */
   private notQueueRide = false;
+  /** RIDE_CLOSED on start (the live feed says closed): games only, the coin waits (bug 12). */
+  private rideResting = false;
+  /** parts_stop "coin_at_top": the coin is at its top look, the line pays no Parts (bug 17). */
+  private coinAtTop = false;
+  /** The server closed this wait because another line started (one line at a time, bug 13). */
+  private movedToAnotherLine = false;
+  /** Wall seconds the server did not count, at its last answer (null before the first answer of this wait). */
+  private uncountedSeconds: number | null = null;
+  /** When a closed-app gap longer than the server bridges was seen (bug 19). */
+  private closedGapAt: number | null = null;
   /** A fix inside the ride's line zone, or the server's own timed session, was seen this wait (T071). */
   private atLineSeen = false;
   /** A live fix outside the ride's line zone was seen this wait (and none inside yet). */
@@ -827,7 +838,21 @@ export class LinePlaySession {
     };
   }
 
+  /** What the wait card and recap must say about the server's line answers (lineStatus.ts). */
+  lineStatus(): LineStatus {
+    return {
+      waitId: this.startedAt != null ? this.startRequestId : null,
+      rideResting: this.rideResting,
+      coinAtTop: this.coinAtTop,
+      movedToAnotherLine: this.movedToAnotherLine,
+      closedGap: this.closedGapAt != null && Date.now() - this.closedGapAt < CLOSED_GAP_NOTICE_MS &&
+        (this.state === 'active' || this.state === 'paused'),
+      countedSeconds: this.serverSessionId ? this.verifiedEligibleSeconds : null,
+    };
+  }
+
   private emit(): void {
+    if (!this.disposed) publishLineStatus(this.lineStatus());
     const snap = this.snapshot();
     this.listeners.forEach((l) => {
       try {
@@ -890,7 +915,10 @@ export class LinePlaySession {
       entranceWaitObservedAt: this.entranceWaitObservedAt,
       entranceWaitChangeMinutes: this.entranceWaitChangeMinutes,
       extraRoundsAdded: this.extraRoundsAdded,
-      elapsedSeconds: this.computeElapsedSeconds(),
+      // Bug 20: once the wait ends, its minutes are the server's counted minutes, never wall time.
+      elapsedSeconds: (this.state === 'complete' || this.state === 'ending') && this.serverSessionId && !this.notQueueRide
+        ? countedWaitSeconds(this.computeElapsedSeconds(), this.rewards?.durationSeconds ?? this.verifiedEligibleSeconds)
+        : this.computeElapsedSeconds(),
       pauseReason: this.pauseReason,
       graceMsRemaining: this.computeGraceRemaining(),
       playlist: this.playlist,
@@ -1560,6 +1588,11 @@ export class LinePlaySession {
     this.notQueueRide = rideWithoutLine(ride.rideType);
     // No line, no line session: the server would refuse it (B04), so none is asked for.
     this.rewardUnavailable = this.notQueueRide;
+    this.rideResting = false;
+    this.coinAtTop = false;
+    this.movedToAnotherLine = false;
+    this.uncountedSeconds = null;
+    this.closedGapAt = null;
     this.atLineSeen = false;
     this.awaySeen = false;
     this.rewardConnectionIssue = null;
@@ -1801,6 +1834,17 @@ export class LinePlaySession {
     if (result.wait_screen !== undefined) this.waitScreen = result.wait_screen;
     if (result.credit !== undefined) this.serverCredit = result.credit ?? null;
     this.startedAt = Date.parse(result.started_at) || this.startedAt;
+    // Bug 17: the server says why this line pays no Parts (absent on older servers: pays as usual).
+    this.coinAtTop = result.parts_stop === 'coin_at_top';
+    // Bug 13: a wait still running here that the server already closed was ended by another line.
+    if (result.status === 'completed' && (this.state === 'active' || this.state === 'paused')) this.movedToAnotherLine = true;
+    // Bug 19: wall time the server did not count jumped by more than it bridges: the app was closed.
+    if (result.status === 'active' && this.startedAt) {
+      const uncounted = Math.max(0, Math.floor((Date.now() - this.startedAt) / 1000) - (result.eligible_seconds ?? 0));
+      const before = this.uncountedSeconds ?? (this.reopenedAt != null ? 0 : uncounted);
+      if (uncounted - before > CLOSED_GAP_MS / 1000) this.closedGapAt = Date.now();
+      this.uncountedSeconds = uncounted;
+    }
     if (result.status === 'completed') {
       void deactivateQueueBackgroundHeartbeat(result.session_id).catch(error =>
         console.warn('[LinePlaySession] could not stop background tracking:', error));
@@ -1882,11 +1926,13 @@ export class LinePlaySession {
         const response = (error as { response?: { status?: number; data?: { code?: string } } })?.response;
         if (!response) this.keepOfflineFix(sample);
         if (response?.status === 404 || response?.data?.code === 'LINE_REWARDS_UNAVAILABLE' ||
-            response?.data?.code === 'NOT_A_QUEUE_RIDE') {
+            response?.data?.code === 'NOT_A_QUEUE_RIDE' || response?.data?.code === 'RIDE_CLOSED') {
           this.rewardUnavailable = true;
           this.rewardConnectionIssue = null;
           // The server says this ride has no line (B04): no timed wait and no wait recap from here on.
           if (response?.data?.code === 'NOT_A_QUEUE_RIDE') this.notQueueRide = true;
+          // Bug 12: the live feed says the ride is closed: no line, no Parts; its coin waits (no timed wait).
+          if (response?.data?.code === 'RIDE_CLOSED') { this.rideResting = true; this.notQueueRide = true; }
         } else {
           this.rewardConnectionIssue = response?.data?.code === 'NOT_NEAR_RIDE' ? 'nearby'
             : response?.status === 401 || response?.status === 403 ? 'sign_in' : 'network';
@@ -2425,6 +2471,11 @@ export class LinePlaySession {
     this.adaptiveEpisodeRecorded = false;
     this.serverSessionId = null;
     this.rewardUnavailable = false;
+    this.rideResting = false;
+    this.coinAtTop = false;
+    this.movedToAnotherLine = false;
+    this.uncountedSeconds = null;
+    this.closedGapAt = null;
     this.atLineSeen = false;
     this.awaySeen = false;
     this.rewardConnectionIssue = null;

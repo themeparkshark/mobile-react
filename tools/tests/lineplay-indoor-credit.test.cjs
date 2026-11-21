@@ -157,6 +157,7 @@ function sessionHarness({ start, heartbeat, complete, saved = null, steps = null
     './bonusRounds': require('./helpers/lineplay-bonus-rounds.cjs'),
     './triviaDeck': { primeTriviaDeck: async () => {} },
     './triviaHistory': { primeTriviaHistory: async () => {} },
+    './lineStatus': require('./helpers/line-status.cjs'),
     './checkpoint': {
       readCheckpoint: async () => saved,
       writeCheckpoint: async value => { calls.written.push(plain(value)); },
@@ -394,4 +395,69 @@ test('L1 stays OTA-safe: no new native modules, the pedometer is the linked expo
   const pure = fs.readFileSync(path.join(root, 'src/services/lineplay/checkpointCredit.ts'), 'utf8');
   assert.doesNotMatch(pure, /^import /m, 'the crediting helpers stay pure');
   assert.doesNotMatch(pure + pedometer, /\u2014/, 'no em dashes');
+});
+
+// ── Ride Parts fixes (Nov 20, RIDE_PARTS_BUGS 12, 13, 17, 19, 20): the server's line answers reach the screens ──
+
+test('P4 bug 12: RIDE_CLOSED on start rests the ride: no timed wait, no Parts, the coin waits', async () => {
+  const closed = () => { const error = new Error('422'); error.response = { status: 422, data: { code: 'RIDE_CLOSED' } }; throw error; };
+  const { Session, clock } = sessionHarness({ start: closed });
+  const session = new Session();
+  await session.start(ride, fixAt(clock), 12);
+  await session.heartbeat(fixAt(clock));
+  assert.equal(session.lineStatus().rideResting, true);
+  assert.equal(session.snapshot().waitTimed, false, 'no wait screen minutes at a closed ride');
+  assert.equal(session.snapshot().rewardUnavailable, true);
+  session.dispose();
+});
+
+test('P4 bug 17: parts_stop coin_at_top reaches the wait card; a server without it pays as usual', async () => {
+  const { Session, clock, server } = sessionHarness({ start: () => server({ parts_stop: 'coin_at_top' }) });
+  const session = new Session();
+  await session.start(ride, fixAt(clock), 12);
+  assert.equal(session.lineStatus().coinAtTop, true);
+  const old = sessionHarness({ start: () => old.server() });
+  const plainSession = new old.Session();
+  await plainSession.start(ride, fixAt(old.clock), 12);
+  assert.equal(plainSession.lineStatus().coinAtTop, false);
+  session.dispose(); plainSession.dispose();
+});
+
+test('P4 bug 13 and P9 bug 20: a wait the server closed for another line ends with its counted minutes', async () => {
+  let moved = false;
+  const { Session, clock, server } = sessionHarness({
+    start: () => server(),
+    heartbeat: () => moved ? server({ status: 'completed', ended_at: new Date(clock.now).toISOString(), duration_seconds: 300,
+      eligible_seconds: 300, rewards: { ride_parts: [], bonus_energy: 0, experience: 0 } }) : server({ eligible_seconds: 60 }),
+  });
+  const session = new Session();
+  await session.start(ride, fixAt(clock), 12);
+  clock.now = T0 + MIN;
+  await session.heartbeat(fixAt(clock));
+  assert.equal(session.lineStatus().movedToAnotherLine, false);
+  moved = true;
+  clock.now = T0 + 20 * MIN;
+  await session.heartbeat(fixAt(clock));
+  assert.equal(session.snapshot().state, 'complete');
+  assert.equal(session.lineStatus().movedToAnotherLine, true);
+  assert.equal(session.snapshot().elapsedSeconds, 300, 'the recap minutes are the server count, not 20 wall minutes');
+  session.dispose();
+});
+
+test('P10 bug 19: a closed-app gap the server did not count says keep the app open, once', async () => {
+  let eligible = 0;
+  const { Session, clock, server } = sessionHarness({ start: () => server(), heartbeat: () => server({ eligible_seconds: eligible }) });
+  const session = new Session();
+  await session.start(ride, fixAt(clock), 12);
+  clock.now = T0 + 30_000; eligible = 30;
+  await session.heartbeat(fixAt(clock));
+  assert.equal(session.lineStatus().closedGap, false, 'a steady wait never shows it');
+  // The app was closed 4 minutes; the server bridged 90 seconds of it.
+  clock.now = T0 + 270_000; eligible = 120;
+  await session.heartbeat(fixAt(clock));
+  assert.equal(session.lineStatus().closedGap, true);
+  clock.now = T0 + 270_000 + 91_000; eligible = 211;
+  await session.heartbeat(fixAt(clock));
+  assert.equal(session.lineStatus().closedGap, false, 'it goes away on its own');
+  session.dispose();
 });
