@@ -117,6 +117,14 @@ export const LINEPLAY_INTRO_BODY: Readonly<Record<LinePartsState, string>> = {
   unknown: 'Play games while you wait. Look up when the line moves.',
 };
 
+/**
+ * The first Ride Part's line (Ride Parts bug 14): a coin already on the shelf gets "+1 Part for this coin!"; one not
+ * won yet (or not known yet) gets "Saved for this coin. Win it to use them." Never a level-up promise for an unwon coin.
+ */
+export function firstPartTipBody(coinOwned: boolean | null | undefined): string {
+  return coinOwned === true ? '+1 Part for this coin!' : 'Saved for this coin. Win it to use them.';
+}
+
 /** One line each. Finn says these once, at the moment they happen. */
 export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy>> = {
   // The map's shark finder button (FollowButton draws its own bubble from FOLLOW_COPY; this is the record).
@@ -132,8 +140,8 @@ export const TIP_COPY: Readonly<Record<Exclude<TipId, `game:${string}`>, TipCopy
   lineplay_intro: { title: 'Welcome to LinePlay',
     body: 'Stay near the ride and your time in line earns Ride Parts. Games are bonus fun. Look up when the line moves.' },
   // Fix w3 T132: a win can grant a Part before any wait does, so this tip never claims "first".
-  first_ride_part: { title: 'You earned a Ride Part!',
-    body: 'Ride Parts belong to this ride. Spend them with Energy to level up its coin on your shelf.' },
+  // Ride Parts bug 14: one short line, and never about leveling a coin the guest has not won (firstPartTipBody).
+  first_ride_part: { title: 'You earned a Ride Part!', body: 'Saved for this coin. Win it to use them.' },
   coin_card: { title: 'Level up your coin',
     body: 'Each level costs Energy and this ride\'s Ride Parts. Higher levels give the coin a new look.' },
   supplies_tab: { title: 'Welcome to Supplies',

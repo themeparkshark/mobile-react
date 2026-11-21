@@ -157,3 +157,12 @@ test('P3: PLAY IN LINE only where there is a line: a show, fountain, walk-throug
   assert.match(times, /const canStartSession = queuePlayPolicy\(entry\.status\)\.canPlay && lineRideType\(rideType\);/);
   assert.match(times, /rideType=\{rideTypes\.get\(item\.name\) \?\? null\}/);
 });
+
+test('P5: the first Ride Part tip is one short line and never promises leveling a coin the guest has not won', () => {
+  const H = loadTs('src/services/help/helpTopics.ts');
+  assert.equal(H.firstPartTipBody(true), '+1 Part for this coin!');
+  assert.equal(H.firstPartTipBody(false), 'Saved for this coin. Win it to use them.');
+  assert.equal(H.firstPartTipBody(null), 'Saved for this coin. Win it to use them.');
+  assert.doesNotMatch(H.TIP_COPY.first_ride_part.body, /Energy|level up/i);
+  assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /body=\{firstPartTipBody\(coinOwned\)\} \/>/);
+});

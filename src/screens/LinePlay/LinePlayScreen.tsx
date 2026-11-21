@@ -217,6 +217,7 @@ const tabLabel = tabWord;
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { lineNudgeReady, linePlayTipReady } from '../../services/help/tipGate';
+import { firstPartTipBody } from '../../services/help/helpTopics';
 import { chapterMissionIds, chapterPlayNow, railPageIcon, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
   PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastSpot, FIRST_LINEPLAY_ROUND, firstLinePlayCalm } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
@@ -2082,7 +2083,8 @@ export default function LinePlayScreen() {
       {/* Never shown before the card is measured, so not one frame sits at a guessed spot over Details. */}
       {/* While the page window has stepped aside (an iPhone SE reading long Details), a tip waits: it would sit over the rail's one button. */}
       <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && pagesShown && waitCardBottom != null} autoHideMs={0}
-        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip} />
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip}
+        body={firstPartTipBody(coinOwned)} />
 
       {/* Toasts land just under the wait card, in the crew row's slot: never over the card's numbers, its buttons or the header. */}
       <QueueToast message={toast} onDone={() => setToast(null)} top={toastSpot?.top} slim={toastSpot?.slim} />
