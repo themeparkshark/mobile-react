@@ -11,12 +11,12 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 const plain = value => JSON.parse(JSON.stringify(value));
 
 /* T097: coin levels, Energy and Ride Parts wait for rung 3. */
-test('T097 the first wins name coins, Tickets and XP only; Parts and Energy fly to the Shelf with no chip', () => {
+test('T097, Ride Parts bug 26: a fresh player\'s first win shows the Parts that landed (+N From your line); only Energy flies chipless', () => {
   const win = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': { taskHasLine: () => false } });
   const row = input => [...win.winRewardChips(input)].map(c => c.label);
   const firstWin = { coins: 10, tickets: 1, parts: 1, energy: 10, xp: 25, lineParts: 1, coinLevelsOpen: false, dailyOpen: false };
-  assert.deepEqual(row(firstWin), ['Shark Coins', 'Ticket', 'XP']);
-  assert.equal(win.silentParts(firstWin), 2);
+  assert.deepEqual(row(firstWin), ['Shark Coins', 'Ticket', 'Ride Part', 'From your line', 'XP']);
+  assert.equal(win.silentParts(firstWin), 0, 'every Part that lands has its chip');
   assert.equal(win.silentEnergy(firstWin), 10);
   // Merged w4: once coin levels open, the line's Parts keep their own quiet chip (T070, lane flow).
   assert.deepEqual(row({ ...firstWin, coinLevelsOpen: true }), ['Shark Coins', 'Ticket', 'Ride Part', 'From your line', 'Energy', 'XP']);
