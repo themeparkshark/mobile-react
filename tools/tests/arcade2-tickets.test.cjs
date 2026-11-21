@@ -102,3 +102,55 @@ test('P23 a won coin on the map wears its own level rim, and never a guessed lev
   assert.match(src, /styles\.tooltipCoinRim, rim && \{ borderColor: rim\.ring, backgroundColor: rim\.halo \}/);
   assert.match(src, /\{level != null && !isSelected && <View style=\{\[styles\.levelPip, \{ backgroundColor: coinTier\(level\)\.ring, borderColor: coinTier\(level\)\.ringDeep \}\]\}>/);
 });
+
+test('Get Tickets with no coin: one door for the top card and the header pill, no price, no ride picked', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const door = loadTs('src/components/tickets/getTicketsOpen.ts', { react: { useSyncExternalStore: () => false } });
+  assert.equal(door.openGetTickets(), false, 'no map up: the caller keeps its older way');
+  const release = door.registerGetTicketsHost();
+  assert.equal(door.openGetTickets(), true);
+  assert.equal(door.getTicketsIsOpen(), true);
+  door.closeGetTickets();
+  assert.equal(door.getTicketsIsOpen(), false);
+  door.openGetTickets(); release();
+  assert.equal(door.getTicketsIsOpen(), false, 'the host leaving closes it');
+  const ways = loadTs('src/components/tickets/getTicketsModel.ts');
+  const base = { price: null, tickets: 2, sources: { home: true, queue: true, queue_per_park_day: 2, line_tickets_left_today: 2, stamps_waiting_tickets: 5 },
+    stampTickets: null, rideHasLine: false, queueTicketsOn: true, affordableNear: null, canPick: false, storeOn: true, arcade: true };
+  const atPark = ways.getTicketsRows({ ...base, anyLine: true });
+  assert.deepEqual(JSON.parse(JSON.stringify(atPark.rows.map(r => r.kind))), ['claim', 'line', 'near', 'grownups']);
+  const line = atPark.rows.find(r => r.kind === 'line');
+  assert.equal(line.action, null, 'no LinePlay button: no ride is picked for the player');
+  assert.equal(line.text, 'Wait in any ride line: +1');
+  assert.equal(atPark.have, 'You have 2 Tickets', 'no price: no "of N"');
+  assert.equal(atPark.footer, 'Tomorrow at any park: +3');
+  assert.equal(ways.getTicketsRows(base).rows.some(r => r.kind === 'line'), false, 'away from a park: no line row');
+  assert.equal(ways.getTicketsRows({ ...base, arcade: false }).footer, null, 'today\'s server: no park gift line');
+  // The host sits on the map (RedeemModal), anchored like P13; the pill and the sheet share the one door.
+  const sheet = read('src/components/tickets/GetTicketsSheet.tsx');
+  assert.match(sheet, /<View collapsable=\{false\} pointerEvents="box-none" style=\{styles\.anchor\}>/);
+  assert.match(sheet, /<GetTicketsPanel price=\{null\}/);
+  assert.match(sheet, /\{wanted && <GrownUpGateSlot \/>\}/);
+  assert.match(sheet, /askGrownUp\(null\)\.then/, 'the shop row asks the grown-up gate first');
+  assert.match(read('src/components/RedeemModal.tsx'), /<GetTicketsSheet atPark=\{!!park\} \/>/);
+  assert.match(read('src/components/Topbar/Currency.tsx'), /if \(flyTarget === 'tickets' && openGetTickets\(\)\) return;/);
+});
+
+test('Supplies opened from Get Tickets lists the smallest pack that covers the shortfall first', () => {
+  const { loadTs } = require('./helpers/ts-module.cjs');
+  const plan = loadTs('src/services/money/suppliesPlan.ts');
+  const pack = (id, tickets, price) => ({ product_id: id, grants: { tickets }, available: true, section: 'tickets', price });
+  const packs = [pack('t5', 5, 0.99), pack('t12', 12, 1.99), pack('t30', 30, 3.99)];
+  const prices = { t5: { amount: 0.99 }, t12: { amount: 1.99 }, t30: { amount: 3.99 } };
+  const amountOf = id => plan.handoffTicketPack(packs, prices, id);
+  // Whatever the price shape, the order is by price then Tickets; read back the picked id.
+  assert.equal(amountOf(2).product_id, 't5', 'short 2: the 5 pack covers it');
+  assert.equal(amountOf(6).product_id, 't12', 'short 6: the smallest pack that covers it, not the cheapest');
+  assert.equal(amountOf(40).product_id, 't30', 'nothing covers it: the biggest gets closest');
+  assert.equal(amountOf(null).product_id, 't5', 'no coin: the smallest pack');
+  const params = loadTs('src/screens/StoreScreen/storeParams.ts');
+  assert.equal(params.storeParams({ focus: 'tickets', from: 'get_tickets', short: 2 }).short, 2);
+  assert.equal(params.storeParams({ focus: 'tickets', short: 2 }).short, undefined, 'only Get Tickets says a shortfall');
+  assert.match(read('src/screens/StoreScreen.tsx'), /<SuppliesShop focus=\{focus\} short=\{shortTickets\} \/>/);
+  assert.match(read('src/screens/StoreScreen/SuppliesShop.tsx'), /planSupplies\(\{ products: catalog\.products, prices, focus, wallet, priced, short \}\)/);
+});

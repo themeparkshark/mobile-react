@@ -326,7 +326,7 @@ export default function StoreScreen(props: NativeStackScreenProps<ParamListBase,
 }
 
 function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store'>) {
-  const { store, tab: initialTab, focus, focus_item: focusItem, secret: routeSecret } = storeParams(route?.params);
+  const { store, tab: initialTab, focus, focus_item: focusItem, secret: routeSecret, short: shortTickets } = storeParams(route?.params);
   const [tab, setTab] = useState<'gear' | 'supplies'>(initialTab ?? 'gear');
   const [currentStore, setCurrentStore] = useState<StoreType>();
   const [catalog, setCatalog] = useState<CatalogType>();
@@ -536,7 +536,7 @@ function StoreScreenBody({ route }: NativeStackScreenProps<ParamListBase, 'Store
       )}
       {sharkShop && tab === 'supplies' && (
         <View style={{ flex: 1, backgroundColor: BRAND.blue }}>
-          <SuppliesShop focus={focus} />
+          <SuppliesShop focus={focus} short={shortTickets} />
         </View>
       )}
       {status === 'away' && (

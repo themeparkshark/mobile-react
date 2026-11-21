@@ -9,6 +9,7 @@ import { AuthContext } from '../context/AuthProvider';
 import { useRung } from '../services/reveal/revealLadder';
 import { playBadge, stampClaimSources, type PlayBadge } from './rewards/challengeCopy';
 import { getStamps } from '../api/endpoints/me/stamps';
+import GetTicketsSheet from './tickets/GetTicketsSheet';
 import TicketGift from './rewards/TicketGift';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { nearbyOpportunityOpen, nearbyRideClosedReason, type NearbyClosedReason } from '../screens/ExploreScreen/mapOpportunityTiming';
@@ -300,6 +301,8 @@ export default function RedeemModal({
 
   return (
     <>
+      {/* The coinless Get Tickets sheet's one host on the map (the top card's GET TICKETS, the header Ticket pill). */}
+      <GetTicketsSheet atPark={!!park} />
       {redeemable && available && (
         <Animated.View style={entrance}>
           <Animated.View ref={pillRef} collapsable={false} style={{ transform: [{ scale: press }] }}

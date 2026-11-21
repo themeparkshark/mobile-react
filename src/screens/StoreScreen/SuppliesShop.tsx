@@ -152,7 +152,7 @@ function unavailableText(product: ShopProduct, holdCap: number | null): string |
   }
 }
 
-export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
+export default function SuppliesShop({ focus, short }: { focus?: SuppliesFocus; short?: number }) {
   const { player, refreshPlayer } = useContext(AuthContext);
   const { hasSeenTip, explain } = useHelp();
   const canBuy = storeAvailable();
@@ -253,7 +253,7 @@ export default function SuppliesShop({ focus }: { focus?: SuppliesFocus }) {
   const holdCap = catalog.ticket_hold_cap;
   const wallet = freshWallet(player, catalog.wallet);
   // What shows first and what waits under More (services/money/suppliesPlan.ts, tested).
-  const plan = planSupplies({ products: catalog.products, prices, focus, wallet, priced });
+  const plan = planSupplies({ products: catalog.products, prices, focus, wallet, priced, short });
   const sectionTitle = (key: 'tickets' | 'coins' | 'rescue') => key === 'rescue' ? 'Extra tries' : key === 'coins' ? 'Shark Coins'
     : catalog.sections.find(s => s.key === key)?.title ?? 'Tickets';
   const allPriced = catalog.products.filter(priced);

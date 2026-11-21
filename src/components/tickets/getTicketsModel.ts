@@ -37,6 +37,11 @@ export interface GetTicketsInput {
   /** The shop is available in this build. */
   readonly storeOn: boolean;
   readonly arcade: boolean;
+  /**
+   * The coinless sheet (top card, header pill) at a park: no ride is picked for the player, so the line row is a plain
+   * "any ride's line" fact with no button (the player chooses the ride).
+   */
+  readonly anyLine?: boolean;
 }
 
 export const TOMORROW_LINE = 'Tomorrow at any park: +3';
@@ -51,6 +56,8 @@ export function getTicketsRows(input: GetTicketsInput): { rows: GetTicketsRow[];
   const lineLeft = n(src?.line_tickets_left_today) ?? (input.queueTicketsOn ? 1 : 0);
   if (input.rideHasLine && lineLeft > 0) {
     rows.push({ kind: 'line', text: '+1 Ticket and its Ride Parts', action: 'LINEPLAY', a11y: '10 minutes in a ride line earns 1 Ticket and its Ride Parts.' });
+  } else if (input.anyLine && lineLeft > 0) {
+    rows.push({ kind: 'line', text: 'Wait in any ride line: +1', action: null, a11y: '10 minutes in any ride line earns 1 Ticket.' });
   }
   const steps = n(src?.trail_box_steps_left);
   if (steps != null && steps > 0) rows.push({ kind: 'trail', text: `${steps} steps to open: +1`, action: null, a11y: `${steps} more steps open a Trail Box with 1 Ticket.` });
