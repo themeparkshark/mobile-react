@@ -101,7 +101,7 @@ export function nearMeDistance(m: number | null): string | null {
 
 /** The row's second line: "120 m · Open, 25 min wait", "Closed right now", or just the distance. Same shape for every row. */
 export function nearMeLine(row: NearMeRow): string {
-  const status = row.status === 'open' ? row.wait != null ? `Open, ${row.wait} min wait` : 'Open'
+  const status = row.status === 'open' ? row.wait != null ? row.wait > 0 ? `Open, ${row.wait} min wait` : 'Open, no wait' : 'Open'
     : row.status === 'closed' ? 'Closed right now' : null;
   return [nearMeDistance(row.meters), status].filter(Boolean).join(' · ');
 }

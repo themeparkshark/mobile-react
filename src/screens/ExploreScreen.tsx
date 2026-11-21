@@ -1308,6 +1308,12 @@ export function ExploreScreenBody() {
     playableTaskId: playRideShown ? playableTaskId : null,
     adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
   });
+  // NEAR ME rows wear each coin's own art: today's map list carries none, so the trip goal's ride list supplies it.
+  const nearMeTasks = useMemo(() => {
+    const art: Record<number, string> = {};
+    for (const ride of tripGoalData?.rides ?? []) if (ride.coin_url) art[ride.task_id] = ride.coin_url;
+    return visibleTasks.map(task => (task.coin_url || !art[task.id] ? task : { ...task, coin_url: art[task.id] }));
+  }, [visibleTasks, tripGoalData?.rides]);
   // NEAR ME lists only coins not yet won here: the shelf's owned list plus any coin today's map marks as won.
   const nearMeOwned = useMemo(() => {
     const ids = new Set<number>(ownedTaskIdsFor(tripGoalData?.rides, park?.id ?? null));
@@ -2202,7 +2208,7 @@ export function ExploreScreenBody() {
           adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null}
           lineOffer={nextCoin.lineOffer ?? calloutLineOffer(queueRide, selectedTask?.id ?? null, nextCoin.target?.taskId ?? null, nextCoin.state)} />}
         {player && <NearMeSheet visible={!!nearMe} canPlayFirst={nearMe?.canPlay ?? false} playerId={player.id}
-          parkName={park.name ? parkLabel(park) : null} tasks={visibleTasks} ownedTaskIds={nearMeOwned} here={location ?? null}
+          parkName={park.name ? parkLabel(park) : null} tasks={nearMeTasks} ownedTaskIds={nearMeOwned} here={location ?? null}
           live={livePark} tickets={player.tickets ?? 0} onClose={() => setNearMe(null)}
           onPick={taskId => {
             setNearMe(null);
