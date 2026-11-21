@@ -236,7 +236,9 @@ test('T009: PLAY! rises on the GPS fix for the coin the player stands at; the se
   assert.equal(R.provisionalPlay({ ...base, here: north(10), failed: new Set([66]) }), null, 'a coin that failed today never rises');
   assert.equal(R.provisionalPlay({ ...base, here: north(10), tickets: 0 }), null, 'short of Tickets: wait for the server (free try badges)');
   const explore = read('src/screens/ExploreScreen.tsx');
-  assert.match(explore, /if \(playAnswerNear\(rangeAnswer, location\)\) return rangeAnswer;/);
+  // Ride Parts bug 1 (Nov 20): a coin the guest chose comes first (choosePlayCoin); otherwise the server's answer wins.
+  assert.match(explore, /const answerNear = playAnswerNear\(rangeAnswer, location\);/);
+  assert.match(explore, /if \(answerNear\) return rangeAnswer;/);
   assert.match(read('src/components/RedeemModal.tsx'), /provisional\?: boolean \}\)\.provisional\) setOpenedRedeemable\(redeemable\)/);
 });
 

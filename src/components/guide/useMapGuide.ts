@@ -15,7 +15,7 @@ import type { LivePark } from '../../api/endpoints/parks/live';
 import type { AdventureTicket, TripGoalData } from '../../api/endpoints/me/trip-goal';
 import { attentionGate, attentionQueue, autoOpenAllowed, guideBusy } from '../../screens/ExploreScreen/mapPresentationQueue';
 import { guide, playerChose } from '../../services/guide/nextCoin';
-import type { GuideAction } from '../../services/guide/guideCopy';
+import { whichCoinCopy, type GuideAction } from '../../services/guide/guideCopy';
 import { freeTrySignal } from '../../services/guide/freeTickets';
 import { useGuideFlags } from '../../services/guide/guideFlags';
 import { currentAppOpen, useRung } from '../../services/reveal/revealLadder';
@@ -58,6 +58,8 @@ export interface MapGuideInput {
   readonly parkLoaded: boolean;
   readonly homeLocationConfirmed: boolean;
   readonly setSelectedTask: (task: TaskType) => void;
+  /** Coins in PLAY! range when the guest picked none of them (choosePlayCoin): two or more and the card asks "Which coin?". */
+  readonly playChoices?: number;
 }
 
 export default function useMapGuide(input: MapGuideInput) {
@@ -143,7 +145,7 @@ export default function useMapGuide(input: MapGuideInput) {
     const model = playUp?.type === 'task' ? playUp.model as TaskType : null;
     return model && !visibleTasks.some(task => task.id === model.id) ? [...visibleTasks, model] : visibleTasks;
   }, [visibleTasks, playUp]);
-  const nextCoin = useNextCoinGuide({
+  const guideNow = useNextCoinGuide({
     enabled: !!player && !!park, ready: guideReady, tripGoalLoaded: !!tripGoalData, parkId: park?.id ?? null, parkName: park ? parkLabel(park) : null, location,
     tasks: guideTasks, live: livePark, adventure, adventureWonTaskId, dwellRideId: queueDwell?.rideId ?? null, dwellRideName: queueDwell?.rideName ?? null,
     starTaskIds: starRides, rushTaskIds, ownedTaskIds, levelUpTaskIds,
@@ -159,6 +161,13 @@ export default function useMapGuide(input: MapGuideInput) {
     parkGiftTickets: guideFlags.arcade_economy === true ? park?.welcome_tickets_granted ?? null : null,
     shelf: parkShelf,
   });
+  // Two or more coins here and none picked: the card asks "Which coin?" and PLAY! waits (Ride Parts bug 1).
+  const playChoices = input.playChoices ?? 0;
+  const guideParkName = park ? parkLabel(park) : null;
+  const nextCoin = useMemo(() => {
+    const copy = whichCoinCopy(guideNow.copy, guideNow.state, playChoices, guideParkName);
+    return copy === guideNow.copy ? guideNow : { ...guideNow, copy };
+  }, [guideNow, playChoices, guideParkName]);
   const guideShown = !!player && !!park;
   // Really at the park: in park mode AND within reach of one of its coins (or no reading yet). The place
   // check can keep a park after the player went home (a sticky server park), so tips such as "You're at

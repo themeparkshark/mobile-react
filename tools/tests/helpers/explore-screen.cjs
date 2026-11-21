@@ -157,7 +157,7 @@ exports.exploreScreen = function exploreScreen(options = {}) {
     '../components/guide/useWelcomeBack': { default: () => options.welcome ?? { daysAway: null, done: false, finish: () => undefined } },
     '../services/guide/nextCoin': { guide: { setTarget: (taskId, source) => guidePicks.push([taskId, source]),
       skipLineStory: () => guidePicks.push(['skip']), clearPick: () => guidePicks.push(['clear']), forPlayer: () => undefined,
-      current: () => null, subscribe: () => () => undefined },
+      current: () => null, plan: () => options.guidePlan ?? null, subscribe: () => () => undefined },
       // The real rule (Dustin, Nov 20): only a coin the player chose wears the map's pointer.
       playerChose: target => !!target && target.source !== 'guide' && !['win_card', 'lineplay_recap', 'ride_logged'].includes(target.source) },
     '../services/guide/freeTickets': freeTickets,
@@ -171,6 +171,8 @@ exports.exploreScreen = function exploreScreen(options = {}) {
       useWonCoinToday: () => options.coinToday !== false, useLadderVeteran: () => options.veteran === true },
     ...options.modules,
   };
+  // useMapGuide's card words are real too ("Which coin?" when two or more coins are here, Ride Parts bug 1).
+  if (!Object.hasOwn(modules, '../../services/guide/guideCopy')) modules['../../services/guide/guideCopy'] = guideCopy;
   // useMapGuide runs for real in the screen's realm; its own imports get the same stubs as the screen's.
   for (const [alias, key] of [['./useNextCoinGuide', '../components/guide/useNextCoinGuide'], ['./useWelcomeBack', '../components/guide/useWelcomeBack'],
     ['./guideCoins', '../components/guide/guideCoins'], ['../../services/guide/nextCoin', '../services/guide/nextCoin'],

@@ -26,6 +26,7 @@ export type GuideAction =
   | 'skip'          // Line story or souvenir: pick another coin (the guide moves on to the next one)
   | 'story'         // Goodbye: the shelf of the park you just left, with today's park story on top
   | 'near_me'       // NEAR ME: every coin not yet won, one identical row each (the player picks)
+  | 'which_coin'    // two or more coins here and none picked: one equal row each, the player picks which to play
   | 'get_tickets'   // the Get Tickets sheet (free ways first)
   | 'clear'         // the X on YOUR PICK: clear the player's own pick
   | 'ok';           // the arrive card's OK: the welcome is read
@@ -464,6 +465,22 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         shelfBar: ctx.shelfBar ?? null,
       });
   }
+}
+
+/** The card states a "Which coin?" ask may take over: nothing urgent of its own (no claim, no 0 Tickets, no line). */
+const WHICH_COIN_STATES: ReadonlySet<GuideState> = new Set<GuideState>(['pick', 'walk', 'here', 'resting']);
+
+/**
+ * Ride Parts bug 1 (Nov 20): two or more coins are in PLAY! range and the guest picked none of them. PLAY! waits, and
+ * the card asks which, naming no ride (every coin is the same size on the rows it opens). Fewer than two: unchanged.
+ */
+export function whichCoinCopy(copy: GuideCardCopy, state: GuideState, choices: number, parkName: string | null): GuideCardCopy {
+  if (!(choices > 1) || !WHICH_COIN_STATES.has(state)) return copy;
+  const kicker = (parkName ?? 'the park').toUpperCase();
+  const line = `${choices} coins are here. Pick one to play`;
+  const button: GuideButton = { label: 'PICK ONE', action: 'which_coin' };
+  return { kicker, title: 'Which coin?', line, button, secondary: null, dots: null, pointsAtPlay: false, badge: null, clear: null,
+    pips: null, shelfBar: null, howTo: false, a11y: `${kicker}. Which coin? ${line}. Button: ${button.label}` };
 }
 
 /** Retired (Nov 20): the resting card names no sight. Returns the card unchanged. */
