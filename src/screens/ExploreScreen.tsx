@@ -1,4 +1,5 @@
 import { parkLabel } from '../helpers/parkName';
+import { openGetTickets } from '../components/tickets/getTicketsOpen';
 import { homeLevelUpCoin, useCoinCollection } from '../context/CoinCollection';
 import type { CollectedRideCoin } from '../api/endpoints/me/ride-coins/show';
 import { useIsFocused, useNavigation, useRoute, type NavigationProp, type ParamListBase } from '@react-navigation/native';
@@ -1749,8 +1750,9 @@ export function ExploreScreenBody() {
       // "Which coin?": only the coins in range, one equal row each; the row the guest taps is the coin PLAY! plays.
       case 'which_coin': setNearMe({ canPlay: false, only: playChoiceIdsRef.current }); return;
       case 'get_tickets':
-        // Merged with app-tickets (Nov 20): their Get Tickets panel lives on the coin card a player is short at (it needs
-        // that coin's price); this top card names no coin, so it lists the free ways plainly, the arcade park gift included.
+        // fix1: the one coinless Get Tickets sheet (app-tickets, hosted on this map) opens; with no host up the free ways
+        // are listed plainly, the arcade park gift included.
+        if (openGetTickets()) return;
         gameAlert('Ways to get Tickets', [...needTicketLines(guideFlags.queue_tickets === true, guideFlags.ride_rescue_pass === true),
           ...(guideFlags.arcade_economy === true ? ['Tomorrow at any park: +3.'] : [])].join(' '),
           [{ text: 'NEAR ME', onPress: () => setNearMe({ canPlay: true }) }, { text: 'OK' }], { icon: 'ticket' });
