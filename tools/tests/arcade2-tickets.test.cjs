@@ -88,6 +88,9 @@ test('P14 the coin card names the Parts already saved for a coin not won, only f
   assert.equal(m.coinCardPrice({ ...base, partsWaiting: 'x' }).waiting, null);
   const view = read('src/components/tickets/CoinCardPrice.tsx');
   assert.match(view, /\{model\.waiting && <View style=\{styles\.waiting\}[^]*?<GameIcon name="parts"/);
+  // Short on Tickets the card shows Get Tickets in place of the prize rows: the saved line rides there too.
+  assert.match(read('src/components/RedeemRedeemableModal.tsx'), /onRow=\{onGetTicketsRow\} saved=\{cardPrice\.waiting\?\.text \?\? null\} \/>/);
+  assert.match(read('src/components/tickets/GetTicketsPanel.tsx'), /\{saved \? <View style=\{styles\.saved\}/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /partsWaiting: \(cardModel as \{ parts_waiting\?: unknown \} \| null \| undefined\)\?\.parts_waiting/);
 });
 

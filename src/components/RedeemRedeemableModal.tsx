@@ -1590,7 +1590,7 @@ export default function RedeemRedeemableModal({
                         {/* T7 (arcade plan): Get Tickets. Only the free ways that work right now, the grown-up row last. */}
                         {needTicket && <GetTicketsPanel price={ticketCost > 0 ? ticketCost : null} tickets={playerTickets} coinUri={arcade ? coinUri : null}
                           have={ticketWays.have} rows={ticketWays.rows} footer={ticketWays.footer}
-                          busy={claiming ? 'claim' : null} onRow={onGetTicketsRow} />}
+                          busy={claiming ? 'claim' : null} onRow={onGetTicketsRow} saved={cardPrice.waiting?.text ?? null} />}
                         {needTicket && <Pressable onPress={safeClose} accessibilityRole="button" accessibilityLabel={BACK_TO_MAP}
                           style={({ pressed }) => [styles.mapLink, pressed && { opacity: 0.7 }]} hitSlop={8}>
                           <GameIcon name="map" size={20} />
