@@ -49,6 +49,7 @@ import { getTicketsRows, type GetTicketsRowKind } from './tickets/getTicketsMode
 import { getTicketSources, type TicketSources } from '../api/endpoints/me/task-attempts';
 import { askGrownUp } from './GrownUpGate';
 import { noteArcadeAnswer, useArcadeEconomy } from './tickets/arcadeMode';
+import { noteShelfGift } from './tickets/shelfGift';
 import { beganHere, markBegan } from '../services/task-attempt/began';
 import { useHelp } from './help/HelpProvider';
 import { gameIntroTip } from '../services/help/helpTopics';
@@ -532,6 +533,8 @@ export default function RedeemRedeemableModal({
     setFirstCoinTicketReturned(!!attempt.first_coin_ticket_returned);
     setLostTicketCost(attempt.ticket_cost);
     if (attempt.status === 'lost' || attempt.status === 'expired') setLossFields(attempt);
+    // T5: the win answer's shelf gift, for the win card's bar (keyed by this attempt).
+    if (attempt.status === 'won') noteShelfGift(attempt.id, attempt.shelf_gift ?? null);
     setUsedRescuePass(!!attempt.rescue_pass);
     setRescueRetryAvailable(!!attempt.rescue_retry_available);
     setStartError(null);
@@ -1237,8 +1240,7 @@ export default function RedeemRedeemableModal({
     if (leavingWinRef.current) return;
     leavingWinRef.current = true;
     clearFinishedTry('Could not clear confirmed ride win:');
-    const target = guide.current();
-    if (button.kind === 'next' && target) guide.setTarget(target.taskId, 'win_card');
+    // T5 (arcade plan): the win card never points the guide at a ride (no setTarget from it).
     afterRewardsHidden.current = null;
     if (button.kind === 'line_story') {
       // The story is found while the card is still up (a short wait, never a blank map), then the first
@@ -1774,7 +1776,8 @@ export default function RedeemRedeemableModal({
         milestones={milestones}
         parkWins={parkWins}
         weekLine={weekWins}
-        nextTarget={guideTarget}
+        // T5 (arcade plan): no "Next coin" on the win card; its buttons are BACK TO MAP and SEE MY SHELF (postWinModel, C5).
+        nextTarget={null}
         wonTaskId={attemptRef.current?.task_id ?? taskId}
         adventureLineStory={lineStoryNext}
         onNextCoin={button => { void handleNextCoin(button); }}

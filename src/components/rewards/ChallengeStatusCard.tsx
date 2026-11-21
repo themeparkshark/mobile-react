@@ -51,7 +51,7 @@ export const RETRY_TAP_GUARD_MS = 800;
  */
 export { RESULT_INPUT_LOCK_MS } from './mashGuard';
 
-/** A small line under the buttons: what comes next ("Next coin: Tiki Room, 60 m"), with its picture. */
+/** A small line under the buttons, with its picture (never a ride the app picked, arcade plan T5). */
 export interface ChallengeFootnote {
   readonly icon: GameIconName;
   readonly text: string;

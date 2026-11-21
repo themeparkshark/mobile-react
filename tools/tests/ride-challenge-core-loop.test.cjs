@@ -500,7 +500,9 @@ test('exactly one primary and one secondary: NEXT COIN (or the Adventure\'s line
   assert.equal((card.match(/<YellowButton /g) ?? []).length, 1, 'one big button');
   assert.equal((card.match(/<TouchableOpacity /g) ?? []).length, 1, 'one quiet button');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /if \(button\.kind === 'next' && target\) guide\.setTarget\(target\.taskId, 'win_card'\);/, 'the guide is the one pointer');
+  // T5 (arcade plan, Nov 20 2026): the win card never points the guide at a ride; it gets no next target at all.
+  assert.doesNotMatch(modal, /guide\.setTarget\(target\.taskId, 'win_card'\)/);
+  assert.match(modal, /nextTarget=\{null\}/);
   assert.match(modal, /const ride = await storyWithin\(resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\),/);
 });
 

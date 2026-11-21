@@ -55,6 +55,9 @@ test('T230 the VIP line says this win\'s own numbers, and nothing for VIP or an 
     '../../services/money/vipNudge': { useVipNudge: () => false, markVipNudgeShown() {} },
     '../../services/money/vipPerks': { vipRideMultiplierNow: () => null, warmVipPerks: async () => undefined },
     '../../services/money/offers': loadTs('src/services/money/offers.ts', {}),
+    // T5 (arcade plan): the shelf gift bar leads the slot; today's server sends no gift, so it draws nothing here.
+    '../tickets/ShelfGiftBar': { default: 'ShelfGiftBar' },
+    '../tickets/shelfGift': { shelfGiftFor: () => null },
   });
   assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: false }), 'VIP doubles this: +60 Shark Coins, +50 XP');
   assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: true }), null);

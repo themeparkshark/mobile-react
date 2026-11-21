@@ -113,3 +113,22 @@ test('T9 Memory Match is one game of 3 boards, never tries per Ticket', () => {
     assert.doesNotMatch(read(file), /tries per Ticket|1 Ticket = /, file);
   }
 });
+
+test('T5 the win card: the shelf gift bar names no ride, +3 lands on the 5th coin, no Next coin and no setTarget', () => {
+  const gift = loadTs('src/components/tickets/shelfGift.ts');
+  const ninth = gift.shelfGiftLine({ won: 9, total: 40, next_at: 10, tickets: 3, paid_now: 0 });
+  assert.equal(ninth.line, '9 of 40 · 1 more: +3 Tickets');
+  assert.equal(ninth.paidNow, 0);
+  const fifth = gift.shelfGiftLine({ won: 5, total: 40, next_at: 10, tickets: 3, paid_now: 3 });
+  assert.equal(fifth.line, '5 of 40 · 5 more: +3 Tickets');
+  assert.equal(fifth.paidNow, 3);
+  assert.equal(gift.shelfGiftLine(null), null, 'today\'s server: no bar');
+  gift.noteShelfGift(901, { won: 10, total: 40, next_at: 15, tickets: 3, paid_now: 3 });
+  assert.equal(gift.shelfGiftFor(901).won, 10);
+  assert.equal(gift.shelfGiftFor(902), null, 'another win never shows this one');
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.doesNotMatch(modal, /setTarget\([^)]*'win_card'\)/);
+  assert.match(modal, /nextTarget=\{null\}/);
+  assert.match(read('src/components/rewards/offerSlots.tsx'), /\{gift && <ShelfGiftBar gift=\{gift\} flyKey=\{winKey\} \/>\}/);
+  assert.doesNotMatch(read('src/components/rewards/ChallengeStatusCard.tsx'), /Next coin:/);
+});
