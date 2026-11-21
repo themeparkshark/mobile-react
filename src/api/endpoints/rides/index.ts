@@ -22,6 +22,8 @@ export interface RideType {
     inversions?: number;
     year_opened?: number;
     manufacturer?: string;
+    /** The wait-times feed's id for this ride (themeparks.wiki); LinePlay matches feed rows by it. */
+    themeparks_id?: string;
   } | null;
   radius: number;
   ride_duration_minutes: number | null;

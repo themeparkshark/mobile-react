@@ -1,25 +1,26 @@
 /**
- * resolveRide: map a wait-times entry (name-keyed) to a numeric ride id.
+ * resolveRide: find the catalog ride (numeric ride id) a LinePlay entry means.
  *
- * The queue-times feed (WikiLiveEntry) is name-keyed with a string id from
- * themeparks.wiki; the in-line timer server API needs the app's numeric
- * ride_id. We resolve by normalized-name match against getRides(parkId), the
- * same strategy useRideDetection.buildWaitTimeMap uses. A short cache avoids
- * repeated row requests while still picking up reviewed coin links and ride
- * availability changed during a park day.
+ * Identity first, names last (P2): a coin finds its ride by rides.task_id, a
+ * wait-times row by the feed id the catalog keeps in metadata.themeparks_id.
+ * Names drift (curly apostrophes, "Jingle Cruise" in December, short coin
+ * labels like "Tiki Room"), so a name match is only the fallback for a server
+ * that serves no link. A short cache avoids repeated row requests while still
+ * picking up reviewed coin links and ride availability changed during a park day.
  */
 
 import { getRides, RideType } from '../../api/endpoints/rides';
 import type { RideContext } from './LinePlaySession';
 import { QUEUE_RIDE_TYPES } from '../../constants/queueRideTypes';
 import { lineZoneFor, type LineZone } from './lineZone';
+import { normalizeRideName, parkCoinIdByName, rememberParkCoins, type CoinRef } from './coinRideIndex';
 
 const QUEUE_TYPES = new Set<string>(QUEUE_RIDE_TYPES);
 
-const norm = (s: string) => s.toLowerCase().trim();
+const norm = normalizeRideName;
 
-/** Catalog lookup key for a ride or coin name. */
-export const normalizeRideName = norm;
+export { normalizeRideName, rememberParkCoins };
+export type { CoinRef };
 
 /** Legacy coin labels that clearly refer to one catalog ride in that park. */
 // ui-copy-allow(phrase): catalog lookup keys matched against ride names, never rendered.
@@ -27,8 +28,6 @@ const TASK_RIDE_ALIASES: Readonly<Record<number, Readonly<Record<string, string>
   1: {
     'world famous studio tour': 'studio tour',
     'forbidden journey': 'harry potter and the forbidden journey',
-    'mummy': 'revenge of the mummy - the ride',
-    'secret life of pets': 'secret life of pets: off the leash',
   },
   8: {
     'thunder mountain': 'big thunder mountain railroad',
@@ -42,7 +41,6 @@ const TASK_RIDE_ALIASES: Readonly<Record<number, Readonly<Record<string, string>
     'mission: breakout!': 'guardians of the galaxy - mission: breakout!',
     'incredible coaster': 'incredicoaster',
     'midway': 'toy story midway mania!',
-    "soarin'": "soarin' around the world",
   },
 };
 
@@ -60,6 +58,65 @@ const OFFLINE_MAP_CHAPTERS: Readonly<Record<number, Readonly<Record<string, stri
 
 const RIDE_CACHE_MS = 60_000;
 const parkRideCache = new Map<number, { fetchedAt: number; rides: Map<string, RideType> }>();
+
+/** A wait-times row: the feed's own id (themeparks.wiki) and its name of the day. */
+export interface WaitRowRef { readonly id?: string | null; readonly name: string }
+
+const isQueueRide = (ride: RideType) => QUEUE_TYPES.has(ride.type);
+const feedIdOf = (ride: RideType): string | null => {
+  const id: unknown = ride.metadata?.themeparks_id;
+  return typeof id === 'string' && id ? id : null;
+};
+
+/** The ride a coin earns: its rides.task_id link, a queue ride first. */
+function rideForTask(rides: Iterable<RideType>, taskId: number): RideType | undefined {
+  let other: RideType | undefined;
+  for (const ride of rides) {
+    if (ride.task_id !== taskId) continue;
+    if (isQueueRide(ride)) return ride;
+    other ??= ride;
+  }
+  return other;
+}
+
+/** The ride a wait-times row is: the catalog row carrying the feed's id. */
+function rideForFeedId(rides: Iterable<RideType>, feedId: string | null | undefined): RideType | undefined {
+  if (!feedId) return undefined;
+  for (const ride of rides) if (feedIdOf(ride) === feedId) return ride;
+  return undefined;
+}
+
+/** By name only when no id links it: the name, then a reviewed alias. */
+function rideForName(map: Map<string, RideType>, parkId: number, name: string): RideType | undefined {
+  return rideKeysForTask(parkId, name).map(key => map.get(key)).find(Boolean);
+}
+
+/**
+ * The one lookup every LinePlay door uses: the coin id, then the wait feed id, then the shelf's coin of that
+ * name, then the ride name. A coin that is linked to a ride always gets that ride, whatever either is called.
+ */
+function findRide(map: Map<string, RideType>, parkId: number, name: string,
+  opts: { readonly taskId?: number | null; readonly feedId?: string | null } = {}): RideType | undefined {
+  const rides = [...map.values()];
+  const given = opts.taskId && opts.taskId > 0 ? opts.taskId : null;
+  const shelfCoin = parkCoinIdByName(parkId, name);
+  return (given ? rideForTask(rides, given) : undefined)
+    ?? rideForFeedId(rides, opts.feedId)
+    ?? (shelfCoin ? rideForTask(rides, shelfCoin) : undefined)
+    ?? rideForName(map, parkId, name);
+}
+
+const contextFor = (ride: RideType, extra: Partial<RideContext> = {}): RideContext => ({
+  rideId: ride.id,
+  rideName: ride.name,
+  rideSlug: ride.slug,
+  parkId: ride.park_id,
+  postedWaitMinutes: null,
+  imageUrl: ride.image_url,
+  lineRewardsReady: ride.line_rewards_ready,
+  rideType: ride.type,
+  ...extra,
+});
 const parkRideInflight = new Map<number, Promise<Map<string, RideType>>>();
 
 async function getRideNameMap(parkId: number): Promise<Map<string, RideType>> {
@@ -130,15 +187,18 @@ export function rideHasQueue(type: string | null | undefined): boolean {
 }
 
 /**
- * The coin task for each wait-times row (by the same name matching as LinePlay), so Wait Times can say
- * "Make this my next coin" through the guide. Rows with no coin are left out.
+ * The coin task for each wait-times row, so Wait Times can say "Make this my pick" through the guide. A row
+ * matches by its feed id first (a holiday name like "Jingle Cruise" still finds Jungle Cruise), then by name.
+ * Keys are the row names. Rows with no coin are left out.
  */
-export async function coinTasksByRideName(parkId: number, names: readonly string[]): Promise<Map<string, number>> {
+export async function coinTasksByRideName(parkId: number, rows: readonly (string | WaitRowRef)[]): Promise<Map<string, number>> {
   const map = await getRideNameMap(parkId);
+  const rides = [...map.values()];
   const out = new Map<string, number>();
-  for (const name of names) {
-    const ride = rideKeysForTask(parkId, name).map(key => map.get(key)).find(Boolean);
-    if (ride?.task_id != null && Number.isInteger(ride.task_id) && ride.task_id > 0) out.set(name, ride.task_id);
+  for (const row of rows) {
+    const ref: WaitRowRef = typeof row === 'string' ? { name: row } : row;
+    const ride = rideForFeedId(rides, ref.id) ?? rideForName(map, parkId, ref.name);
+    if (ride?.task_id != null && Number.isInteger(ride.task_id) && ride.task_id > 0) out.set(ref.name, ride.task_id);
   }
   return out;
 }
@@ -149,8 +209,8 @@ export async function prefetchRideCatalog(parkId: number): Promise<void> {
 }
 
 /**
- * Resolve a RideContext for a named attraction. Returns null if the catalog
- * cannot verify its numeric ride id; callers can still offer local games.
+ * Resolve a RideContext for an attraction: by the shelf coin of that name, then the wait feed id, then the name.
+ * Returns null if the catalog cannot verify its numeric ride id; callers can still offer local games.
  */
 export async function resolveRideContext(
   parkId: number,
@@ -158,23 +218,13 @@ export async function resolveRideContext(
   postedWaitMinutes: number | null,
   postedWaitObservedAt: number | null = null,
   waitFeedRideId: string | null = null,
+  taskId: number | null = null,
 ): Promise<RideContext | null> {
   try {
     const map = await getRideNameMap(parkId);
-    const ride = rideKeysForTask(parkId, rideName).map(key => map.get(key)).find(Boolean);
+    const ride = findRide(map, parkId, rideName, { taskId, feedId: waitFeedRideId });
     if (!ride) return null;
-    return {
-      rideId: ride.id,
-      rideName: ride.name,
-      rideSlug: ride.slug,
-      parkId: ride.park_id,
-      postedWaitMinutes,
-      postedWaitObservedAt,
-      waitFeedRideId,
-      imageUrl: ride.image_url,
-      lineRewardsReady: ride.line_rewards_ready,
-      rideType: ride.type,
-    };
+    return contextFor(ride, { postedWaitMinutes, postedWaitObservedAt, waitFeedRideId });
   } catch {
     return null;
   }
@@ -188,19 +238,7 @@ export async function resolveRideContext(
 export async function resolveRideContextById(parkId: number, rideId: number): Promise<RideContext | null> {
   try {
     const map = await getRideNameMap(parkId);
-    for (const ride of map.values()) {
-      if (ride.id !== rideId) continue;
-      return {
-        rideId: ride.id,
-        rideName: ride.name,
-        rideSlug: ride.slug,
-        parkId: ride.park_id,
-        postedWaitMinutes: null,
-        imageUrl: ride.image_url,
-        lineRewardsReady: ride.line_rewards_ready,
-        rideType: ride.type,
-      };
-    }
+    for (const ride of map.values()) if (ride.id === rideId) return contextFor(ride);
     return null;
   } catch {
     return null;
@@ -214,9 +252,10 @@ export async function resolveRideContextOrOffline(
   postedWaitMinutes: number | null = null,
   postedWaitObservedAt: number | null = null,
   waitFeedRideId: string | null = null,
+  taskId: number | null = null,
 ): Promise<RideContext> {
   return await resolveRideContext(parkId, rideName, postedWaitMinutes,
-    postedWaitObservedAt, waitFeedRideId) ?? {
+    postedWaitObservedAt, waitFeedRideId, taskId) ?? {
     rideId: 0,
     rideName,
     parkId,
@@ -228,26 +267,21 @@ export async function resolveRideContextOrOffline(
   };
 }
 
-/** The queue ride a coin task earns, for coin labels that differ from the ride title ("Tiki Room"). */
-async function resolveRideContextByTask(parkId: number, taskId: number): Promise<RideContext | null> {
-  try {
-    const map = await getRideNameMap(parkId);
-    for (const ride of map.values()) {
-      if (ride.task_id !== taskId || !QUEUE_TYPES.has(ride.type)) continue;
-      return await resolveRideContextById(parkId, ride.id);
-    }
-    return null;
-  } catch {
-    return null;
-  }
+/** LinePlay for a coin (shelf, Coin Guide, coin sheet): its linked ride by coin id, never by its label. */
+export function resolveCoinRideContext(parkId: number, coin: CoinRef): Promise<RideContext> {
+  return resolveRideContextOrOffline(parkId, coin.name, null, null, null, coin.id);
+}
+
+/** LinePlay for a wait-times row: the ride carrying the feed's id, so a holiday name still pays its coin. */
+export function resolveWaitRowRideContext(parkId: number, row: WaitRowRef, postedWaitMinutes: number | null,
+  postedWaitObservedAt: number | null): Promise<RideContext> {
+  return resolveRideContextOrOffline(parkId, row.name, postedWaitMinutes, postedWaitObservedAt, row.id ?? null);
 }
 
 /** Map markers include non-rides, so only cataloged rides or explicit authored chapters open LinePlay. */
 export async function resolveMapQueueContext(parkId: number, taskName: string, taskId?: number): Promise<RideContext | null> {
-  const ride = await resolveRideContext(parkId, taskName, null);
+  const ride = await resolveRideContext(parkId, taskName, null, null, null, taskId ?? null);
   if (ride) return ride;
-  const byTask = taskId ? await resolveRideContextByTask(parkId, taskId) : null;
-  if (byTask) return byTask;
   const rideSlug = OFFLINE_MAP_CHAPTERS[parkId]?.[norm(taskName)];
   return rideSlug ? {
     rideId: 0,
