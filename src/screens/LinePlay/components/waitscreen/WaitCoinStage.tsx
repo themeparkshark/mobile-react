@@ -22,7 +22,7 @@ import { queueHaptic } from '../../../../gamekit/Haptics';
 import { playLimited, SFX_PRIORITY } from '../../../../audio/sfxLimiter';
 import { usePresentationSlot } from '../../../../hooks/usePresentationQueue';
 import { SoundEffectContext } from '../../../../context/SoundEffectProvider';
-import { GameIcon } from '../../../../ui';
+import { GameDialog, GameIcon } from '../../../../ui';
 import { BRAND } from '../../../../ui/tokens';
 import type { WaitCoinProgress } from '../../../../services/lineplay/waitScreen';
 import type { WaitCoin } from './useWaitScreenCoin';
@@ -146,6 +146,13 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
     }
   }, [coin, progress.ready, busy, reducedMotion, onLevelUp, onLeveled, playSound, scale, waitKey]);
 
+  // Bug 15: the coin and its TAP TO LEVEL UP words both open one sheet with the cost first; LEVEL UP there plays the
+  // reveal (the charge, the burst and the coin's new look). Nothing is spent on a single tap.
+  const [askLevel, setAskLevel] = useState(false);
+  const canLevel = owned && progress.ready && !busy && coin != null;
+  const openLevelSheet = useCallback(() => { if (canLevel) setAskLevel(true); }, [canLevel]);
+  const levelAsk = coin ? levelSheetWords(coin) : null;
+
   const autoLeveled = useRef(false);
   useEffect(() => {
     if (!autoLevel || autoLeveled.current || !progress.ready) return;
@@ -165,9 +172,9 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
 
   return (
     <View style={{ alignItems: 'center' }}>
-      <Pressable onPress={levelUp} disabled={!progress.ready || busy || !owned}
+      <Pressable onPress={openLevelSheet} disabled={!canLevel} testID="wait-coin"
         accessibilityRole={progress.ready ? 'button' : 'image'} accessibilityLabel={accessibility}
-        accessibilityHint={progress.ready ? 'Levels up this coin with your Parts and Energy.' : undefined}
+        accessibilityHint={progress.ready ? 'Shows what leveling up this coin costs.' : undefined}
         style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           <CoinFillRing size={size} level={level} fill={owned ? progress.fill : Math.min(1, progress.fill)}
@@ -213,8 +220,10 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
       {/* One coin, one ring, one sentence (kid clarity, wave 6): the ring already shows how full the coin is,
           so the chip under it only appears when there is something to DO or to know right now (tap to level
           up, leveling, an error). The count ("1 of 6 Parts to Level 3") stays in the coin's spoken label. */}
-      {(chipShown) && <View style={[styles.labelChip, progress.ready && owned && styles.labelChipReady]} accessible
-        accessibilityLabel={showCount ? progress.label : label}>
+      {(chipShown) && <Pressable onPress={openLevelSheet} disabled={!canLevel} testID="wait-coin-level-words"
+        accessibilityRole={canLevel ? 'button' : 'text'} hitSlop={10}
+        style={[styles.labelChip, progress.ready && owned && styles.labelChipReady]} accessible
+        accessibilityLabel={canLevel ? 'Level up. Shows what it costs.' : showCount ? progress.label : label}>
         {progress.ready && owned && !busy && <GameIcon name="sparkle" size={14} />}
         {showCount && <GameIcon name="parts" size={17} />}
         {/* The count's digits use the flagged-1 font, so "1 of 6" never reads "I of 6". */}
@@ -223,7 +232,13 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
           adjustsFontSizeToFit minimumFontScale={0.8}>
           {progress.ready && owned && !busy && !error ? 'TAP TO LEVEL UP' : label}
         </KidText>
-      </View>}
+      </Pressable>}
+      {levelAsk && (
+        <GameDialog visible={askLevel} title="Level up?" icon="coin" message={levelAsk}
+          buttons={[{ text: 'Not now', style: 'cancel' }, { text: 'LEVEL UP' }]} runButtonHandlers={false}
+          testID="wait-coin-level-sheet"
+          onAnswer={index => { setAskLevel(false); if (index === 1) void levelUp(); }} />
+      )}
       {crowningId && coin && (
         <Modal visible={crowning.visible} transparent animationType="fade" onRequestClose={() => { crowning.done(); setCrowningId(null); }}>
           <View style={styles.crowningWrap}>
@@ -235,6 +250,16 @@ function WaitCoinStage({ size, coin, owned, progress, partsBanked, active, reduc
       )}
     </View>
   );
+}
+
+/** The level sheet's one sentence: what it costs and what the coin becomes. */
+export function levelSheetWords(coin: Pick<WaitCoin, 'level' | 'partsToNext' | 'energyToNext' | 'nextTierName'>): string {
+  const parts = Math.max(0, Math.round(coin.partsToNext));
+  const energy = Math.max(0, Math.round(coin.energyToNext));
+  const cost = [parts > 0 ? `${parts} Ride Part${parts === 1 ? '' : 's'}` : null,
+    energy > 0 ? `${energy} Energy` : null].filter(Boolean).join(' and ');
+  const look = coin.nextTierName ? `its ${coin.nextTierName} look` : `Level ${coin.level + 1}`;
+  return cost ? `Use ${cost} to give this coin ${look}.` : `Give this coin ${look}.`;
 }
 
 const styles = StyleSheet.create({
