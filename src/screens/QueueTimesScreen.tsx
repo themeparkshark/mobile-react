@@ -31,7 +31,7 @@ import {
   WAIT_COLOR_TIERS,
 } from '../constants/parkWaitTimes';
 import { LocationContext } from '../context/LocationProvider';
-import { coinTasksByRideName, resolveRideContext, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { coinTasksByRideName, resolveRideContext, resolveWaitRowRideContext } from '../services/lineplay/resolveRide';
 import { lineRideType } from '../services/guide/guideCopy';
 import { guide, playerChose } from '../services/guide/nextCoin';
 import getRideCoins from '../api/endpoints/me/ride-coins';
@@ -373,13 +373,16 @@ export default function QueueTimesScreen({ route }: { route: any }) {
     return () => { live = false; };
   }, [previewEntries]);
   const attractionNames = attractions.map(entry => entry.name).join('|');
+  // Rows by feed id and name, so a holiday name ('Jingle Cruise') still finds its coin (P2).
+  const attractionRows = JSON.stringify(attractions.map(entry => [entry.id ?? null, entry.name]));
   useEffect(() => {
     if (!attractionNames) return;
     let live = true;
-    void coinTasksByRideName(selectedPark, attractionNames.split('|'))
+    const rows = (JSON.parse(attractionRows) as [string | null, string][]).map(([id, name]) => ({ id, name }));
+    void coinTasksByRideName(selectedPark, rows)
       .then(tasks => { if (live) setCoinTasks(tasks); }).catch(() => undefined);
     return () => { live = false; };
-  }, [selectedPark, attractionNames]);
+  }, [selectedPark, attractionNames, attractionRows]);
   // Each row's catalog ride type, so a show or walk-through never offers PLAY IN LINE (Ride Parts bug 11).
   const [rideTypes, setRideTypes] = useState<ReadonlyMap<string, string>>(new Map());
   useEffect(() => {
@@ -407,8 +410,8 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       if (previewEntries) return;
       const rideOperating = queuePlayPolicy(entry.status).canRequestParts;
       const postedWait = rideOperating ? postedStandbyWait(entry) : null;
-      const ride = await resolveRideContextOrOffline(selectedPark, entry.name, postedWait,
-        rideOperating ? lastUpdated || null : null, entry.id);
+      const ride = await resolveWaitRowRideContext(selectedPark, { id: entry.id ?? null, name: entry.name }, postedWait,
+        rideOperating ? lastUpdated || null : null);
       (navigation as any).navigate('LinePlay', { ride: rideOperating
         ? ride : { ...ride, lineRewardsReady: false } });
     },
