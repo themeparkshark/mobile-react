@@ -1,11 +1,12 @@
 import {
   getTaskAttempt,
+  resolveTaskAttempt,
   startTaskAttempt,
   type TaskAttemptResponse,
 } from '../../api/endpoints/me/task-attempts';
 import { writeTaskAttemptCheckpoint, type TaskAttemptCheckpoint } from './checkpoint';
 import type { GroupKind } from '../lineplay/lineGroup';
-import { flushBegan } from './began';
+import { beganHere, flushBegan } from './began';
 
 /**
  * The core-loop extras of a start (the same game on TRY AGAIN, picture games
@@ -25,9 +26,15 @@ export async function recoverTaskAttempt(checkpoint: TaskAttemptCheckpoint): Pro
   // T6 (arcade plan): a began mark saved before a crash or a dead zone lands first, so the server reads this try as
   // played before anything reopens it (never a free replay).
   await flushBegan().catch(() => undefined);
-  const result = checkpoint.attemptId
-    ? await getTaskAttempt(checkpoint.attemptId)
-    : await startTaskAttempt(
+  const known = checkpoint.attemptId ? await getTaskAttempt(checkpoint.attemptId) : null;
+  // T6 (arcade plan): a saved try whose round 1 already started is a played game. Reopened (after a force-quit, a
+  // dead phone or a closed card) it is settled as a loss, its Parts paid, never handed back as a free replay. A try
+  // that never began (shut on the how-to card) resumes for free. Today's server sends no began_at: only this run's
+  // own mark counts there.
+  if (known && known.attempt.status === 'started' && (!!known.attempt.began_at || beganHere(known.attempt.id))) {
+    return resolveTaskAttempt(known.attempt.id, 'loss');
+  }
+  const result = known ?? await startTaskAttempt(
       checkpoint.requestId,
       checkpoint.taskType,
       checkpoint.taskId,

@@ -22,7 +22,7 @@ export const BEGAN_KEEP_MS = 2 * 60 * 60 * 1000;
 type Saved = { readonly id: number; readonly at: number };
 
 let memory: Saved[] | null = null;
-const sending = new Map<number, Promise<boolean>>();
+const sending = new Map<number, Promise<'landed' | 'drop' | 'retry'>>();
 const landed = new Set<number>();
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
 let retryStep = 0;
@@ -55,20 +55,23 @@ function statusOf(error: unknown): number | null {
   return typeof status === 'number' ? status : null;
 }
 
-/** Sends one saved mark. True when it is done (landed, or the server cannot take it); false to try again later. */
-async function sendOne(id: number): Promise<boolean> {
+type Sent = 'landed' | 'drop' | 'retry';
+
+/** Sends one saved mark: landed, dropped (the server cannot take it) or to try again later. */
+async function sendOne(id: number): Promise<Sent> {
   const running = sending.get(id);
   if (running) return running;
-  const run = (async () => {
+  const run = (async (): Promise<Sent> => {
     try {
       await markTaskAttemptBegan(id);
       landed.add(id);
-      return true;
+      return 'landed';
     } catch (error) {
       const status = statusOf(error);
-      // A 4xx will never change on a retry (no route on today's server, someone else's try, a finished try).
-      if (status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429) return true;
-      return false;
+      // A 4xx will never change on a retry (no route on today's server, someone else's try, a finished try). On today's
+      // server the mark simply does not exist: the try keeps today's behavior there.
+      if (status !== null && status >= 400 && status < 500 && status !== 408 && status !== 429) return 'drop';
+      return 'retry';
     }
   })().finally(() => sending.delete(id));
   sending.set(id, run);
@@ -88,9 +91,8 @@ export async function flushBegan(now: number = Date.now()): Promise<void> {
   const keep: Saved[] = [];
   for (const mark of list) {
     if (now - mark.at > BEGAN_KEEP_MS) continue;
-    const done = await sendOne(mark.id);
-    if (done) landed.add(mark.id);
-    else keep.push(mark);
+    const sent = await sendOne(mark.id);
+    if (sent === 'retry') keep.push(mark);
   }
   try { await writeAll(keep); } catch { /* the marks stay in memory; the next flush writes them */ }
   if (keep.length) scheduleRetry(); else retryStep = 0;

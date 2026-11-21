@@ -49,6 +49,7 @@ test('today\'s server has no began route: a 404 drops the mark (it treats every 
   const h = harness({ fail: () => 404 });
   await h.began.markBegan(5, 1000);
   assert.equal(h.timers.length, 0, 'no endless retry');
+  assert.equal(h.began.beganHere(5), false, 'today\'s behavior there: the try is not settled as a loss by the app');
   assert.equal(JSON.parse(h.store.get(h.began.BEGAN_KEY)).length, 0);
 });
 
@@ -61,6 +62,7 @@ test('the ride card marks round 1 on the game going live (or the first touch aft
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /if \(flowState === 'minigame' && !introAheadRef\.current\) sendBegan\(\);/);
   assert.match(modal, /if \(flowStateRef\.current === 'minigame'\) sendBegan\(\);/);
-  assert.match(modal, /&& \(!!result\.attempt\.began_at \|\| beganHere\(result\.attempt\.id\)\);\n\s+if \(began\) \{\n\s+const lost = await resolveTaskAttempt\(result\.attempt\.id, 'loss'\);/);
+  const recovery = read('src/services/task-attempt/recovery.ts');
+  assert.match(recovery, /if \(known && known\.attempt\.status === 'started' && \(!!known\.attempt\.began_at \|\| beganHere\(known\.attempt\.id\)\)\) \{\n\s+return resolveTaskAttempt\(known\.attempt\.id, 'loss'\);/);
   assert.match(read('src/api/endpoints/me/task-attempts.ts'), /client\.post<\{ data: TaskAttemptResponse \}>\(`\/me\/task-attempts\/\$\{id\}\/began`\)/);
 });

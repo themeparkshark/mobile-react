@@ -17,10 +17,11 @@ vm.runInNewContext(code, {
   console: { warn: () => {} },
   require(name) {
     if (name === '../../api/endpoints/me/task-attempts') return {
-      getTaskAttempt: async id => { calls.get.push(id); return { attempt: { id, status: 'started' } }; },
+      getTaskAttempt: async id => { calls.get.push(id); return { attempt: { id, status: 'started', began_at: id === 555 ? '2026-11-21T00:07:36Z' : null } }; },
+      resolveTaskAttempt: async (id, outcome) => { (calls.resolve ??= []).push([id, outcome]); return { attempt: { id, status: 'lost', loss_parts: 3 } }; },
       startTaskAttempt: async (...args) => { calls.start.push(args); return { attempt: { id: 123, status: 'started' } }; },
     };
-    if (name === './began') return { flushBegan: async () => { calls.flush = (calls.flush ?? 0) + 1; } };
+    if (name === './began') return { flushBegan: async () => { calls.flush = (calls.flush ?? 0) + 1; }, beganHere: id => id === 999 };
     if (name === './checkpoint') return {
       writeTaskAttemptCheckpoint: async value => {
         calls.write.push(value);
@@ -67,4 +68,22 @@ test('losing the ID write still leaves the original request usable', async () =>
   } finally {
     calls.failWrite = false;
   }
+});
+
+test('T6: a saved try that began (server began_at, or this run\'s own mark) reopens as a loss, never a free replay', async () => {
+  calls.get.length = calls.start.length = calls.write.length = 0; calls.resolve = [];
+  const fromServer = await recoverTaskAttempt({ ...checkpoint, attemptId: 555 });
+  assert.equal(fromServer.attempt.status, 'lost');
+  const fromPhone = await recoverTaskAttempt({ ...checkpoint, attemptId: 999 });
+  assert.equal(fromPhone.attempt.status, 'lost');
+  assert.deepEqual(JSON.parse(JSON.stringify(calls.resolve)), [[555, 'loss'], [999, 'loss']]);
+  assert.equal(calls.start.length, 0, 'no new charge here: TRY AGAIN pays for the next try');
+});
+
+test('T6: a saved try that never began (shut on the how-to card) resumes for free', async () => {
+  calls.get.length = calls.start.length = calls.write.length = 0; calls.resolve = [];
+  const result = await recoverTaskAttempt({ ...checkpoint, attemptId: 456 });
+  assert.equal(result.attempt.status, 'started');
+  assert.equal(calls.resolve.length, 0);
+  assert.equal(calls.start.length, 0);
 });

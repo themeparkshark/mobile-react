@@ -50,7 +50,7 @@ import { getTicketSources, type TicketSources } from '../api/endpoints/me/task-a
 import { askGrownUp } from './GrownUpGate';
 import { noteArcadeAnswer, useArcadeEconomy } from './tickets/arcadeMode';
 import { noteShelfGift } from './tickets/shelfGift';
-import { beganHere, markBegan } from '../services/task-attempt/began';
+import { markBegan } from '../services/task-attempt/began';
 import { useHelp } from './help/HelpProvider';
 import { gameIntroTip } from '../services/help/helpTopics';
 import { markStandingsStale } from '../screens/LeaderboardsScreen/standingsCache';
@@ -654,17 +654,7 @@ export default function RedeemRedeemableModal({
         noteArcadeAnswer(result);
         if (!alive) return;
         if (!spendingRef.current) {
-          // T6 (arcade plan): a try whose round 1 already started is a played game. Reopened after a force-quit it is
-          // a loss (its Parts are paid), never a free replay. A try that never began resumes for free, as before.
-          const began = result.attempt.status === 'started'
-            && (!!result.attempt.began_at || beganHere(result.attempt.id));
-          if (began) {
-            const lost = await resolveTaskAttempt(result.attempt.id, 'loss');
-            noteArcadeAnswer(lost);
-            if (!alive) return;
-            applyAttemptStateRef.current(lost.attempt);
-            return;
-          }
+          // T6 (arcade plan): recoverTaskAttempt settles a begun try as a loss (never a free replay); it arrives lost here.
           applyAttemptStateRef.current(result.attempt);
           if (result.attempt.status === 'started') setFlowState('wheel');
         }
