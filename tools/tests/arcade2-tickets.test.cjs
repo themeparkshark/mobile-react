@@ -88,3 +88,17 @@ test('P14 the coin card names the Parts already saved for a coin not won, only f
   assert.match(view, /\{model\.waiting && <View style=\{styles\.waiting\}[^]*?<GameIcon name="parts"/);
   assert.match(read('src/components/RedeemRedeemableModal.tsx'), /partsWaiting: \(cardModel as \{ parts_waiting\?: unknown \} \| null \| undefined\)\?\.parts_waiting/);
 });
+
+test('P23 a won coin on the map wears its own level rim, and never a guessed level 1', () => {
+  const src = read('src/screens/ExploreScreen/TaskMarker.tsx');
+  const fn = src.slice(src.indexOf('export function markerCoinLevel'), src.indexOf('function LampGlow('));
+  // eslint-disable-next-line no-new-func
+  const markerCoinLevel = new Function(`${fn.replace('export function', 'return function').replace(/: (boolean|number \| null \| undefined|number \| null)/g, '')}`)();
+  assert.equal(markerCoinLevel(true, 5), 5);
+  assert.equal(markerCoinLevel(true, undefined), null, 'the map list sends no level: no "1" badge');
+  assert.equal(markerCoinLevel(false, 3), null, 'a coin not won has no level');
+  assert.doesNotMatch(src, /task\.coin_level \?\? 1/);
+  assert.match(src, /const rim = level != null && level >= 2 \? coinTier\(level\) : null;/);
+  assert.match(src, /styles\.tooltipCoinRim, rim && \{ borderColor: rim\.ring, backgroundColor: rim\.halo \}/);
+  assert.match(src, /\{level != null && !isSelected && <View style=\{\[styles\.levelPip, \{ backgroundColor: coinTier\(level\)\.ring, borderColor: coinTier\(level\)\.ringDeep \}\]\}>/);
+});

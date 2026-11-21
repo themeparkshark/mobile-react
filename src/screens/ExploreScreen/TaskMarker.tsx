@@ -19,6 +19,7 @@ import { BEHIND, RideAmbience, WaterAmbience } from '../../components/map/RideAm
 import { ambienceNow, rideLook, WATER_AMBIENCE, type AmbienceId, type LandmarkId } from '../../services/rideLandmark';
 import { haptic } from '../../gamekit/Haptics';
 import { BRAND, GameIcon } from '../../ui';
+import { coinTier } from '../../constants/coinTiers';
 
 import { calloutDistance } from '../../services/guide/guideCopy';
 import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentation';
@@ -155,6 +156,12 @@ function WaitGlow({ id, glow, moving }: { readonly id: number; readonly glow: Wa
  * After sunset each island stands in a warm pool of lamp light, so the pins
  * glow against the darker map. The nearest few flicker very slightly.
  */
+/** P23 (bug 30): the level a won coin's island shows, from the server only; null when not won or not sent. */
+export function markerCoinLevel(owned: boolean, served: number | null | undefined): number | null {
+  if (!owned || typeof served !== 'number' || !Number.isFinite(served) || served < 1) return null;
+  return Math.floor(served);
+}
+
 function LampGlow({ id, level, moving }: { readonly id: number; readonly level: number; readonly moving: boolean }) {
   const { clock } = useMapAlive();
   const phase = hash01(id + 0.75) * 10;
@@ -355,6 +362,8 @@ function TaskMarker({
   const closed = live?.status === 'CLOSED' || live?.status === 'REFURBISHMENT';
   const resting = down || closed || restingUntil !== null;
   const owned = (task.times_completed ?? 0) > 0;
+  // P23 (bug 30): the won coin's level, only when the server sends it (never a guessed 1); its tier gives the rim.
+  const level = markerCoinLevel(owned, task.coin_level);
   // T2 (arcade plan): no ride hurries the player. No countdown, no red, no "leaves soon" on the map;
   // the leave date is a date on the coin card.
 
@@ -411,7 +420,7 @@ function TaskMarker({
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={press}
-      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${price !== null ? `${price} Ticket${price === 1 ? '' : 's'}. ` : ''}Show ride on the map.`}
+      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? level != null ? `Your coin, level ${level}. ` : 'Your coin. ' : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${price !== null ? `${price} Ticket${price === 1 ? '' : 's'}. ` : ''}Show ride on the map.`}
       stopPropagation={true}
       hidden={parked}
       // Folded into a "+N" or hidden by the declutter: invisible, so it must not take the visible island's tap (T017).
@@ -426,7 +435,7 @@ function TaskMarker({
         star={star} parked={parked} alive={alive} badge={badge}
         glow={glow} calm={calm} aliveRank={aliveRank} ringColor={ringColor} resting={resting} reducedMotion={reducedMotion}
         control={control} flagRaiseKey={flagRaiseKey} behindKinds={behindKinds} frontKinds={frontKinds} near={near}
-        look={look} owned={owned} down={down} folded={folded} revealDelay={revealDelay} /> : <View style={styles.bare} />}
+        look={look} owned={owned} level={level} down={down} folded={folded} revealDelay={revealDelay} /> : <View style={styles.bare} />}
     </Marker>
   </>);
 }
@@ -446,6 +455,8 @@ type IslandArtProps = {
   readonly resting: boolean; readonly reducedMotion: boolean; readonly control: RideControlRide | undefined;
   readonly flagRaiseKey: string | undefined; readonly behindKinds: readonly AmbienceId[]; readonly frontKinds: readonly AmbienceId[];
   readonly near: boolean; readonly look: ReturnType<typeof rideLook>; readonly owned: boolean; readonly down: boolean;
+  /** P23: the won coin's served level, or null (not won, or not sent). */
+  readonly level: number | null;
   readonly folded: number; readonly revealDelay: number | undefined;
 };
 
@@ -458,8 +469,10 @@ function IslandArt({
   placement, task, isSelected, guideTarget, cardSide, distanceMeters, restingUntil, price, held, status, isTripGoal, adventure, limited,
   tagKind, tagSize, playable, rush, live, star, parked, alive, badge,
   glow, calm, aliveRank, ringColor, resting, reducedMotion, control, flagRaiseKey, behindKinds, frontKinds, near, look, owned,
-  down, folded, revealDelay,
+  level, down, folded, revealDelay,
 }: IslandArtProps) {
+  // P23 (bug 30): a leveled coin wears its level's rim on the callout and its level chip (rings only, no new art).
+  const rim = level != null && level >= 2 ? coinTier(level) : null;
   // Selection: anticipation dip, spring lift to 1.15, settle. Haptic on the lift.
   const lift = useSharedValue(isSelected ? 1 : 0);
   const wasSelected = useRef(isSelected);
@@ -516,7 +529,9 @@ function IslandArt({
               {cardSide === 'below' && <View style={styles.tooltipArrowUp} />}
             <View style={styles.tooltip}>
                 <View style={styles.tooltipRow}>
-                  <Image source={task.coin_url ? { uri: task.coin_url } : RIDE_COIN} style={styles.tooltipCoin} contentFit="contain" />
+                  <View style={[styles.tooltipCoinRim, rim && { borderColor: rim.ring, backgroundColor: rim.halo }]}>
+                    <Image source={task.coin_url ? { uri: task.coin_url } : RIDE_COIN} style={styles.tooltipCoin} contentFit="contain" />
+                  </View>
                   <View style={styles.tooltipCopy}>
                     <Text style={styles.tooltipTitle} numberOfLines={1}>{task.name}</Text>
                     <View style={styles.tooltipMeta}>
@@ -583,7 +598,8 @@ function IslandArt({
               moving={!calm && !reducedMotion && (isSelected || guideTarget || withinBudget(aliveRank, alive.caps.idleCoins))} />}
             <Image source={LANDMARKS[look.landmark]} style={styles.landmarkImage} contentFit="contain" />
           </View>
-          {owned && !isSelected && <View style={styles.levelPip}><Text style={styles.levelText}>{task.coin_level ?? 1}</Text></View>}
+          {level != null && !isSelected && <View style={[styles.levelPip, { backgroundColor: coinTier(level).ring, borderColor: coinTier(level).ringDeep }]}>
+            <Text style={styles.levelText}>{level}</Text></View>}
           {resting && <View pointerEvents="none" style={styles.sleepy}>
             {[0, 1, 2].map(i => <SleepyZ key={i} i={i} seed={task.id} moving={!calm && withinBudget(aliveRank, alive.caps.sleepyRides)} />)}
           </View>}
@@ -632,7 +648,7 @@ const styles = StyleSheet.create({
   newBadge: { position: 'absolute', top: 2, right: 2, zIndex: 22 },
   levelPip: { position: 'absolute', bottom: 12, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 3,
     backgroundColor: BRAND.blueBright, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
-  levelText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.white },
+  levelText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.navy },
   cardSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   cardBelow: { justifyContent: 'flex-start' },
   cardBeside: { justifyContent: 'center' },
@@ -640,6 +656,8 @@ const styles = StyleSheet.create({
     borderWidth: 3, borderColor: BRAND.navy, maxWidth: SELECTED_TAG.w, maxHeight: SELECTED_TAG.h - 8 },
   tooltipRow: { flexDirection: 'row', alignItems: 'center', gap: 7 },
   tooltipCoin: { width: 30, height: 30 },
+  /** P23: the callout coin's rim; clear for a coin not won or at Level 1, its level's ring from Level 2. */
+  tooltipCoinRim: { width: 36, height: 36, borderRadius: 18, borderWidth: 3, borderColor: 'transparent', alignItems: 'center', justifyContent: 'center' },
   tooltipCopy: { flexShrink: 1 },
   tooltipTitle: { fontFamily: 'Shark', fontSize: 14, color: BRAND.navy },
   tooltipMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
