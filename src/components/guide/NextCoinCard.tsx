@@ -26,6 +26,7 @@ import { StampDot } from '../../screens/ExploreScreen/AdventureTicketCard';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
 const TICKET = require('../../../assets/images/ticket-icon.png');
+const FOOTSTEPS = require('../../../assets/images/ride-photo/footsteps.webp');
 import { LINEPLAY_ICON } from './linePlayIcon';
 /** LinePlay's own picture (ledger 37); the pocket watch means Wait Times only. */
 export { LINEPLAY_ICON };
@@ -122,12 +123,12 @@ function ShelfGiftBar({ bar }: { bar: ShelfBar }) {
   </View>;
 }
 
-/** The arrive card's three pictures with no reading: tap a coin, walk there (the shark), PLAY!. */
+/** The arrive card's three pictures with no reading: tap a coin, walk there (Alex's footsteps, as on Finn's warm-up win), PLAY!. */
 function HowToPictures() {
   return <View testID="arrive-how-to" style={styles.howTo} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
     <GameIcon name="coin" size={20} />
     <GameIcon name="arrow" size={12} />
-    <GameIcon name="shark" size={20} />
+    <Image source={FOOTSTEPS} style={styles.howToSteps} contentFit="contain" />
     <GameIcon name="arrow" size={12} />
     <GameIcon name="play" size={20} />
   </View>;
@@ -297,5 +298,6 @@ const styles = StyleSheet.create({
   giftEmpty: { opacity: 0.35 },
   giftText: { color: '#ffdc61', fontFamily: 'Shark', fontSize: 13, marginLeft: 1 },
   howTo: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
+  howToSteps: { width: 22, height: 22 },
   teach: { marginTop: 4, alignSelf: 'flex-start' },
 });
