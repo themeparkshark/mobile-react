@@ -106,3 +106,22 @@ test('P18 bug 29: a coin at its top level is never the LEVEL UP GOAL', () => {
   assert.match(sheet, /levelUpGoal\.noteLevel\(rideCoin\.ride_id, rideCoin\.current_level, rideCoin\.max_level\);/);
   assert.match(sheet, /levelUpGoal\.noteLevel\(rideCoin\.ride_id, nextLevel, rideCoin\.max_level\);/);
 });
+
+test('P22 bug 6: a many-finger mash that fills the tap log never freezes the board; the round ends normally', () => {
+  const T = loadTs('src/games/whack/timeline.ts');
+  const S = loadTs('src/games/whack/sim.ts');
+  const W = loadTs('src/games/whack/waves.ts');
+  const tl = T.buildBurst({ seed: 4242, burstIndex: 0, format: 'ride', difficulty: 2, theme: 'park', unlockLevel: 40 });
+  const s = S.createSim(tl);
+  // Nine fingers on nine holes, again and again: the log fills in a few seconds.
+  while (s.tapCount < W.MAX_TAPS) {
+    S.simAdvance(s, 40);
+    for (let h = 0; h < 9 && s.tapCount < W.MAX_TAPS; h++) S.simTap(s, h);
+  }
+  // Then nothing more counts; time runs on.
+  for (let i = 0; i < 2000 && !s.ended; i++) S.simAdvance(s, 50);
+  assert.equal(s.frozen, false, 'never stuck on TAP TO KEEP BONKING');
+  assert.equal(s.ended, true, 'the round ends by itself');
+  const runtime = fs.readFileSync('src/games/whack/useWhackRuntime.ts', 'utf8');
+  assert.match(runtime, /\.onTouchesCancelled\(/);
+});

@@ -444,6 +444,11 @@ export function useWhackRuntime(opts: {
     .onTouchesUp(() => {
       'worklet';
       rt.value.swipeHole = -1;
+    })
+    // iOS cancels touches past its per-view limit (a whole hand on the glass): end any swipe the same way.
+    .onTouchesCancelled(() => {
+      'worklet';
+      rt.value.swipeHole = -1;
     }), [sim, rt, an, geo, bridge]);
 
   const liteWaiters = useRef<((m: SimMirror) => void)[]>([]);
