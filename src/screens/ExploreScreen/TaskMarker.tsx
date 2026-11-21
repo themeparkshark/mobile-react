@@ -11,7 +11,6 @@ import { Marker } from '../../components/map/Marker';
 import RideTeamFlag from '../../components/map/RideTeamFlag';
 import { TaskType } from '../../models/task-type';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
-import { gameTimestamp } from './mapOpportunityTiming';
 import type { RideControlRide } from '../../api/endpoints/parks/rideControl';
 import type { LiveRide } from '../../api/endpoints/parks/live';
 import { TEAMS } from '../../constants/teams';
@@ -26,9 +25,11 @@ import { markerBadge, markerRingColor, restingLabel } from './mapMarkerPresentat
 import { FoldBadge, Placed, TagSlot, usePlacement } from '../../components/map/declutter/Placed';
 import type { Placement } from '../../components/map/declutter/solver';
 import { RIDE_BODY, RIDE_BOX, SELECTED_TAG, rideLayoutId, rideTagKind, rideTagSize, selectedCardSide } from './parkMapLayout';
-import { stayWords, type StayWords } from '../../helpers/calmTime';
 import StarRideBadge from '../../components/liveEvents/StarRideBadge';
 import { useIslandMount } from './islandMount';
+import { AuthContext } from '../../context/AuthProvider';
+import TicketPips from '../../components/tickets/TicketPips';
+import { islandPrice } from '../../components/tickets/islandPrice';
 
 const LANDMARKS: Record<LandmarkId, number> = {
   shark: require('../../../assets/images/map/landmarks/shark.png'),
@@ -266,33 +267,6 @@ function LimitedShimmer({ seed, moving }: { readonly seed: number; readonly movi
   </>;
 }
 
-/**
- * The island's timer chip in calm whole minutes ("4 min", or "1h 2m" past an hour), never a
- * ticking clock (core loop 4.3 rule 7). It wakes once a minute while the map is on screen and
- * holds still otherwise, and fades itself out at zero, before the ride's data catches up.
- * Always the same View and Text, so nothing inside the map marker swaps.
- */
-function MarkerTimer({ expiresAt, ticking, urgent, badgeStyle }: {
-  readonly expiresAt: number; readonly ticking: boolean; readonly urgent: boolean; readonly badgeStyle: StyleProp<ViewStyle>;
-}) {
-  // Words, never minutes (T006): the chip says "Leaves soon" and fades itself out at zero.
-  const [now, setNow] = useState(() => Date.now());
-  const left = expiresAt - now;
-  const done = left <= 0;
-  useEffect(() => {
-    if (!ticking || done) return;
-    // Battery: the words change once (at zero), so the chip wakes once.
-    const id = setTimeout(() => setNow(Date.now()), Math.min(Math.max(50, expiresAt - Date.now() + 50), 2 ** 31 - 1));
-    return () => clearTimeout(id);
-  }, [ticking, done, expiresAt, now]);
-  const shown = useSharedValue(done ? 0 : 1);
-  useEffect(() => { shown.value = withTiming(done ? 0 : 1, { duration: TIMER_FADE_MS }); }, [done, shown]);
-  const fade = useAnimatedStyle(() => ({ opacity: shown.value }));
-  return <Animated.View style={[badgeStyle, fade]}>
-    <Text style={[styles.timerText, urgent && styles.timerTextUrgent]} numberOfLines={1}>{stayWords(left) ?? 'Leaves soon'}</Text>
-  </Animated.View>;
-}
-const TIMER_FADE_MS = 280;
 
 /** "Play here": a soft ring swells out from the island's base while the ride is playable. */
 function PlayPulse({ color, reducedMotion }: { readonly color: string; readonly reducedMotion: boolean }) {
@@ -336,7 +310,8 @@ export interface TaskMarkerProps {
   readonly restingUntil?: number | null;
   /** Selected chip: distance from the player and the Ticket price. */
   readonly distanceMeters?: number | null;
-  readonly ticketCost?: number;
+  /** The ride's served price when the task itself carries none. Missing hides the price (never a guessed 1). */
+  readonly ticketCost?: number | null;
   /** First reveal: drop in after this many ms (stagger). */
   readonly revealDelay?: number;
   /** Distance order among the islands on the map (0 = nearest): only the nearest few spend animation. */
@@ -358,10 +333,13 @@ export interface TaskMarkerProps {
 function TaskMarker({
   task, isSelected, isTripGoal = false, control, flagRaiseKey, ambient = false, live, onPress,
   near = false, playable = false, adventure = false, clusterCount = 0, restingUntil = null, guideTarget = false,
-  distanceMeters = null, ticketCost = 1, revealDelay, aliveRank, parked = false, star = false,
+  distanceMeters = null, ticketCost = null, revealDelay, aliveRank, parked = false, star = false,
 }: TaskMarkerProps) {
   const reducedMotion = useReducedGameMotion();
   const alive = useMapAlive();
+  // T2 (arcade plan): the price under every island, filled up to the Tickets held.
+  const held = useContext(AuthContext).player?.tickets ?? null;
+  const price = islandPrice(task.ticket_cost, ticketCost);
   // Declutter: shown, receded or folded away, and where this island's chip goes (parkMapLayout).
   const placed = usePlacement(rideLayoutId(task.id));
   const placement = parked ? PARKED_PLACEMENT : placed;
@@ -369,11 +347,6 @@ function TaskMarker({
   // A hidden island holds every loop still (battery) and ignores taps.
   const calm = alive.tier === 'calm' || !shown;
   const shownRef = useRef(shown); shownRef.current = shown;
-  // The chip's clock ticks only while the map runs and this island is on show.
-  const timerTicking = shown ? alive.active : false;
-  const expiresAt = gameTimestamp(task.active_to);
-  // How long a timed ride stays, in words (T006): "Here for a little while" or, in its last ten minutes, "Leaves soon".
-  const stay = expiresAt !== null ? stayWords(expiresAt - Date.now()) : null;
 
   const look = useMemo(() => rideLook(task.name), [task.name]);
   const rush = live?.rush && live.status === 'OPERATING' && new Date(live.rush.ends_at).getTime() > Date.now()
@@ -382,18 +355,19 @@ function TaskMarker({
   const closed = live?.status === 'CLOSED' || live?.status === 'REFURBISHMENT';
   const resting = down || closed || restingUntil !== null;
   const owned = (task.times_completed ?? 0) > 0;
-  // A closed ride never hurries the player: no countdown and no red on it.
-  const timerUrgent = !resting && stay === 'Leaves soon';
+  // T2 (arcade plan): no ride hurries the player. No countdown, no red, no "leaves soon" on the map;
+  // the leave date is a date on the coin card.
 
-  // Rush gold, a held ride its team colour, red only in the last 5 minutes, gold in reach, else blue.
-  const ringColor = markerRingColor({ rush: !!rush, team: control ? TEAMS[control.controller].color : null, urgent: timerUrgent, near: near || playable });
+  // A held ride its team colour, gold in reach, else blue. Every coin is the same ring otherwise:
+  // a short line is a plain word tag, never a gold ring that says one ride matters more (T2).
+  const ringColor = markerRingColor({ rush: false, team: control ? TEAMS[control.controller].color : null, urgent: false, near: near || playable });
   // Fix w3 T228: the Limited tag and its date live on the shelf only. On the kid's map a limited coin is
   // just a coin (its island keeps its soft shimmer), so no "LIMITED LEAVES NOV 30" chip or line.
   // '' (not null) keeps the island's shimmer while every chip, line and label reads it as no tag.
   const limited: string | null = task.limited?.active ? '' : null;
   const badge = markerBadge({ rush: !!rush, adventure, goal: isTripGoal, owned, limited: false, selected: isSelected });
-  // The island's chip shows only in the last ten minutes; before that the selected card says it in words.
-  const showTimer = !resting && expiresAt !== null && expiresAt > Date.now() && !rush && timerUrgent;
+  // T2: no timer chip on the map at all (the leave date lives on the coin card).
+  const showTimer = false;
   // One chip above the art: the badge, else the timer (the timer drops into the art when a badge holds the chip).
   const tagKind = isSelected ? null : rideTagKind({ badge, showTimer });
   const tagSize = rideTagSize(tagKind, limited?.toUpperCase() ?? '', task.name);
@@ -405,10 +379,9 @@ function TaskMarker({
   // inside 37 markers at once on every return to the map crashed MapLibre's
   // subview insert (-[MLRNMapView insertReactSubview:atIndex:]) in testing.
   const kinds = useMemo(() => {
-    const base = ambient && !reducedMotion ? ambienceNow(look.ambience) : [];
-    // A Rush always sparkles, near or far: it's worth walking to.
-    return rush && !reducedMotion ? [...base, 'rush' as const] : base;
-  }, [ambient, look, rush, reducedMotion]);
+    // T2: no Rush sparkle. Every coin stays the same brightness; SHORT LINE is plain words.
+    return ambient && !reducedMotion ? ambienceNow(look.ambience) : [];
+  }, [ambient, look, reducedMotion]);
   const waterKind = kinds.find(k => WATER_AMBIENCE.includes(k));
   const [behindKinds, frontKinds] = useMemo(() => {
     const pin = kinds.filter(k => !WATER_AMBIENCE.includes(k));
@@ -438,7 +411,7 @@ function TaskMarker({
     <Marker
       coordinate={{ latitude, longitude }}
       onPress={press}
-      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${stay ? `Bonus opportunity. ${stay}. ` : ''}Show ride on the map.`}
+      accessibilityLabel={`${task.name}. ${isSelected ? 'Selected. ' : ''}${owned ? `Your coin, level ${task.coin_level ?? 1}. ` : 'New coin. '}${limited ? `${limited}. ` : ''}${folded ? `${folded} more rides here. ` : ''}${restingUntil ? `${restingLabel(restingUntil)}. ` : ''}${price !== null ? `${price} Ticket${price === 1 ? '' : 's'}. ` : ''}Show ride on the map.`}
       stopPropagation={true}
       hidden={parked}
       // Folded into a "+N" or hidden by the declutter: invisible, so it must not take the visible island's tap (T017).
@@ -447,10 +420,10 @@ function TaskMarker({
     >
       {/* Same 72 x 96 box either way, so the marker's layout never changes (no corner blink). */}
       {materialized ? <IslandArt placement={placement} task={task} isSelected={isSelected} guideTarget={guideTarget} cardSide={cardSide}
-        distanceMeters={distanceMeters} restingUntil={restingUntil} ticketCost={ticketCost} status={status}
-        isTripGoal={isTripGoal} adventure={adventure} limited={limited} stay={stay} expiresAt={expiresAt}
-        timerUrgent={timerUrgent} tagKind={tagKind} tagSize={tagSize} playable={playable} rush={rush} live={live}
-        timerTicking={timerTicking} star={star} parked={parked} alive={alive} badge={badge} showTimer={showTimer}
+        distanceMeters={distanceMeters} restingUntil={restingUntil} price={price} held={held} status={status}
+        isTripGoal={isTripGoal} adventure={adventure} limited={limited}
+        tagKind={tagKind} tagSize={tagSize} playable={playable} rush={rush} live={live}
+        star={star} parked={parked} alive={alive} badge={badge}
         glow={glow} calm={calm} aliveRank={aliveRank} ringColor={ringColor} resting={resting} reducedMotion={reducedMotion}
         control={control} flagRaiseKey={flagRaiseKey} behindKinds={behindKinds} frontKinds={frontKinds} near={near}
         look={look} owned={owned} down={down} folded={folded} revealDelay={revealDelay} /> : <View style={styles.bare} />}
@@ -462,12 +435,13 @@ function TaskMarker({
 type IslandArtProps = {
   readonly placement: Placement; readonly task: TaskType; readonly isSelected: boolean; readonly guideTarget: boolean;
   readonly cardSide: ReturnType<typeof selectedCardSide>; readonly distanceMeters: number | null;
-  readonly restingUntil: number | null; readonly ticketCost: number; readonly status: string | null | undefined;
-  readonly isTripGoal: boolean; readonly adventure: boolean; readonly limited: string | null; readonly stay: StayWords | null;
-  readonly expiresAt: number | null; readonly timerUrgent: boolean; readonly tagKind: ReturnType<typeof rideTagKind> | null;
+  readonly restingUntil: number | null; readonly price: number | null; readonly held: number | null;
+  readonly status: string | null | undefined;
+  readonly isTripGoal: boolean; readonly adventure: boolean; readonly limited: string | null;
+  readonly tagKind: ReturnType<typeof rideTagKind> | null;
   readonly tagSize: ReturnType<typeof rideTagSize>; readonly playable: boolean; readonly rush: NonNullable<LiveRide['rush']> | null;
-  readonly live: LiveRide | undefined; readonly timerTicking: boolean; readonly star: boolean; readonly parked: boolean;
-  readonly alive: ReturnType<typeof useMapAlive>; readonly badge: ReturnType<typeof markerBadge>; readonly showTimer: boolean;
+  readonly live: LiveRide | undefined; readonly star: boolean; readonly parked: boolean;
+  readonly alive: ReturnType<typeof useMapAlive>; readonly badge: ReturnType<typeof markerBadge>;
   readonly glow: WaitGlowLook | null; readonly calm: boolean; readonly aliveRank: number | undefined; readonly ringColor: string;
   readonly resting: boolean; readonly reducedMotion: boolean; readonly control: RideControlRide | undefined;
   readonly flagRaiseKey: string | undefined; readonly behindKinds: readonly AmbienceId[]; readonly frontKinds: readonly AmbienceId[];
@@ -481,8 +455,8 @@ type IslandArtProps = {
  * ride leaves draws it parked and hidden, and nothing inside a marker mounts or unmounts again.
  */
 function IslandArt({
-  placement, task, isSelected, guideTarget, cardSide, distanceMeters, restingUntil, ticketCost, status, isTripGoal, adventure, limited,
-  stay, expiresAt, timerUrgent, tagKind, tagSize, playable, rush, live, timerTicking, star, parked, alive, badge, showTimer,
+  placement, task, isSelected, guideTarget, cardSide, distanceMeters, restingUntil, price, held, status, isTripGoal, adventure, limited,
+  tagKind, tagSize, playable, rush, live, star, parked, alive, badge,
   glow, calm, aliveRank, ringColor, resting, reducedMotion, control, flagRaiseKey, behindKinds, frontKinds, near, look, owned,
   down, folded, revealDelay,
 }: IslandArtProps) {
@@ -547,17 +521,14 @@ function IslandArt({
                     <Text style={styles.tooltipTitle} numberOfLines={1}>{task.name}</Text>
                     <View style={styles.tooltipMeta}>
                       {distanceMeters !== null && <Text style={styles.tooltipDetail}>{calloutDistance(distanceMeters, (task.times_completed ?? 0) > 0)}</Text>}
-                      {restingUntil ? <Text style={styles.tooltipDetail}>{restingLabel(restingUntil)}</Text> : <>
-                        <GameIcon name="ticket" size={14} />
-                        <Text style={styles.tooltipDetail}>{ticketCost} {ticketCost === 1 ? 'Ticket' : 'Tickets'}</Text>
-                      </>}
+                      {restingUntil ? <Text style={styles.tooltipDetail}>{restingLabel(restingUntil)}</Text>
+                        : <TicketPips price={price} held={held} size="island" />}
                     </View>
                     {(status || isTripGoal || adventure || limited) && <Text style={styles.tooltipWait} numberOfLines={1}>
                       {[adventure ? 'Adventure ride' : isTripGoal ? 'My goal' : null, status, limited].filter(Boolean).join(' · ')}
                     </Text>}
                   </View>
                 </View>
-                {stay !== null && expiresAt! > Date.now() && <Text style={[styles.tooltipTimer, timerUrgent && styles.tooltipTimerSoon]}>{stay}</Text>}
               </View>
               {cardSide === 'above' && <View style={styles.tooltipArrow} />}
             </View>
@@ -571,8 +542,7 @@ function IslandArt({
             <View style={playable && placement.tag === undefined ? styles.standingLift : null}>
             {/* A short line right now, in words: a minutes number on the map read as a clock (T006 hold). */}
             {tagKind === 'rush' && rush && (
-              <View style={styles.rushBadge} accessibilityLabel={`Rush: a short line right now, ${live?.wait ?? rush.wait} minute wait`}>
-                <GameIcon name="rush" size={14} />
+              <View style={styles.rushBadge} accessibilityLabel={`Short line right now, ${live?.wait ?? rush.wait} minute wait`}>
                 <Text style={styles.rushText}>SHORT LINE</Text>
               </View>
             )}
@@ -584,23 +554,12 @@ function IslandArt({
                 <Text style={styles.limitedName} numberOfLines={1}>{task.name}</Text>
                 <Text style={styles.limitedText} numberOfLines={1}>{limited.toUpperCase()}</Text>
               </View></View>}
-            {tagKind === 'timer' && (
-              <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
-                badgeStyle={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]} />
-            )}
             </View>
           </TagSlot>
       ) : undefined}>
       <Animated.View style={[styles.container, dropStyle]}>
         {star && !parked && <View pointerEvents="none" style={[styles.starRide, playable && styles.standingLift]}><StarRideBadge paused={!alive.running} /></View>}
         {!isSelected && badge === 'new' && <View style={styles.newBadge}><GameIcon name="sparkle" size={16} /></View>}
-        {!isSelected && showTimer && tagKind !== 'timer' && (
-          // A row wider than the island, so "Leaves soon" is never cut to "Leaves s...".
-          <View pointerEvents="none" style={styles.timerLow}>
-            <MarkerTimer expiresAt={expiresAt!} ticking={timerTicking} urgent={timerUrgent}
-              badgeStyle={[styles.timerBadge, timerUrgent && styles.timerBadgeUrgent]} />
-          </View>
-        )}
 
         {alive.light.lamps >= 0.05 && <LampGlow id={task.id} level={alive.light.lamps} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
         {glow && <WaitGlow id={task.id} glow={glow} moving={!calm && withinBudget(aliveRank, alive.caps.pulsingRides)} />}
@@ -634,6 +593,11 @@ function IslandArt({
         </Animated.View>
 
         <RideAmbience kinds={frontKinds} seed={task.id} origin={GROUND} zIndex={8} />
+        {/* T2: the ride's price under its island, the same size and brightness at every price.
+            A resting ride shows its BACK or DOWN chip in this spot instead. */}
+        {!resting && price !== null && <View pointerEvents="none" style={styles.priceRow}>
+          <View style={styles.pricePill}><TicketPips price={price} held={held} size="island" /></View>
+        </View>}
         {burst > 0 && <ArrivalBurst key={burst} onDone={() => setBurst(0)} />}
       </Animated.View>
       </Placed>
@@ -666,18 +630,9 @@ const styles = StyleSheet.create({
   limitedLines: { flexShrink: 1, alignItems: 'flex-start' },
   limitedName: { color: BRAND.navy, fontSize: 12, lineHeight: 14, fontFamily: 'Shark' },
   newBadge: { position: 'absolute', top: 2, right: 2, zIndex: 22 },
-  levelPip: { position: 'absolute', bottom: 2, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 3,
+  levelPip: { position: 'absolute', bottom: 12, right: -2, minWidth: 18, height: 18, borderRadius: 9, paddingHorizontal: 3,
     backgroundColor: BRAND.blueBright, borderWidth: 2, borderColor: BRAND.white, alignItems: 'center', justifyContent: 'center' },
   levelText: { fontFamily: 'Shark', fontSize: 10, color: BRAND.white },
-  timerBadge: { backgroundColor: BRAND.white, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 2,
-    borderWidth: 2, borderColor: BRAND.navy },
-  // Under a badge, the timer sits on the art's shoulder.
-  timerLow: { position: 'absolute', top: -2, left: -40, right: -40, alignItems: 'center', zIndex: 20 },
-  // The last 5 minutes: a calm gold chip, never a red ticking clock (kid-trust).
-  timerBadgeUrgent: { backgroundColor: BRAND.gold, borderColor: BRAND.goldLip },
-  timerText: { fontFamily: 'Shark', fontSize: 13, color: BRAND.navy, textAlign: 'center' },
-  timerTextUrgent: { color: BRAND.navy },
-  tooltipTimerSoon: { color: '#9a6a00' },
   cardSlot: { flex: 1, alignItems: 'center', justifyContent: 'flex-end' },
   cardBelow: { justifyContent: 'flex-start' },
   cardBeside: { justifyContent: 'center' },
@@ -690,7 +645,6 @@ const styles = StyleSheet.create({
   tooltipMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 },
   tooltipDetail: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.navySoft, marginRight: 2 },
   tooltipWait: { fontFamily: 'Knockout', fontSize: 12, color: BRAND.blue },
-  tooltipTimer: { fontFamily: 'Shark', fontSize: 11, color: BRAND.navy, textAlign: 'center', marginTop: 2 },
   tooltipArrow: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderTopWidth: 8,
     borderLeftColor: 'transparent', borderRightColor: 'transparent', borderTopColor: BRAND.navy },
   tooltipArrowUp: { width: 0, height: 0, borderLeftWidth: 8, borderRightWidth: 8, borderBottomWidth: 8,
@@ -712,7 +666,7 @@ const styles = StyleSheet.create({
   clusterBadge: { position: 'absolute', top: 16, left: 0, minWidth: 26, height: 22, borderRadius: 11, paddingHorizontal: 5,
     backgroundColor: BRAND.gold, borderWidth: 2, borderColor: BRAND.navy, alignItems: 'center', justifyContent: 'center' },
   rushBadge: { flexDirection: 'row', alignItems: 'center', gap: 3,
-    backgroundColor: BRAND.gold, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
+    backgroundColor: BRAND.white, borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2, borderWidth: 2, borderColor: BRAND.navy },
   rushText: { fontFamily: 'Shark', fontSize: 12, color: BRAND.navy },
   landmarkImage: { width: 64, height: 64 },
   floatingCoin: { position: 'absolute', top: 0, width: 20, height: 20 },
@@ -732,4 +686,9 @@ const styles = StyleSheet.create({
   sleepyZ: { position: 'absolute', left: 0, bottom: 0, fontFamily: 'Shark', fontSize: 15, color: BRAND.navy,
     textShadowColor: BRAND.white, textShadowOffset: { width: 0, height: 0 }, textShadowRadius: 3 },
   limitedTwinkle: { position: 'absolute', width: 13, height: 13, zIndex: 9 },
+  // The price row sits in the island's own box (under the ground ring), so the declutter never has to
+  // place it and it never covers a chip, a card or another island's tag.
+  priceRow: { position: 'absolute', bottom: -1, left: -6, right: -6, alignItems: 'center', zIndex: 7 },
+  pricePill: { backgroundColor: BRAND.cream, borderRadius: 7, borderWidth: 1.5, borderColor: BRAND.navy,
+    paddingHorizontal: 2, paddingVertical: 1 },
 });

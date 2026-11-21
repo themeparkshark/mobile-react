@@ -72,9 +72,10 @@ test('an island shows its chip only in the last ten minutes, as LEAVES SOON', ()
   const layout = read('src/screens/ExploreScreen/parkMapLayout.ts');
   assert.match(layout, /export const URGENT_MS = LEAVES_SOON_MS;/);
   assert.match(layout, /const showTimer = timed && !rush && expiresAt! - now <= URGENT_MS;/);
+  // T2 (arcade plan, Nov 20 2026): a ride island never wears a timer chip; the leave date is a date on the coin card.
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
-  assert.match(marker, /const showTimer = !resting && expiresAt !== null && expiresAt > Date\.now\(\) && !rush && timerUrgent;/);
-  assert.match(marker, /const timerUrgent = !resting && stay === 'Leaves soon';/);
+  assert.match(marker, /const showTimer = false;/);
+  assert.doesNotMatch(marker, /MarkerTimer|Leaves soon|timerUrgent/);
 });
 
 test('T006 hold: no minutes chip on a Rush island, and a placed chip never floats off its leader line', () => {
@@ -82,7 +83,7 @@ test('T006 hold: no minutes chip on a Rush island, and a placed chip never float
   assert.doesNotMatch(marker, /RUSH \{live\?\.wait \?\? rush\.wait\} MIN/, 'RUSH 15 MIN read as a clock');
   assert.match(marker, /<Text style=\{styles\.rushText\}>SHORT LINE<\/Text>/);
   // Every chip text a park island can wear: none carries a number of minutes.
-  const chipTexts = [...marker.matchAll(/<Text style=\{styles\.(rushText|adventureText|goalText|limitedText|timerText)[^>]*>([^<]*)<\/Text>/g)].map(m => m[2]);
+  const chipTexts = [...marker.matchAll(/<Text style=\{styles\.(rushText|adventureText|goalText|limitedText)[^>]*>([^<]*)<\/Text>/g)].map(m => m[2]);
   assert.ok(chipTexts.length >= 3);
   for (const t of chipTexts) assert.doesNotMatch(t, /MIN|min\b/, `chip text ${t}`);
   // The standing lift only moves a chip with no solver slot. The solver already keeps chips off the shark

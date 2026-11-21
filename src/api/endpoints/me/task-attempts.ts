@@ -100,6 +100,29 @@ export interface TaskAttempt {
   retry_game?: TaskAttemptGame | null;
   /** Beat the Buzzer's dealt round from the fact-checked bank (core-loop builds, T196): played as dealt. */
   trivia?: AttemptTrivia | null;
+  /* ---- Arcade economy (Nov 20 2026, build/CONTRACTS.md). Every field is optional: today's server sends none. ---- */
+  /** When round 1 started on screen (the began mark), or null while it has not. */
+  began_at?: string | null;
+  /** Parts actually paid to this coin by this loss (the price, cut by the 12 a day cap). */
+  loss_parts?: number | null;
+  /** Lost tries at this coin this park day, this one included (the soft stop at 2). */
+  losses_here_today?: number | null;
+  /** Parts this coin earned today from every source, and the cap (12). */
+  parts_today?: number | null;
+  parts_cap?: number | null;
+  loss?: { parts: number; xp: number; parts_full: boolean; task_name?: string | null } | null;
+  /** The shelf gift: +3 Tickets at every 5th coin won at a park. */
+  shelf_gift?: ShelfGift | null;
+  /** A began try that expired: a loss, no Tickets back. */
+  abandoned?: boolean;
+}
+
+export interface ShelfGift {
+  readonly won: number;
+  readonly total: number;
+  readonly next_at: number;
+  readonly tickets: number;
+  readonly paid_now: number;
 }
 
 export interface TaskAttemptRules {
@@ -123,12 +146,52 @@ export interface TicketSources {
   home: boolean;
   queue: boolean;
   queue_per_park_day: number;
+  /* Arcade economy (CONTRACTS.md section 7): optional, today's server sends none. */
+  park_gift_claimed_today?: boolean;
+  line_tickets_left_today?: number | null;
+  stamps_waiting_tickets?: number | null;
+  shelf_gift_waiting?: number | null;
+  trail_box_steps_left?: number | null;
+  suggested_pack?: SuggestedPack | null;
+}
+
+export interface SuggestedPack {
+  readonly sku: string;
+  readonly tickets: number;
+  readonly price?: string | null;
+  readonly name?: string | null;
 }
 
 export interface TaskAttemptResponse {
   attempt: TaskAttempt;
   tickets: number;
   ticket_sources?: TicketSources;
+  /** True on the arcade server (every answer). */
+  arcade?: boolean;
+}
+
+/** The Get Tickets sheet's read (CONTRACTS.md section 7): GET /me/ticket-sources?task_id=N. */
+export interface TicketSourcesAnswer {
+  readonly price: number | null;
+  readonly tickets: number;
+  readonly short: number;
+  readonly ticket_sources: TicketSources | null;
+}
+
+export async function getTicketSources(taskId?: number | null): Promise<TicketSourcesAnswer> {
+  const { data } = await client.get<{ data: TicketSourcesAnswer }>('/me/ticket-sources', {
+    params: taskId ? { task_id: taskId } : undefined,
+  });
+  return data.data;
+}
+
+/**
+ * The began mark (T6, CONTRACTS.md section 3): round 1 started on screen. Idempotent on the server, so the
+ * app may send it again until it lands. A 404 or 405 means the server has no began mark (today's server).
+ */
+export async function markTaskAttemptBegan(id: number): Promise<TaskAttemptResponse> {
+  const { data } = await client.post<{ data: TaskAttemptResponse }>(`/me/task-attempts/${id}/began`);
+  return withPlainAttemptNames(data.data);
 }
 
 /** One line telling a player where their next Ticket comes from. */

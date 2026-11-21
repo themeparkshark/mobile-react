@@ -134,8 +134,8 @@ test('map markers and pills stop timers and loops while the map is off screen', 
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
   // Pausing never mounts or unmounts views inside a map marker (MapLibre crash).
   assert.doesNotMatch(marker, /alive\.(running|active) \?|&& alive\.(running|active) &&|alive\.(running|active) && /);
-  assert.match(marker, /const timerTicking = shown \? alive\.active : false;/);
-  assert.match(marker, /<MarkerTimer expiresAt=\{expiresAt!\} ticking=\{timerTicking\}/);
+  // T2 (arcade plan): the island has no clock at all, so nothing ticks on it.
+  assert.doesNotMatch(marker, /MarkerTimer|setInterval|setTimeout\(\(\) => setNow/);
   assert.match(read('src/components/map/RideAmbience.tsx'), /const \{ running \} = useMapAlive\(\);\s*useEffect\(\(\) => \{\s*if \(!running\) \{ cancelAnimation\(p\); return; \}/);
   const pill = read('src/components/LiveEventsPill.tsx');
   assert.match(pill, /const ticking = focused && appActive && \(rushes\.length > 0 \|\| raid\?\.status === 'active'\)/);

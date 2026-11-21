@@ -44,7 +44,7 @@ test('R2: today\'s Adventure sheet and the win card use the same names', () => {
   assert.equal(won.attempt.rewards.xp_earned, 25);
   assert.equal(won.tickets, 2);
   const attempts = read('src/api/endpoints/me/task-attempts.ts');
-  assert.equal((attempts.match(/return withPlainAttemptNames\(data\.data\);/g) ?? []).length, 3, 'start, get and resolve');
+  assert.equal((attempts.match(/return withPlainAttemptNames\(data\.data\);/g) ?? []).length, 4, 'start, get, resolve and began (T6)');
 });
 
 test('integrator list: the LinePlay recap never says "4 of 2 Parts to Level 2"; it says the Parts are ready', () => {

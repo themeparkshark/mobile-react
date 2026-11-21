@@ -25,6 +25,8 @@ import { UpperText } from '../ui/upper';
 import { useNativeModalLayer } from '../ui/modalLayers';
 import { useRung } from '../services/reveal/revealLadder';
 import RideFactLine from './collection/RideFactLine';
+import TicketPips from './tickets/TicketPips';
+import { AuthContext } from '../context/AuthProvider';
 
 interface Props {
   task: TaskType | SecretTaskType;
@@ -88,6 +90,7 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
   const [goalBusy, setGoalBusy] = useState(false);
   const [goalError, setGoalError] = useState(false);
   const { playSound } = useContext(SoundEffectContext);
+  const { player } = useContext(AuthContext);
   const reducedMotion = useReducedGameMotion();
   const isRestingSecret = isSecret && 'is_active' in task && task.is_active === false;
   const copy = unfoundCoinCopy({ isSecret, isArchived, isResting: isRestingSecret, kind, limited });
@@ -216,14 +219,10 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
                   <Text style={{ color: '#075b9b', fontFamily: 'Shark', fontSize: 16, marginBottom: 5 }}>
                     {copy.challenge}
                   </Text>
-                  <Text style={{ color: '#204c6e', fontFamily: 'Knockout', fontSize: 14, lineHeight: 19 }}>
-                    {task.ticket_cost === 0
-                      ? 'Free challenge. '
-                      : typeof task.ticket_cost === 'number'
-                      ? `Costs ${task.ticket_cost} Ticket${task.ticket_cost === 1 ? '' : 's'} to play. `
-                      : 'Each try costs tickets. '}
-                    {task.ticket_cost !== 0 && `Out of Tickets? Today's free try works ${kind === 'ride' ? 'at the ride' : 'at this spot'} too.`}
-                  </Text>
+                  {/* T3 (arcade plan): the price as Ticket pictures; win or lose, the Tickets are spent. No free try promise. */}
+                  {typeof task.ticket_cost === 'number' && task.ticket_cost > 0 ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <TicketPips price={task.ticket_cost} held={player?.tickets ?? null} size="card" showNumber />
+                  </View> : task.ticket_cost === 0 ? <Text style={{ color: '#204c6e', fontFamily: 'Knockout', fontSize: 14, lineHeight: 19 }}>Free challenge.</Text> : null}
                   {'energy_reward' in task && 'ride_parts_reward' in task &&
                     typeof task.coins === 'number' && typeof task.experience === 'number' &&
                     typeof task.energy_reward === 'number' && typeof task.ride_parts_reward === 'number' && (

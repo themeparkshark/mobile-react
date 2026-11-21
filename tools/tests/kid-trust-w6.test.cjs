@@ -48,8 +48,8 @@ test('no value anchors on a kid-facing shop card: a bundle\'s worth shows only i
 
 test('timed finds on the map count down in calm gold, never red', () => {
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
-  assert.match(marker, /timerBadgeUrgent: \{ backgroundColor: BRAND\.gold, borderColor: BRAND\.goldLip \}/);
-  assert.match(marker, /timerTextUrgent: \{ color: BRAND\.navy \}/);
+  // T2 (arcade plan, Nov 20 2026): a ride island has no timer chip at all; the leave date is on the coin card.
+  assert.doesNotMatch(marker, /MarkerTimer|timerBadge|stayWords/);
   assert.doesNotMatch(marker, /timer\w*: \{[^}]*BRAND\.red/);
   const ring = loadTs('src/screens/ExploreScreen/mapMarkerPresentation.ts');
   assert.notEqual(ring.RING.urgent.toLowerCase(), '#ef4a3c');

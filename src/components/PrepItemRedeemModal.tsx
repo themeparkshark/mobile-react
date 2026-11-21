@@ -33,6 +33,8 @@ import { setHomeHuntRankLine } from '../screens/ExploreScreen/homeHuntRankStore'
 
 // Local asset icons for currency fly (must be hoisted to module level)
 const TICKET_ICON = require('../../assets/images/ticket-icon.png');
+import TreatJar from './tickets/TreatJar';
+import { treatJarModel, type TreatJarAnswer, type TreatJarModel } from './tickets/treatJarModel';
 import {
   FloatingNumber,
   StarBurst,
@@ -110,6 +112,8 @@ export default function PrepItemRedeemModal({
     'is_new_variant' | 'replayed' | 'set_progress' | 'project_update' | 'hunt_points'
   > | null>(null);
   const reducedMotion = useReducedGameMotion();
+  // T8 (arcade plan): the treat meter and the jar, from the catch answer (null on today's server).
+  const [jar, setJar] = useState<TreatJarModel | null>(null);
   const { refreshPlayer } = useContext(AuthContext);
   const { location, latestLocationSampleRef, permissionGranted, requestLocation } = useContext(LocationContext);
   const { triggerFly } = useCurrencyFly();
@@ -159,6 +163,7 @@ export default function PrepItemRedeemModal({
       );
 
       setRewards(response.data.rewards);
+      setJar(response.data.replayed ? null : treatJarModel(response.data as unknown as TreatJarAnswer));
       setStreakInfo(response.data.streak);
       setPickupOutcome({
         is_new_variant: response.data.is_new_variant,
@@ -280,6 +285,7 @@ export default function PrepItemRedeemModal({
     HapticPatterns.buttonTap();
     setShowRewards(false);
     setRewards(null);
+    setJar(null);
     setPickupOutcome(null);
     setCollectError(null);
     setUnavailable(false);
@@ -753,6 +759,8 @@ export default function PrepItemRedeemModal({
                         </View>
                       )}
                     </View>}
+                    {/* T8: 3 treats = 1 Ticket into the jar (arcade server only). */}
+                    {jar && <View style={{ marginTop: 10 }}><TreatJar model={jar} reduced={reducedMotion} /></View>}
                     {/* The flame on the Rewards button is the one streak (core loop 4.5): no second streak here. */}
                     {(() => {
                       // Only when the server sent hunt_points. Zero shows the server's line verbatim.

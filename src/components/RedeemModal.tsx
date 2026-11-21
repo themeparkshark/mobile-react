@@ -33,8 +33,9 @@ import { useCoverArt } from './map/mapCover';
 import HomeArcade from './HomeArcade';
 import { playCaptionName } from './guide/playCaption';
 import { coinCardSeenNow, warmCoinCardsSeen } from './rewards/coinCardSeen';
-import { playPillState } from './rewards/playPill';
 import { findPendingWin, pendingWinRedeemable } from '../services/task-attempt/pendingWins';
+import TicketPips from './tickets/TicketPips';
+import { servedTicketPrice } from './tickets/ticketPipsModel';
 
 /**
  * PLAY!'s wrapper sits 50 pt below the map's bottom edge (ExploreScreen); the group rests 120 pt
@@ -143,7 +144,9 @@ export default function RedeemModal({
   // Earned Tickets waiting in the Stamp Book come first (the card claims them in place), so while any wait
   // PLAY! wears no gift: the button and the card always agree. Looked up once per Ticket count, only at 0.
   // Looked up at 0 Tickets with or without a free try: with none, an empty book is what dims PLAY! (T030).
-  const short = !!coin && (player?.tickets ?? 0) < Math.max(1, coin.ticket_cost ?? 1);
+  // T3 (arcade plan): the coin's served price. A missing price is never guessed as 1: it hides the pictures.
+  const price = coin ? servedTicketPrice(coin.ticket_cost) : null;
+  const short = price != null && (player?.tickets ?? 0) < price;
   const [claimWaiting, setClaimWaiting] = useState<{ tickets: number; count: number } | null>(null);
   const ticketsNow = player?.tickets ?? 0;
   useEffect(() => {
@@ -164,7 +167,7 @@ export default function RedeemModal({
   }, [modalVisible, redeemable]); // eslint-disable-line react-hooks/exhaustive-deps
   const ownClaimable = short && claimWaiting?.tickets !== ticketsNow ? 1 : claimWaiting?.count ?? 0;
   const badge: PlayBadge = coin ? playBadge({
-    tickets: ticketsNow, ticketCost: coin.ticket_cost ?? 1,
+    tickets: ticketsNow, ticketCost: price ?? 0,
     rescueAvailable: redeemable?.rescue_pass_available, rescueSource: redeemable?.rescue_pass_source,
     // Until the lookup answers, no gift: a gift that vanishes a moment later would be a false promise.
     claimable: claimableTickets === undefined ? ownClaimable : claimableTickets === null ? 1 : claimableTickets,
@@ -268,7 +271,7 @@ export default function RedeemModal({
     if (!redeemable) return;   // walked off while the press waited: nothing to open
     setOpenedRedeemable(redeemable);
     // A coin whose card was read before, with a Ticket in hand: PLAY! is the one press (the card starts at once).
-    setQuickStart(!!coin && (player?.tickets ?? 0) >= Math.max(1, coin.ticket_cost ?? 1)
+    setQuickStart(!!coin && price != null && (player?.tickets ?? 0) >= price
       && coinCardSeenNow(player?.id, redeemable?.type ?? '', coin.id));
     setModalVisible(true);
   };
@@ -277,11 +280,8 @@ export default function RedeemModal({
     const how = pressQueue.press(() => openRef.current());
     pressTrace('play.press', () => `${identity} ${how} modalVisible=${modalVisible} leaving=${modalLayers.leavingCount()} layers=${modalLayers.count()}`);
   };
-  // Out of Tickets with no free way to play right now (T030): PLAY! dims and wears a ticket, so it never looks
-  // like a free press; it still opens the card, whose big button plays the line or a practice game.
-  const pill = playPillState({ isCoin: !!coin, tickets: ticketsNow, ticketCost: coin?.ticket_cost ?? 1, badge,
-    claimable: claimableTickets === undefined ? (claimWaiting?.tickets === ticketsNow ? claimWaiting.count : null) : claimableTickets,
-    rescueAvailable: redeemable?.rescue_pass_available === true });
+  // T3 (arcade plan): short on Tickets, PLAY! is never dimmed or locked. Its Ticket pictures show the outlines and the
+  // card it opens lists the ways to get Tickets.
   // The guide card's body says "Tap PLAY!": a tap there is PLAY!'s own press, only while PLAY! is shown.
   const seenPlayRequest = useRef(playRequest);
   useEffect(() => {
@@ -301,7 +301,7 @@ export default function RedeemModal({
     <>
       {redeemable && available && (
         <Animated.View style={entrance}>
-          <Animated.View ref={pillRef} collapsable={false} style={{ transform: [{ scale: press }], opacity: pill.dim ? 0.62 : 1 }}
+          <Animated.View ref={pillRef} collapsable={false} style={{ transform: [{ scale: press }] }}
             onTouchStart={() => pressTrace('play.touch')}>
             <YellowButton
               onArtReady={() => { pillArtDrawn(); setPillReady(true); }}
@@ -314,21 +314,17 @@ export default function RedeemModal({
               accessibilityLabel={badge === 'free_try' ? 'Free try today' : 'Extra try'}>
               {badge === 'free_try' ? <GameIcon name="gift" size={30} /> : <TicketGift size={30} />}
             </View>}
-            {pill.needTicket && <View pointerEvents="none" style={styles.badge} accessible accessibilityLabel="You need a Ticket">
-              <GameIcon name="ticket" size={28} />
-            </View>}
+            {/* Short on Tickets the pictures under PLAY! show the outlines; no extra badge, nothing locked or blinking. */}
           </Animated.View>
           {coin && <View pointerEvents="none" style={styles.caption} accessible
             accessibilityLabel={badge === 'free_try' ? `${coin.name}. Free try today.`
               : badge === 'extra_try' ? `${coin.name}. Uses an extra try.`
-              : `${coin.name}. Costs ${coin.ticket_cost ?? 1} ${(coin.ticket_cost ?? 1) === 1 ? 'Ticket' : 'Tickets'}.`}>
+              : price != null ? `${coin.name}. Costs ${price} ${price === 1 ? 'Ticket' : 'Tickets'}. You have ${ticketsNow}.` : coin.name}>
             {!!coin.coin_url && <Image source={{ uri: coin.coin_url }} style={styles.captionCoin} contentFit="contain" />}
             {/* One line on every phone (N11): the name shrinks to fit, and a very long one keeps its main words. */}
             <Text style={styles.captionText} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>{playCaptionName(coin.name)}</Text>
-            {!badge && <View style={styles.cost}>
-              <GameIcon name="ticket" size={16} />
-              <Text style={styles.captionText}>{coin.ticket_cost ?? 1}</Text>
-            </View>}
+            {/* T3: the price as Ticket pictures, filled for the Tickets held, outlined for the ones short. */}
+            {!badge && price != null && <View style={styles.cost}><TicketPips price={price} held={ticketsNow} size="button" /></View>}
           </View>}
         </Animated.View>
       )}

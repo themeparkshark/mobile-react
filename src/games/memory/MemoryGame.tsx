@@ -8,7 +8,7 @@
  *   ride        Ride Sprint, the paid Ride Challenge: 8 plain pairs on a
  *               server-revealed board, a charged clock (network never costs
  *               a Ticket), Signal Mode on a weak start, the coin minted in
- *               the edition your stars earned, 3 tries per Ticket. On screen:
+ *               the edition your stars earned, one game of 3 boards per PLAY!. On screen:
  *               the rim timer and the chain plate. Nothing else.
  *   timeAttack  queue solo: the staircase, one new system per board and each
  *               one earned, the line bleed instead of any freeze, opt-in Heat
@@ -2562,7 +2562,7 @@ export default function MemoryGame({
   useMemoryAutoplay({ runRef, tapSlot, enabled: visible && !stageHeld && !result && !tryScreen, capture: captureAutoplay });
 
   // ---------------------------------------------------------------------------
-  // Try again (Ride Sprint: 3 tries per Ticket), rematch, wrap-up
+  // Next board (Ride Sprint: one game of 3 boards per PLAY!), rematch, wrap-up
   // ---------------------------------------------------------------------------
   const tryAgain = useCallback(() => {
     const prev = runRef.current;

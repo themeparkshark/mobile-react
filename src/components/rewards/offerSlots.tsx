@@ -17,6 +17,8 @@ import { AuthContext } from '../../context/AuthProvider';
 import { vipWinOffer } from '../../services/money/offers';
 import { markVipNudgeShown, useVipNudge } from '../../services/money/vipNudge';
 import { vipRideMultiplierNow, warmVipPerks } from '../../services/money/vipPerks';
+import ShelfGiftBar from '../tickets/ShelfGiftBar';
+import { shelfGiftFor } from '../tickets/shelfGift';
 
 export interface OfferSlotProps {
   /** Where the row sits, for the offer's own rules and analytics. */
@@ -69,9 +71,12 @@ export function WinOfferSlot({ firstWin, coins, xp, winKey, closeCard }: WinOffe
   const nudge = useVipNudge(!isVip && winKey != null ? winKey : null);
   const line = winVipLine({ coins, xp, multiplier, isVip });
   const vipLine = starterShown === false && nudge && !!line;
-  if (!firstWin && !vipLine) return null;
+  // T5 (arcade plan): the shelf gift bar ("10 of 40 · 1 more: +3 Tickets") leads the slot, before any offer.
+  const gift = shelfGiftFor(winKey);
+  if (!firstWin && !vipLine && !gift) return null;
   return (
     <View style={{ alignSelf: 'stretch', marginTop: 10 }}>
+      {gift && <ShelfGiftBar gift={gift} flyKey={winKey} />}
       {firstWin && <CalmOffer placement="first_win" compact onShown={setStarterShown} />}
       {vipLine && <CalmOffer placement="win_vip" vipLine={line} beforeLeave={closeCard}
         onShown={shown => { if (shown) markVipNudgeShown(winKey); }} />}

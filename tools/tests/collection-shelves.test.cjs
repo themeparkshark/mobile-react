@@ -152,6 +152,7 @@ test('unfound coin copy is type-aware and leads with the gameplay action', () =>
     '../context/SoundEffectProvider': {}, './Ribbon': {}, './YellowButton': {}, './MysteryCoinArtwork': {},
     './collection/CoinSocket': {}, '../ui/GameIcon': {}, '../ui/GameRichText': {}, '../hooks/useReducedGameMotion': {},
     '../ui/modalLayers': {}, '../services/reveal/revealLadder': {}, './collection/RideFactLine': {},
+    './tickets/TicketPips': {}, '../context/AuthProvider': {},
   });
   assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false, kind: 'ride' }).ribbon, 'Ride Coin');
   assert.equal(unfoundCoinCopy({ isSecret: false, isArchived: false, isResting: false }).challenge, 'PLAY! at this spot');
@@ -199,7 +200,8 @@ test('stamp book cards and detail are bright parchment or Alex blue, never dark 
 test('unfound coin copy: rescue pass wording follows the coin kind and Ride Part is singular for one', () => {
   const src = fs.readFileSync('src/components/UnfoundCoinModal.tsx', 'utf8');
   assert.ok(!src.includes("may be available at the ride.'"), 'rescue pass copy must not assume a ride');
-  assert.match(src, /kind === 'ride' \? 'at the ride' : 'at this spot'/);
+  // T3 (arcade plan): no free try promise on the card; a Ticket is spent win or lose.
+  assert.doesNotMatch(src, /free try works/);
   assert.match(src, /Ride Part\$?\{task\.ride_parts_reward === 1 \? '' : 's'\}/);
 });
 

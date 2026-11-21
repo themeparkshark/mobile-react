@@ -114,7 +114,7 @@ test('T036/N04: the fx stage never reads its state on the JS thread (a sync UI t
 test('T038: the picture re-deal reaches the server as a new start, never a read of the trivia attempt', () => {
   const recovery = fs.readFileSync('src/services/task-attempt/recovery.ts', 'utf8');
   // Recovery reads an attempt back by its id and only posts without one: the re-deal must drop the id.
-  assert.match(recovery, /const result = checkpoint\.attemptId\n\s+\? await getTaskAttempt\(checkpoint\.attemptId\)/);
+  assert.match(recovery, /const known = checkpoint\.attemptId \? await getTaskAttempt\(checkpoint\.attemptId\) : null;/);
   assert.match(modal, /await writeTaskAttemptCheckpoint\(\{ \.\.\.saved, attemptId: null, pictureOnly: true,/);
   assert.match(modal, /redealStartRef\.current = true;\n\s+setRedealt\(true\);\n\s+await handleStartWheel\(\);/);
   assert.match(modal, /attemptId: redealStartRef\.current \? null : saved\?\.attemptId \?\? attemptRef\.current\?\.id \?\? savedAttemptIdRef\.current,/);
@@ -195,7 +195,7 @@ test('w5 T036: PLAY starts from the recovery check and the start skips a second 
 test('w5 N04: the loss card holds under the veiled board until its reset is drawn (no dim map between)', () => {
   assert.match(modal, /const replayUnderCard = flowState === 'replay' && !replayShown;/);
   assert.match(modal, /\(flowState === 'replay' && !replayUnderCard\);/, 'the card keeps its layout (not full-bleed) while it holds');
-  assert.match(modal, /\{\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard title=\{lostCopy\.title\} art="soClose"/);
+  assert.match(modal, /\{\(flowState === 'lost' \|\| replayUnderCard\) && <ChallengeStatusCard title=\{loss\.title\} art="soClose"/);
   // The board is drawn after (above) the card and fills the window, so the held card takes no touch.
   assert.ok(modal.indexOf('replayUnderCard) && <ChallengeStatusCard') < modal.indexOf('<View style={[styles.minigameContainer, boardOutset'));
 });

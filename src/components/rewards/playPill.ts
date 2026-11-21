@@ -14,7 +14,9 @@ export function playPillState(input: {
   readonly claimable: number | null;
   readonly rescueAvailable: boolean;
 }): { dim: boolean; needTicket: boolean } {
-  const short = input.isCoin && (Number(input.tickets) || 0) < Math.max(1, Number(input.ticketCost) || 1);
+  // T3 (arcade plan): the served price; a missing price is never guessed as 1 (it cannot be short of nothing).
+  const price = Number(input.ticketCost);
+  const short = input.isCoin && Number.isFinite(price) && price >= 1 && (Number(input.tickets) || 0) < price;
   const nothingNow = short && !input.badge && !input.rescueAvailable && input.claimable === 0;
   return { dim: nothingNow, needTicket: nothingNow };
 }

@@ -224,14 +224,18 @@ test('out of Tickets the card offers the free ways in one order, and the grown-u
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /if \(freeStep\?\.kind === 'claim'\) \{ void handleClaimTickets\(\); return; \}/);
   assert.match(modal, /await claimStampReward\(source\.id\)/, 'claimed right here, in place');
-  const card = modal.slice(modal.indexOf('{needTicket && <View style={styles.ticketHelpCard}>'), modal.indexOf('{startError && <Text style={styles.ticketError}>'));
-  const shop = card.indexOf('onPress={openSupplies}');
-  assert.ok(shop > 0 && card.indexOf('treats at home = 1 Ticket') < shop, 'the shop sits under every free way');
-  assert.doesNotMatch(card, /<CoinTopUpOffer|\$\d/, 'no price inside the card: one small row to Supplies, where the grown-up gate is');
-  assert.doesNotMatch(card, /name=\{step\.kind === 'line_ticket' \? 'queue'/, 'the pocket watch means Wait Times only');
-  assert.match(modal, /\{!needTicket && <View style=\{\{ marginLeft: -4/, 'the help card takes the reward tiles\' room so the card fits an SE');
-  assert.match(card, /step\.kind === 'line_ticket'/, 'the line Ticket only when Queue Tickets is on (freeTickets contract)');
-  assert.doesNotMatch(card, /LinePlay while you wait|home finds/i);
+  // T7 (arcade plan, Nov 20 2026): Get Tickets lists only the free ways that work now, the grown-up row last.
+  const card = modal.slice(modal.indexOf('{needTicket && <GetTicketsPanel'), modal.indexOf('{startError && <Text style={styles.ticketError}>'));
+  assert.ok(card.length > 0);
+  assert.doesNotMatch(card, /<CoinTopUpOffer|\$\d/, 'no price inside the card: one row to Supplies, behind the grown-up gate');
+  const rows = loadTs('src/components/tickets/getTicketsModel.ts');
+  const all = rows.getTicketsRows({ price: 3, tickets: 1, sources: { home: true, queue: true, queue_per_park_day: 3, stamps_waiting_tickets: 5,
+    line_tickets_left_today: 2, trail_box_steps_left: 400 }, stampTickets: 0, rideHasLine: true, queueTicketsOn: true, affordableNear: 14,
+    canPick: true, storeOn: true, arcade: true });
+  assert.deepEqual([...all.rows].map(r => r.kind), ['claim', 'line', 'trail', 'near', 'pick', 'grownups']);
+  assert.equal(all.footer, 'Tomorrow at any park: +3');
+  assert.match(modal, /if \(kind === 'grownups'\) void askGrownUp\(null\)\.then\(ok => \{ if \(ok\) openSupplies\(\); \}\);/, 'the gate first');
+  assert.match(modal, /\{taskType !== 'task' && !needTicket && <View style=\{\{ marginLeft: -4/, 'the help card takes the reward tiles\' room so the card fits an SE');
 });
 
 test('the Ticket Punch says "This ride\'s game" and never names Rhythm Tap or Snap the Ride', () => {
@@ -263,7 +267,7 @@ test('TRY AGAIN sends retry_of (the same game) and every paid try sends picture_
   assert.equal('retry_of' in sent[0] || 'picture_only' in sent[0], false, 'a plain start is exactly the old request');
   assert.equal(sent[1].retry_of, 77);
   assert.equal(sent[1].picture_only, 1);
-  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', { './began': { flushBegan: async () => undefined },
     '../../api/endpoints/me/task-attempts': {}, './checkpoint': {},
   });
   assert.deepEqual([...recovery.startExtras({})], []);
@@ -369,9 +373,9 @@ test('a VIP member\'s retry lives inside TRY AGAIN; nobody else sees a VIP or ad
   const lost = loadTs('src/components/rewards/lostTryCard.ts');
   assert.equal(lost.VIP_RETRY_ACTION.label, 'Try Again');
   assert.equal(lost.VIP_RETRY_ACTION.note, 'VIP try');
+  // T4 (arcade plan): no VIP try on the ride's loss card any more (a Ticket is spent win or lose; VIP gets +5 at the gate).
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /const vipRetryCase = taskType !== null && lostTicketCost > 0 && !usedRescuePass\n\s+&& !firstCoinTicketReturned && !rescueRetryAvailable && vip;/);
-  assert.match(modal, /const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;/);
+  assert.doesNotMatch(modal, /vipRetryCase|canOfferRetry/);
   assert.doesNotMatch(modal, /AD_RETRY_ACTION|adsAvailable|gameAlert/);
   const buttons = read('src/gamekit/results/ResultButtons.tsx');
   assert.match(buttons, /\{note \? <View style=\{styles\.note\}><Text style=\{styles\.noteText\} numberOfLines=\{1\}>\{withNumberFont\(note\)\}<\/Text><\/View> : null\}/);
@@ -496,7 +500,9 @@ test('exactly one primary and one secondary: NEXT COIN (or the Adventure\'s line
   assert.equal((card.match(/<YellowButton /g) ?? []).length, 1, 'one big button');
   assert.equal((card.match(/<TouchableOpacity /g) ?? []).length, 1, 'one quiet button');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /if \(button\.kind === 'next' && target\) guide\.setTarget\(target\.taskId, 'win_card'\);/, 'the guide is the one pointer');
+  // T5 (arcade plan, Nov 20 2026): the win card never points the guide at a ride; it gets no next target at all.
+  assert.doesNotMatch(modal, /guide\.setTarget\(target\.taskId, 'win_card'\)/);
+  assert.match(modal, /nextTarget=\{null\}/);
   assert.match(modal, /const ride = await storyWithin\(resolveQueueStoryContext\(park\.id, 0, taskName, wonTaskId\),/);
 });
 
@@ -675,7 +681,7 @@ test('after a trivia loss with Picture games on, TRY AGAIN sends retry_of and pi
     '../../../utils/toast': { showToast() {} },
   });
   const writes = [];
-  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', { './began': { flushBegan: async () => undefined },
     '../../api/endpoints/me/task-attempts': api,
     './checkpoint': { writeTaskAttemptCheckpoint: async cp => { writes.push(cp); } },
   });
@@ -711,10 +717,8 @@ test('kid test: the Trivia toggle shows a question with a cross, the ball a chec
   // Fix pass w4 T045: the basket wears the moving hold demo (a finger held on it, sliding); banana and ball both checked.
   assert.match(intro, /banana: \[\[\{ art: ART\.basket, demo: 'slide' \}\], \[\{ art: ART\.banana, mark: 'check' \}, \{ art: ART\.ball, mark: 'check' \}\]\]/);
   assert.ok(fs.existsSync(path.join(root, 'assets/images/screens/community-center-question.png')));
+  // T7 (arcade plan): the treats tile left the ride card (Get Tickets lists park ways; treats live on the home card, T8).
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /const TREAT_ART = require\('\.\.\/\.\.\/assets\/images\/prep-items\/churros\/churro_18\.png'\);/);
-  // Fix W3 T030: the treats way is a picture, three churros = a Ticket.
-  assert.match(modal, /<Image key=\{i\} source=\{TREAT_ART\} style=\{styles\.treatArt\} contentFit="contain" \/>/);
   assert.doesNotMatch(modal, /name=\{step\.kind === 'line_ticket' \? 'ride' : 'map'\}/, 'the treats line never wears the compass');
   assert.match(modal, /export const BACK_TO_MAP = 'Back to Map';/);
   assert.match(modal, /export const NEED_TICKET_BUTTON = BACK_TO_MAP;/);
@@ -726,7 +730,6 @@ test('short lines draw their digits in the number face, so "1" never reads "I"',
   assert.match(read('src/components/PostWinRewardsModal.tsx'), /<Text style=\{styles\.weekText\}>\{withNumberFont\(weekLine\)\}<\/Text>/);
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   // Fix W3 T030: the free ways are pictures now; their words are spoken, never drawn.
-  assert.match(modal, /accessibilityLabel=\{`\$\{TREATS_PER_TICKET\} treats at home make 1 Ticket\.`\}/);
   assert.match(modal, /<Text style=\{styles\.stepLine\}>\{withNumberFont\(challengeStepLine\(freeStep\) \?\? ''\)\}<\/Text>/);
   assert.match(read('src/games/trivia-duel/ui/Card.tsx'), /\{withNumberFont\(roundLabel\)\}/, '"QUESTION 1 OF 3" never reads "I OF 3"');
   // The loss card's try line ("1 of 3 right.") is already in the number face; its message ("1 Ticket used.") now too.
@@ -767,8 +770,9 @@ test('today\'s Adventure coin won: the big button plays its line story, even bef
 test('one phrase back to the map: every card that leads to the map says Back to Map', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.doesNotMatch(modal, /Return to [Mm]ap|label: 'Continue'|label: 'DONE'/);
-  // Fix W3 T029: the loss card's map button is its small second button now (quiet), never its only way on.
-  assert.ok((modal.match(/label: BACK_TO_MAP/g) ?? []).length >= 7);
+  // T4 (arcade plan): the loss card's map button lives in LossActions (the same words); the other cards keep label: BACK_TO_MAP.
+  assert.ok((modal.match(/label: BACK_TO_MAP/g) ?? []).length >= 6);
+  assert.match(read('src/components/tickets/LossActions.tsx'), /const BACK_TO_MAP = 'Back to Map';/);
   const card = read('src/components/PostWinRewardsModal.tsx');
   assert.doesNotMatch(card, /Back to the Park/);
   assert.match(card, /label: BACK_TO_MAP_LABEL/);
@@ -925,13 +929,10 @@ test('a member whose VIP tries are used today sees "comes back tomorrow", never 
   assert.equal(lost.vipTriesLeft({ placements: { retry: { remaining: -1 } } }), 0);
   assert.equal(lost.vipTriesLeft(null), null, 'no answer: the try is offered and the server decides');
   assert.equal(lost.vipTriesLeft({ placements: {} }), null);
+  // T4 (arcade plan): the ride's loss card reads no VIP tries at all (VIP's perk moved to +5 at the park gate).
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  // Read while the game plays (members only), so the loss card's big button never swaps under a finger.
-  assert.match(modal, /if \(!vip \|\| flowState !== 'minigame'\) return undefined;\n\s+let alive = true;\n\s+void getAdSummary\(\)\.then\(summary => \{ if \(alive\) setVipLeft\(vipTriesLeft\(summary\)\); \}\)/);
-  assert.match(modal, /const vipOutToday = vipRetryCase && vipLeft === 0;\n\s+const canOfferRetry = retryOffered && vipRetryCase && !vipOutToday;/);
-  assert.match(modal, /message=\{vipNote \?\? \(vipOutToday \? VIP_TRY_TOMORROW : lostCopy\.message\)\}/);
-  assert.match(modal, /setRetryOffered\(true\);\n\s+setVipLeft\(null\);\n\s+setVipNote\(null\);/, 'a new card starts with no old note');
-  assert.match(modal, /const vipRetryCase = taskType !== null && lostTicketCost > 0 && !usedRescuePass\n\s+&& !firstCoinTicketReturned && !rescueRetryAvailable && vip;/, 'members only');
+  assert.doesNotMatch(modal, /getAdSummary|vipTriesLeft|VIP_TRY_TOMORROW/);
+  assert.match(modal, /setLossFields\(null\);/, 'a new card starts with no old loss');
 });
 
 test('Memory\'s loss line tells the best of the Ticket\'s three tries, never only a last try that found nothing', () => {
@@ -974,5 +975,9 @@ test('the returned-Ticket line promises "same game" only on a server that deals 
   assert.equal(lost.lostTryCopy({ ...base, sameGame: true }).message, 'Your Ticket came back. Same game, try again!');
   assert.equal(lost.lostTryCopy(base).message, 'Your Ticket came back. Same game, try again!', 'callers that do not say keep the line');
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /retryOffered: canOfferRetry, near: rideTry\?\.near === true, sameGame: playFlagsNow\(\)\.retrySameGame,\n\s+rescueSource: redeemable\?\.rescue_pass_source, nextGame: retryGameName \}\);/);
+  // T4 (arcade plan): on today's server a Ticket the server gave back still says so on the ride's card (lossCard.ts).
+  const card = loadTs('src/components/tickets/lossCard.ts');
+  assert.equal(card.lossCardModel({ attempt: { first_coin_ticket_returned: true, ticket_cost: 1 }, coinName: 'Dumbo', price: 1, tickets: 1, practice: false }).message,
+    'Your Ticket came back. Try again!');
+  assert.match(modal, /const loss = lossCardModel\(/);
 });

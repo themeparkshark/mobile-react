@@ -444,7 +444,8 @@ test('calm clocks on the map and the home map: whole minutes, never a ticking m:
   assert.doesNotMatch(live, /ms \/ 60_000/);
   assert.doesNotMatch(live, /setInterval\(\(\) => setNow\(Date\.now\(\)\), 1000\)/, 'no per-second ticking on the home map');
   const marker = read('src/screens/ExploreScreen/TaskMarker.tsx');
-  assert.match(marker, /the words change once \(at zero\), so the chip wakes once\./, 'the island chip wakes once, not every minute');
+  // T2 (arcade plan): the island has no clock at all (the leave date is on the coin card).
+  assert.doesNotMatch(marker, /MarkerTimer|setNow\(Date\.now\(\)\)/, 'the island never wakes for a clock');
 });
 
 test('at home Finn\'s first-time intro goes first: the daily chest waits while the intro is owed (4.3 rule 1)', () => {

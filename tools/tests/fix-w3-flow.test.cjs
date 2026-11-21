@@ -43,11 +43,12 @@ test('T029 a free retry or a VIP try comes first; at 0 Tickets the way on is the
 test('T029 the loss card always shows the map as its small second button and its primary from the plan', () => {
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   const lost = modal.slice(modal.indexOf("{(flowState === 'lost' || replayUnderCard) && <ChallengeStatusCard"), modal.indexOf('{/* MINIGAME STATE'));
-  assert.match(lost, /quiet=\{\{ label: BACK_TO_MAP, onPress: handleLostClose \}\}/);
-  assert.match(lost, /label: lossPlan\.kind === 'vip_retry'/);
-  assert.match(lost, /footnotes=\{lossPlan\.footnotes\}/);
-  assert.doesNotMatch(lost, /: \{ label: BACK_TO_MAP, onPress: handleLostClose \}\}/, 'never a card whose only button is the map');
-  assert.match(modal, /lossPlan\.kind === 'ways' \? backToCard : \(\) => \{ void handleProtectedRetry\(\); \}/);
+  // T4 (arcade plan, Nov 20 2026): TRY AGAIN with the price as pictures and BACK TO MAP, the same size (LossActions).
+  // Short on Tickets, TRY AGAIN opens the free ways (never a dead end); no next coin line (the app never picks one).
+  assert.match(lost, /actions=\{armed => <LossActions armed=\{armed\} price=\{loss\.price\} held=\{playerTickets\} short=\{loss\.short\} soft=\{loss\.soft\}/);
+  assert.match(lost, /onMap=\{handleLostClose\}/);
+  assert.doesNotMatch(lost, /footnotes=/);
+  assert.match(modal, /const lossRetry = loss\.short \? backToCard : \(\) => \{ void handleProtectedRetry\(\); \};/);
 });
 
 /* T046: an input lock that mashing keeps extending (hold-2: longer than a steady tapper's gap, see fix-w3-hold-2). */
@@ -76,10 +77,12 @@ test('T030 T031 the NEED A TICKET card plays: LinePlay at a line ride with the l
   assert.equal(card.needTicketMain({ queueTicketsOn: false, rideHasLine: true, practice: true }), 'practice');
   assert.equal(card.needTicketMain({ queueTicketsOn: true, rideHasLine: false, practice: true }), 'practice');
   assert.equal(card.needTicketMain({ queueTicketsOn: false, rideHasLine: false, practice: false }), 'map');
+  // T7 (arcade plan): the NEED A TICKET tiles became Get Tickets: only rows that work now, the line first after a claim.
   const modal = read('src/components/RedeemRedeemableModal.tsx');
-  assert.match(modal, /<GameIcon name="moon" size=\{26\} \/>/, 'tomorrow\'s free try is a moon picture');
-  assert.match(modal, /<GameIcon name="line" size=\{26\} \/>/, 'the line Ticket wears LinePlay\'s own picture');
-  assert.match(modal, /<NeedTicketOfferSlot placement="need_ticket"/, 'one clean place for a later calm offer row');
+  assert.match(modal, /\{needTicket && <GetTicketsPanel /);
+  const panel = read('src/components/tickets/GetTicketsPanel.tsx');
+  assert.match(panel, /claim: 'star', line: 'line'/, 'the line row wears LinePlay\'s own picture');
+  assert.doesNotMatch(modal, /<NeedTicketOfferSlot/, 'no pack art or offer on the kid\'s sheet');
   assert.match(read('src/components/RedeemModal.tsx'), /<HomeArcade visible=\{practiceOpen\}/);
 });
 

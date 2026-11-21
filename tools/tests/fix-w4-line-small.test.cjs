@@ -42,7 +42,7 @@ test('T084: the line Ticket fills over its 10 minutes near the ride, and the cop
   const card = read('src/screens/LinePlay/components/WaitCard.tsx');
   assert.match(card, /queueTicketsOn && rewardTrackingAvailable && ticketAvailable === true && !completed && \(\n\s+<LineTicketFill/);
   for (const file of ['src/services/guide/guideCopy.ts', 'src/services/guide/freeTickets.ts', 'src/screens/StoreScreen/SuppliesShop.tsx',
-    'src/components/RedeemRedeemableModal.tsx', 'src/screens/ExploreScreen/adventureTicketPresentation.ts', 'src/services/help/glossary.ts']) {
+    'src/components/tickets/getTicketsModel.ts', 'src/screens/ExploreScreen/adventureTicketPresentation.ts', 'src/services/help/glossary.ts']) {
     const src = read(file);
     assert.doesNotMatch(src, /'[^']*Your first wait at a ride earns/, `${file} never hides the 10 minutes`);
     assert.match(src, /10 minutes in a ride line earns/, file);

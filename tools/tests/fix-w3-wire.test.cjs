@@ -17,15 +17,16 @@ const offers = loadTs('src/services/money/naturalOffers.ts', {
   '@react-native-async-storage/async-storage': { default: { getItem: async () => null, setItem: async () => undefined } },
 });
 
-test('T220 need_ticket: the NEED A TICKET card mounts the calm offer, and never right after a lost try', () => {
+test('T220 need_ticket: the calm offer slot stays built, but Get Tickets (T7, arcade plan) shows no offer to the kid', () => {
   const slots = strip(read('src/components/rewards/offerSlots.tsx'));
   assert.match(slots, /export function NeedTicketOfferSlot\(\{ loss = false \}: OfferSlotProps\)[^{]*\{\s*return <CalmOffer placement="need_ticket" loss=\{loss\} compact/);
   const modal = strip(read('src/components/RedeemRedeemableModal.tsx'));
-  assert.match(modal, /<NeedTicketOfferSlot placement="need_ticket" taskId=\{taskId\} closeCard=\{close\} loss=\{cardAfterLoss\} \/>/);
+  // T7 (arcade plan): the grown-up row behind the gate is the only money path on the kid's sheet; no pack art.
+  assert.doesNotMatch(modal, /<NeedTicketOfferSlot/);
   // The loss card's way on at 0 Tickets (backToCard) is a loss moment; a fresh open of the card is not.
   const back = modal.slice(modal.indexOf('const backToCard = useCallback'), modal.indexOf("setFlowState('preview');", modal.indexOf('const backToCard = useCallback')));
   assert.match(back, /setCardAfterLoss\(true\);/);
-  const reset = modal.slice(modal.indexOf('setLostTicketCost(0);'), modal.indexOf('setRetryOffered(true);'));
+  const reset = modal.slice(modal.indexOf('setLostTicketCost(0);'), modal.indexOf('setLossFields(null);'));
   assert.match(reset, /setCardAfterLoss\(false\);/);
 });
 
@@ -54,6 +55,9 @@ test('T230 the VIP line says this win\'s own numbers, and nothing for VIP or an 
     '../../services/money/vipNudge': { useVipNudge: () => false, markVipNudgeShown() {} },
     '../../services/money/vipPerks': { vipRideMultiplierNow: () => null, warmVipPerks: async () => undefined },
     '../../services/money/offers': loadTs('src/services/money/offers.ts', {}),
+    // T5 (arcade plan): the shelf gift bar leads the slot; today's server sends no gift, so it draws nothing here.
+    '../tickets/ShelfGiftBar': { default: 'ShelfGiftBar' },
+    '../tickets/shelfGift': { shelfGiftFor: () => null },
   });
   assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: false }), 'VIP doubles this: +60 Shark Coins, +50 XP');
   assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: true }), null);
@@ -147,7 +151,7 @@ test('T196 T197 T199: Beat the Buzzer on a coin plays the server\'s dealt round 
   assert.equal(trivia.triviaCrewFor({ kind: 'friends', players: [] }, false), 'friends');
   assert.equal(trivia.triviaCrewFor(null, false), null);
 
-  const recovery = loadTs('src/services/task-attempt/recovery.ts', {
+  const recovery = loadTs('src/services/task-attempt/recovery.ts', { './began': { flushBegan: async () => undefined },
     '../../api/endpoints/me/task-attempts': {}, './checkpoint': {},
   });
   assert.deepEqual(JSON.parse(JSON.stringify(recovery.startExtras({}))), [], 'a plain start sends the old request');

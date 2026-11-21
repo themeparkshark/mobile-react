@@ -112,14 +112,10 @@ test('no find ever shows 0:00: at its time it fades out and asks for fresh map d
   }
 });
 
-test('ride timers say Leaves soon in words and fade themselves out at zero', () => {
+test('ride islands carry no timer chip (T2, arcade plan: the leave date is on the coin card)', () => {
   const src = read('src/screens/ExploreScreen/TaskMarker.tsx');
-  const body = src.slice(src.indexOf('function MarkerTimer'), src.indexOf('const TIMER_FADE_MS'));
-  assert.match(body, /\{stayWords\(left\) \?\? 'Leaves soon'\}/);
-  assert.doesNotMatch(body, /Math\.round|padStart/, 'no own m:ss math (it rounded the last second to 0:00)');
-  assert.match(body, /if \(!ticking \|\| done\) return;/, 'stops ticking at zero');
-  assert.match(body, /withTiming\(done \? 0 : 1/, 'fades out at zero from inside the timer');
-  assert.doesNotMatch(src, /<View style=\{\[styles\.timerBadge/, 'the chip itself fades, not just its text');
+  assert.doesNotMatch(src, /function MarkerTimer|<MarkerTimer|styles\.timerBadge/);
+  assert.match(src, /const showTimer = false;/);
 });
 
 test('the pointer line and the +N badge are always mounted and animate in (no pop)', () => {

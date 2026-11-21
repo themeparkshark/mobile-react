@@ -484,7 +484,8 @@ test('round 4: the unfound sight card says Sight Coin (the tab word) and its pri
   assert.match(card, /ribbon: kind === 'coin' \? 'Sight Coin' : 'Spot Coin'/);
   assert.match(card, /\+\$\{task\.coins\} Shark Coins/);
   assert.doesNotMatch(card, /\+\$\{task\.coins\} coins/);
-  assert.match(card, /`Costs \$\{task\.ticket_cost\} Ticket\$\{/, 'Tickets are a named thing: capital T');
+  // T3 (arcade plan): the price is Ticket pictures with its number (TicketPips), not a sentence.
+  assert.match(card, /<TicketPips price=\{task\.ticket_cost\} held=\{player\?\.tickets \?\? null\} size="card" showNumber \/>/);
 });
 
 test('round 5: the shelf NEXT COIN never names a closed, down or refurbishing ride; at night the sights stay open', () => {

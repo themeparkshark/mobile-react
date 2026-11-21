@@ -131,9 +131,10 @@ test('T037 the win\'s own Energy line folds into the held win card; Energy news 
 /* T039: the card says what a Ticket buys before PLAY. */
 test('T039 the server deal turns into shells on the card; no deal keeps the card as today', () => {
   const card = loadTs('src/components/rewards/coinCardModel.ts');
-  assert.deepEqual(plain(card.dealTries({ game: 'memory', tries_per_ticket: 3 })), { shells: 3, label: '1 Ticket = 3 tries at Memory Match' });
-  assert.deepEqual(plain(card.dealTries({ game: 'tap', tries_per_ticket: 1 })), { shells: 1, label: '1 Ticket = 1 try at Whack-a-Shark' });
-  assert.equal(card.dealTries({ game: 'trivia', tries_per_ticket: 1 }).label, '1 Ticket = 1 try at Beat the Buzzer');
+  // T9 (arcade plan): one game of 3 boards, never "tries per Ticket".
+  assert.deepEqual(plain(card.dealTries({ game: 'memory', tries_per_ticket: 3 })), { shells: 3, label: 'One game, 3 boards of Memory Match' });
+  assert.deepEqual(plain(card.dealTries({ game: 'tap', tries_per_ticket: 1 })), { shells: 1, label: 'One game of Whack-a-Shark' });
+  assert.equal(card.dealTries({ game: 'trivia', tries_per_ticket: 1 }).label, 'One game of Beat the Buzzer');
   assert.equal(card.dealTries({ tries_per_ticket: 9 }).shells, 5, 'never more than five shells');
   assert.equal(card.dealTries(null), null);
   assert.equal(card.dealTries({ game: 'tap', tries_per_ticket: 0 }), null);
