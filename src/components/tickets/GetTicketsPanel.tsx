@@ -29,7 +29,7 @@ export default function GetTicketsPanel({ price, tickets, have, rows, footer, bu
     <View style={styles.head}>
       <Text style={styles.title}>GET TICKETS</Text>
       <View style={styles.price}>
-        <TicketPips price={price} held={tickets} size="card" />
+        <TicketPips price={price} held={tickets} size="button" />
         <Text style={styles.have}>{withNumberFont(have)}</Text>
       </View>
     </View>
@@ -51,17 +51,17 @@ export default function GetTicketsPanel({ price, tickets, have, rows, footer, bu
 
 const styles = StyleSheet.create({
   panel: { alignSelf: 'stretch', backgroundColor: BRAND.cream, borderRadius: 18, borderWidth: 3, borderColor: BRAND.navy,
-    padding: 12, gap: 8, marginTop: 8 },
-  head: { alignItems: 'center', gap: 4 },
-  title: { fontFamily: FONT.display, fontSize: 20, color: BRAND.navy },
+    padding: 10, gap: 6, marginTop: 6 },
+  head: { alignItems: 'center', gap: 2 },
+  title: { fontFamily: FONT.display, fontSize: 18, color: BRAND.navy },
   price: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   have: { fontFamily: FONT.body, fontSize: 17, color: BRAND.navySoft },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: BRAND.white, borderRadius: 14, borderWidth: 2.5,
-    borderColor: BRAND.navy, paddingVertical: 6, paddingHorizontal: 8, minHeight: 52 },
+    borderColor: BRAND.navy, paddingVertical: 4, paddingHorizontal: 8, minHeight: 46 },
   icon: { width: 30, alignItems: 'center' },
-  rowText: { flex: 1, fontFamily: FONT.body, fontSize: 17, lineHeight: 20, color: BRAND.navy },
+  rowText: { flex: 1, fontFamily: FONT.body, fontSize: 16, lineHeight: 19, color: BRAND.navy },
   btn: { backgroundColor: BRAND.gold, borderRadius: 11, borderWidth: 2.5, borderColor: BRAND.navy, borderBottomWidth: 4,
-    paddingHorizontal: 10, paddingVertical: 6, maxWidth: 140, minHeight: 40, justifyContent: 'center' },
+    paddingHorizontal: 10, paddingVertical: 5, maxWidth: 170, minHeight: 38, justifyContent: 'center' },
   btnQuiet: { backgroundColor: BRAND.sky },
   btnText: { fontFamily: FONT.display, fontSize: 14, color: BRAND.navy },
   pressed: { opacity: 0.7 },

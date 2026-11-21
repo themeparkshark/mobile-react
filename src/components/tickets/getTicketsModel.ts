@@ -60,7 +60,7 @@ export function getTicketsRows(input: GetTicketsInput): { rows: GetTicketsRow[];
     const text = count != null && count > 0 ? `${count} coin${count === 1 ? '' : 's'} near you cost what you have` : 'Coins you can play now';
     if (count == null || count > 0) rows.push({ kind: 'near', text, action: 'SEE', a11y: `${text}. See them.` });
   }
-  if (input.canPick) rows.push({ kind: 'pick', text: 'Save up for this one', action: 'MAKE THIS MY PICK', a11y: 'Make this coin your pick and save up for it.' });
+  if (input.canPick) rows.push({ kind: 'pick', text: 'Save up', action: 'MAKE THIS MY PICK', a11y: 'Make this coin your pick and save up for it.' });
   if (input.storeOn) rows.push({ kind: 'grownups', text: 'Grown-ups', action: 'SHOP', a11y: 'Ask a grown-up. Opens the Shark Shop on Tickets.' });
   const price = n(input.price);
   return { rows, footer: input.arcade ? TOMORROW_LINE : null, have: price != null ? `You have ${tickets} of ${price}` : `You have ${ticketWord(tickets)}` };

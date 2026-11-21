@@ -1560,7 +1560,7 @@ export default function RedeemRedeemableModal({
                         {/* Out of Tickets: the free way that plays now, in one short line above the same button. */}
                         {returnedLine && <Text style={styles.stepLine} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}>{returnedLine}</Text>}
                         {!returnedLine && playsNow && outOfTickets && challengeStepLine(freeStep) && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
-                        {freeStep?.kind === 'claim' && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
+                        {freeStep?.kind === 'claim' && !needTicket && <Text style={styles.stepLine}>{withNumberFont(challengeStepLine(freeStep) ?? '')}</Text>}
                         {/* T039: what a Ticket buys here, before PLAY, as the same shells the try card empties. */}
                         {taskType !== 'task' && !needTicket && cardTries && <View style={styles.dealRow} accessible accessibilityLabel={cardTries.label}>
                           <View style={styles.wayTile}>
