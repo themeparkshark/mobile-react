@@ -132,3 +132,19 @@ test('T5 the win card: the shelf gift bar names no ride, +3 lands on the 5th coi
   assert.match(read('src/components/rewards/offerSlots.tsx'), /\{gift && <ShelfGiftBar gift=\{gift\} flyKey=\{winKey\} \/>\}/);
   assert.doesNotMatch(read('src/components/rewards/ChallengeStatusCard.tsx'), /Next coin:/);
 });
+
+test('T8 the treat meter fills to a Ticket in the jar; a full jar pays Shark Coins; the daily cap says so', () => {
+  const jar = loadTs('src/components/tickets/treatJarModel.ts');
+  const one = jar.treatJarModel({ treat_meter: { pips: 1, of: 3 }, home_jar: { held: 12, cap: 20, full: false }, home_tickets_today: { earned: 1, cap: 4 }, rewards: { tickets: 0 } });
+  assert.equal(one.pips, 1); assert.equal(one.dropped, false); assert.equal(one.line, null);
+  assert.equal(one.a11y, '2 more treats make 1 Ticket. 12 in your jar.');
+  const third = jar.treatJarModel({ treat_meter: { pips: 0, of: 3, filled: true }, home_jar: { held: 13, cap: 20 }, rewards: { tickets: 1 } });
+  assert.equal(third.dropped, true); assert.equal(third.pips, 3, 'the full meter shows as the Ticket drops');
+  const full = jar.treatJarModel({ treat_meter: { pips: 0, of: 3, filled: true }, home_jar: { held: 20, cap: 20, full: true }, jar_overflow_coins: 25, rewards: { tickets: 0 } });
+  assert.equal(full.line, 'Jar full! Save them for your park day'); assert.equal(full.overflowCoins, 25);
+  const capped = jar.treatJarModel({ treat_meter: { pips: 2, of: 3 }, home_jar: { held: 9, cap: 20 }, home_tickets_today: { earned: 4, cap: 4 }, rewards: { tickets: 0 } });
+  assert.equal(capped.line, "That's today's treat Tickets. More tomorrow!");
+  assert.equal(jar.treatJarModel({ rewards: { tickets: 1 } }), null, 'today\'s server: the card is as today');
+  assert.match(read('src/components/PrepItemRedeemModal.tsx'), /\{jar && <View style=\{\{ marginTop: 10 \}\}><TreatJar model=\{jar\} reduced=\{reducedMotion\} \/><\/View>\}/);
+  assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /setJar\(data\.replayed \? null : treatJarModel\(data as unknown as TreatJarAnswer\)\);/);
+});

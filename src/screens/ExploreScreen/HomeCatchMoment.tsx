@@ -108,6 +108,8 @@ export function resetRideHintForPreview(): void {
 void AsyncStorage.getItem(RIDE_HINT_KEY).then(value => { rideHintSeen = value === '1'; }).catch(() => { rideHintSeen = false; });
 
 const TICKET_ICON = require('../../../assets/images/ticket-icon.png');
+import TreatJar from '../../components/tickets/TreatJar';
+import { treatJarModel, type TreatJarAnswer, type TreatJarModel } from '../../components/tickets/treatJarModel';
 
 export interface CatchRequest {
   readonly item: PrepItemType;
@@ -575,6 +577,8 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
   const stage = useRef<RideStageHandle>(null);
   const [layer, setLayer] = useState({ width: 0, height: 0 });
   const [summary, setSummary] = useState<CatchSummary | null>(null);
+  // T8 (arcade plan): the treat meter and the jar for this catch (null on today's server).
+  const [jar, setJar] = useState<TreatJarModel | null>(null);
   const [showing, setShowing] = useState<CatchRequest | null>(null);
   /** Wave 4: the confetti pieces mount only for the grand catch (the same commit as the catch's own art). */
   const [grandCatch, setGrandCatch] = useState(false);
@@ -801,6 +805,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     const next = catchSummary(item, data);
     setSummary(next);
+    setJar(data.replayed ? null : treatJarModel(data as unknown as TreatJarAnswer));
     setBadgeOn(true);
     latest.current.onCascade?.(true);
     setBonusXp(typeof data.photo?.bonus_xp === 'number' && data.photo.bonus_xp > 0 ? data.photo.bonus_xp : null);
@@ -920,7 +925,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       if (finished) setReadyItem(finished);
       setStageNonce(n => n + 1);
       if (primeSeq.current !== seq) return;
-      setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setPhoto(null); setCascade(0);
+      setSummary(null); setRide(null); setPrimed(null); setRideItem(null); setJar(null); setPhoto(null); setCascade(0);
     }));
     setShowing(null);
     setBadgeOn(false);
@@ -1104,7 +1109,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
     const motion = !latest.current.reducedMotion;
     [badgeIn, reveal, progress, gradeIn, barGlow].forEach(value => { cancelAnimation(value); value.value = 0; });
     badgeKick.value = 1;
-    setSummary(null); setPhoto(null); setCascade(0); setBonusXp(null); setCoinStamp(null); setNextArt(null);
+    setSummary(null); setJar(null); setPhoto(null); setCascade(0); setBonusXp(null); setCoinStamp(null); setNextArt(null);
     isNewSV.value = 0;
     setShowing(request);
     const start = fromPoint(request);
@@ -1860,6 +1865,10 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
       {item && <CatchFx fx={fxStyles} sv={fxValues} burst={burstValues} confetti={confetti} layerHeight={layer.height} art={art} color={color} motionFx={motionFx} sparks={sparks} stars={stars} gatherCount={gatherCount}
         goldSize={goldSize} fxT={fxT} gatherT={gatherT} onCopyShown={onCopyShown} />}
 
+      {/* T8: the treat meter and the jar, under the header's pills, while this catch's rewards show. */}
+      {jar && badgeOn && <View pointerEvents="none" style={[styles.treatJar, { top: insets.top + 64 }]}>
+        <TreatJar model={jar} reduced={reducedMotion} />
+      </View>}
       {/* The badge stays mounted (hidden at badgeIn 0), so the first reward never mounts its views mid-cascade */}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, !badgeOn && styles.gateOff]}>
       <CatchBadge st={badgeStyles} summary={summary} photo={photo} bonusXp={bonusXp} newRide={newRide} art={art} name={name} color={color}
@@ -1877,6 +1886,7 @@ const HomeCatchMoment = forwardRef<HomeCatchHandle, {
 export default memo(HomeCatchMoment);
 
 const styles = StyleSheet.create({
+  treatJar: { position: 'absolute', left: 16, right: 16, alignItems: 'center', zIndex: 40 },
   tint: { backgroundColor: 'rgba(11,47,92,0.35)' },
   gateOff: { opacity: 0 },
   warmCanvas: { position: 'absolute', left: 0, top: 0, width: 2, height: 2, opacity: 0.01 },
