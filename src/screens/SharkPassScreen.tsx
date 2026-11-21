@@ -459,7 +459,9 @@ export default function SharkPassScreen() {
     const value = regularValue({ coins: g.coins, tickets: g.tickets, rescue_passes: g.rescue_passes }, baseRates(supplies.catalog.products, supplies.prices));
     if (!value || value < price.amount * 1.5) return null;
     const worth = formatLike(price.price, Math.floor(value * 100) / 100);
-    return worth ? `Climb all ${steps} steps and the Shark Pass row's coins, Tickets and Extra tries come to ${worth} at Supplies' regular prices. Plus ${g.pins} Shark Pass season items.` : null;
+    // T10 (arcade plan): name Extra tries only while the server still lists them on the row (they fold into Tickets).
+    const things = g.rescue_passes > 0 ? 'coins, Tickets and Extra tries' : 'coins and Tickets';
+    return worth ? `Climb all ${steps} steps and the Shark Pass row's ${things} come to ${worth} at Supplies' regular prices. Plus ${g.pins} Shark Pass season items.` : null;
   }, [tiers, price, supplies.catalog, supplies.prices, steps]);
   // The panel's showcase: the season items on the Shark Pass row, the next ones first (three, so the buy stays calm).
   const showcase = useMemo(() => {
