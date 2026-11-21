@@ -266,6 +266,8 @@ export default function CoinLevelingModal({
       stopUiShow(); charge.value = 0; gold.value = 0; bloom.value = 0; sparkle.value = 0; sparkle2.value = 0; shine.value = 0; bloomOut.value = 0; ringPulse.value = 0; setAnchor(null);
       const isMax = rideCoin.current_level >= rideCoin.max_level;
       setState(isMax ? 'maxed' : 'preview');
+      // Bug 29: a coin at its top level is never the shelf's LEVEL UP GOAL.
+      levelUpGoal.noteLevel(rideCoin.ride_id, rideCoin.current_level, rideCoin.max_level);
     }
   }, [visible, rideCoin?.id]);
 
@@ -440,6 +442,7 @@ export default function CoinLevelingModal({
         }
 
         setState('success');
+        levelUpGoal.noteLevel(rideCoin.ride_id, nextLevel, rideCoin.max_level);
 
         if (reducedMotionRef.current) {
           coinPop.value = 1; successIn.value = 1;

@@ -144,6 +144,8 @@ exports.runtime = function(file, imports = {}, initialProps = {}, globals = {}, 
       if (/(^|\/)gamekit\/results\/rideTry$/.test(name)) return { takeRideTry: () => null, noteRideTry() {}, rideTrySummary: () => null };
       if (/(^|\/)services\/lineplay\/resolveRide$/.test(name)) return { resolveQueueStoryContext: async () => ({ rideId: 0 }) };
       // The wait's line status (Ride Parts fixes, Nov 20): the pure words run for real; no wait is running (calm).
+      // The level-up goal store is pure: it runs for real (Ride Parts P18).
+      if (/(^|\/)services\/collection\/levelUpGoal$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/collection/levelUpGoal.ts');
       if (/(^|\/)services\/lineplay\/lineStatus$/.test(name)) return require('./ts-module.cjs').loadTs('src/services/lineplay/lineStatus.ts');
       if (/(^|\/)services\/lineplay\/useLineStatus$/.test(name)) {
         const status = require('./ts-module.cjs').loadTs('src/services/lineplay/lineStatus.ts');

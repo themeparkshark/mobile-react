@@ -90,3 +90,19 @@ test('P21 and the began mark: a try clock starts at its own round start, and the
   const ctx = loadTs('src/gamekit/StageHoldContext.ts', { react: { createContext: value => ({ value }), useContext: c => c.value, useEffect() {}, useRef: v => ({ current: v }) } });
   assert.equal(ctx.RoundStartContext.value, null, 'outside a ride challenge nothing is told');
 });
+
+test('P18 bug 29: a coin at its top level is never the LEVEL UP GOAL', () => {
+  const { levelUpGoal } = loadTs('src/services/collection/levelUpGoal.ts');
+  levelUpGoal.set(12, 7);
+  assert.equal(levelUpGoal.getFor(7), 12);
+  assert.equal(levelUpGoal.getFor(7, id => id === 12), null, 'a reader that knows the level sees none at the top');
+  levelUpGoal.noteLevel(12, 4, 5);
+  assert.equal(levelUpGoal.getFor(7), 12, 'still climbing');
+  levelUpGoal.noteLevel(12, 5, 5);
+  assert.equal(levelUpGoal.getFor(7), null, 'at the top it stops being the goal');
+  levelUpGoal.set(13, 7, true);
+  assert.equal(levelUpGoal.getFor(7), null, 'a top coin is never set as a goal');
+  const sheet = fs.readFileSync('src/components/CoinLevelingModal.tsx', 'utf8');
+  assert.match(sheet, /levelUpGoal\.noteLevel\(rideCoin\.ride_id, rideCoin\.current_level, rideCoin\.max_level\);/);
+  assert.match(sheet, /levelUpGoal\.noteLevel\(rideCoin\.ride_id, nextLevel, rideCoin\.max_level\);/);
+});

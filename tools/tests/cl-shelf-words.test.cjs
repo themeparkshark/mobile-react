@@ -32,7 +32,7 @@ function levelSheet(props) {
     '../hooks/useReducedGameMotion': { default: () => true },
     '../helpers/haptics': { impactAsync() {}, notificationAsync() {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} },
     '../constants/coinTiers': coinTiers,
-    '../services/collection/levelUpGoal': { levelUpGoal: { set() {}, clear() {} } },
+    '../services/collection/levelUpGoal': { levelUpGoal: { set() {}, clear() {}, noteLevel() {} } },
     ...progressionStubs,
   }, { visible: true, rideCoin: { id: 13, ride_id: 86, ride_name: 'Jungle Cruise', current_level: 1, max_level: 5,
     is_unlocked: true, parts_to_next_level: 3, energy_to_next_level: 10, next_level_perks: [], current_perks: [] },
