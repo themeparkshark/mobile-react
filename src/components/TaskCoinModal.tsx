@@ -12,7 +12,7 @@ import { TaskType } from '../models/task-type';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import levelUpRideCoin from '../api/endpoints/me/ride-coins/level-up';
 import featureRideCoin from '../api/endpoints/me/ride-coins/feature';
-import { coinLevelLabel } from '../constants/coinTiers';
+import { coinLevelLabel, MAX_COIN_LEVEL } from '../constants/coinTiers';
 import { gameAlert } from '../ui/GameDialog';
 import GameIcon from '../ui/GameIcon';
 import Ribbon from './Ribbon';
@@ -152,7 +152,8 @@ export default function TaskCoinModal({
       <Button onPress={() => handleOpen()} accessibilityLabel={readOnly
         ? `${task.name} ride coin, collected${knownLevel ? `, ${coinLevelLabel(shownLevel)}` : ''}. View collection details`
         : !levelsOpen ? `${task.name} ride coin, collected. View it`
-          : `${task.name} ride coin, ${coinLevelLabel(shownLevel)}. See how to level it up`}>
+          : shownLevel >= MAX_COIN_LEVEL ? `${task.name} ride coin, ${coinLevelLabel(shownLevel)}. Top level. View it`
+            : `${task.name} ride coin, ${coinLevelLabel(shownLevel)}. See how to level it up`}>
         {trigger ?? <ShelfCoin coinUrl={task.coin_url} level={shownLevel} size={size} phase={phase} igniteKey={ignite} />}
       </Button>
 

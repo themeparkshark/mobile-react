@@ -1,6 +1,7 @@
 import { Image } from 'expo-image';
 import { goalCoinKind, guideShelfHint, levelUpGoalHint, shelfGuidePick, stalePlan } from '../services/collection/nextCoinCopy';
 import { levelUpGoal } from '../services/collection/levelUpGoal';
+import { MAX_COIN_LEVEL } from '../constants/coinTiers';
 import { parkDaySignal } from '../services/guide/parkDay';
 import { localDay } from '../services/reveal/revealLadder';
 import { chunk } from 'lodash';
@@ -35,7 +36,7 @@ import { InformationModalEnums } from '../models/information-modal-enums';
 import { ParkType } from '../models/park-type';
 import { SecretTaskType } from '../models/secret-task-type';
 import { TaskType } from '../models/task-type';
-import { loadParkRides, prefetchRideCatalog, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { loadParkRides, prefetchRideCatalog, resolveCoinRideContext, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
 import { shelfEdition, splitParkShelf } from '../services/collection/limitedCoins';
 import type { RideType } from '../api/endpoints/rides';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -154,7 +155,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   // The owned coin GET RIDE PARTS pointed at: the shelf shows it as LEVEL UP GOAL while it is still the plan.
   // It belongs to the signed-in player: another account on this phone never sees it.
   const viewerId = viewer?.id ?? null;
-  const readLevelUp = useCallback(() => levelUpGoal.getFor(viewerId), [viewerId]);
+  // A coin at its top level is never the LEVEL UP GOAL (bug 29, P18): the header and the directory read this one id.
+  const topCoinIds = useMemo(() => new Set(completedTasks
+    .filter(task => Number(task.coin_level ?? 0) >= MAX_COIN_LEVEL).map(task => task.id)), [completedTasks]);
+  const readLevelUp = useCallback(() => levelUpGoal.getFor(viewerId, id => topCoinIds.has(id)), [viewerId, topCoinIds]);
   const levelUpId = useSyncExternalStore(levelUpGoal.subscribe, readLevelUp, readLevelUp);
   useEffect(() => { levelUpGoal.forPlayer(viewerId); }, [viewerId]);
   const { labels } = useCrumbs();
@@ -247,7 +251,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     if (canChooseGoal && inThisPark) void prefetchRideCatalog(Number(park));
   }, [park, canChooseGoal, inThisPark]);
   const openRideLinePlay = useCallback((task: TaskType) => {
-    void resolveRideContextOrOffline(Number(park), task.name).then(ride => {
+    // P2: the coin's own linked ride by coin id, never by its label (a holiday name still opens its line).
+    void resolveCoinRideContext(Number(park), task).then(ride => {
       RootNavigation.navigate('LinePlay', { ride });
     });
   }, [park]);

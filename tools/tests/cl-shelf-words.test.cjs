@@ -537,7 +537,7 @@ test('round 5: the shelf forgets only a plan it watched you win; the level-up go
   const park = read('src/screens/ParkScreen.tsx');
   assert.match(park, /stalePlan\(guidePlan, ownedIds, levelUpId, watchedPlan\.current\)/);
   assert.match(park, /watchedPlan\.current = guidePlan != null && !ownedIds\.has\(guidePlan\) \? guidePlan : null;/);
-  assert.match(park, /levelUpGoal\.getFor\(viewerId\)/);
+  assert.match(park, /levelUpGoal\.getFor\(viewerId, id => topCoinIds\.has\(id\)\)/);
   assert.match(park, /levelUpGoal\.forPlayer\(viewerId\)/);
 
   const goal = loadTs('src/services/collection/levelUpGoal.ts').levelUpGoal;
