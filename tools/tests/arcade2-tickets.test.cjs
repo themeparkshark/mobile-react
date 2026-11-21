@@ -58,3 +58,19 @@ test('P19 an old win card comes back only on its own park map, with its own pric
   assert.match(read('src/components/RedeemModal.tsx'), /findPendingWin\(player\.id, undefined, park\?\.id \?\? null\)/);
   assert.doesNotMatch(read('src/services/task-attempt/pendingWins.ts'), /ticket_cost: 1\b/);
 });
+
+test('P20 no pack and no VIP line inside any win card', () => {
+  const slot = read('src/components/rewards/offerSlots.tsx');
+  const win = slot.slice(slot.indexOf('export function WinOfferSlot'));
+  assert.doesNotMatch(win, /CalmOffer/, 'the win slot mounts no offer');
+  assert.match(win, /<ShelfGiftBar gift=\{gift\} flyKey=\{winKey\} \/>/, 'the shelf gift bar stays');
+  const calm = read('src/components/money/CalmOffer.tsx');
+  assert.match(calm, /return placement === 'first_win' \|\| placement === 'win_vip';/);
+  assert.match(calm, /const show = !inWin && /, 'a win placement never shows, whoever mounts it');
+  assert.match(calm, /const decided = inWin \|\| /, 'and tells its owner so at once');
+  assert.match(calm, /const wantsPack = placement === 'need_ticket';/, 'no Starter Pack catalog read for a win');
+  // No other screen mounts a win placement (the dev bench shows that it draws nothing).
+  const { execSync } = require('node:child_process');
+  const hits = execSync("grep -rln \"placement=\\\"first_win\\\"\\|placement=\\\"win_vip\\\"\" src || true").toString().trim().split('\n').filter(Boolean);
+  assert.deepEqual(hits, ['src/screens/MoneyPreviewScreen.tsx']);
+});

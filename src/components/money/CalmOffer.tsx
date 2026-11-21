@@ -85,7 +85,7 @@ async function loadOfferCtx(playerId: string | number, placement: OfferPlacement
 export function warmCalmOffer(playerId: string | number | null | undefined, placement: OfferPlacement): void {
   if (playerId == null) return;
   if (!ctxCache.has(ctxKey(playerId, placement))) void loadOfferCtx(playerId, placement).catch(() => undefined);
-  if ((placement === 'need_ticket' || placement === 'first_win') && storeAvailable()) void refreshSupplies();
+  if (placement === 'need_ticket' && storeAvailable()) void refreshSupplies();
 }
 
 /** The height of the slim row and of the place it keeps while its answer loads (pack art 40, padding 5 + 5, rim 2 + 4). */
@@ -112,6 +112,13 @@ export type CalmOfferProps = {
   readonly compact?: boolean;
 };
 
+/**
+ * P20 (bug 7): a win is the kid's moment, so no pack and no VIP line ever sits inside one. The two placements a win
+ * card used (first_win, win_vip) never show, whoever mounts them.
+ */
+export function offerInsideWin(placement: OfferPlacement): boolean {
+  return placement === 'first_win' || placement === 'win_vip';
+}
 
 export default function CalmOffer({ placement, loss = false, style, onShown, vipLine, beforeLeave, compact = false }: CalmOfferProps) {
   const { player, refreshPlayer } = useContext(AuthContext);
@@ -119,13 +126,14 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
   const passOn = useMoneyFlag('shark_pass');
   const playerId = player?.id ?? null;
   const vip = !!player?.is_subscribed;
-  const wantsPack = placement === 'need_ticket' || placement === 'first_win';
+  const inWin = offerInsideWin(placement);
+  const wantsPack = placement === 'need_ticket';
   const canBuy = !!player && storeAvailable();
   const { catalog, status: catalogStatus } = useSupplies(switchOn && wantsPack && canBuy && !loss);
   // The kid paths and this placement's own record, read once per mount.
   const [ctx, setCtx] = useState<OfferCtx | null>(() => (playerId == null ? null : ctxCache.get(ctxKey(playerId, placement)) ?? null));
   useEffect(() => {
-    if (playerId == null || !switchOn || loss) return undefined;
+    if (playerId == null || !switchOn || loss || inWin) return undefined;
     let live = true;
     void loadOfferCtx(playerId, placement).then((next) => { if (live) setCtx(next); }).catch(() => undefined);
     return () => { live = false; };
@@ -159,7 +167,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
       : !!catalog?.enabled && !!pack;
   const why = offerDecision({ placement, switchOn, loss, familyWithKids: ctx?.kids, pictureGames: ctx?.picture, vip,
     today, now: Date.now(), record: ctx?.record });
-  const show = !gone && !!player && !!ctx && why === 'show' && contentReady && (placement === 'high_point' || placement === 'win_vip' || canBuy);
+  const show = !inWin && !gone && !!player && !!ctx && why === 'show' && contentReady && (placement === 'high_point' || placement === 'win_vip' || canBuy);
 
   // Seen only once it really showed with its content: a slow load never burns the day (or the once-ever Starter Pack).
   useEffect(() => {
@@ -170,7 +178,7 @@ export default function CalmOffer({ placement, loss = false, style, onShown, vip
     // phone and money:launch-funnel counts it (only the unmounted StarterOfferCard sent this before).
     if (placement === 'first_win' && pack) trackMoney('starter_seen', `offer.${placement}`, pack.product_id);
   }, [show]); // eslint-disable-line react-hooks/exhaustive-deps
-  const decided = loss || !switchOn || (placement === 'win_vip' && !vipText) || (placement === 'high_point' && (!passOn || passReady === false)) ? false
+  const decided = inWin || loss || !switchOn || (placement === 'win_vip' && !vipText) || (placement === 'high_point' && (!passOn || passReady === false)) ? false
     : ctx && (placement !== 'high_point' || passReady !== null) ? show : null;
   useEffect(() => { if (decided !== null) onShown?.(decided); }, [decided]); // eslint-disable-line react-hooks/exhaustive-deps
 

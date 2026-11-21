@@ -129,7 +129,7 @@ test('T5 the win card: the shelf gift bar names no ride, +3 lands on the 5th coi
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.doesNotMatch(modal, /setTarget\([^)]*'win_card'\)/);
   assert.match(modal, /nextTarget=\{null\}/);
-  assert.match(read('src/components/rewards/offerSlots.tsx'), /\{gift && <ShelfGiftBar gift=\{gift\} flyKey=\{winKey\} \/>\}/);
+  assert.match(read('src/components/rewards/offerSlots.tsx'), /<ShelfGiftBar gift=\{gift\} flyKey=\{winKey\} \/>/);
   assert.doesNotMatch(read('src/components/rewards/ChallengeStatusCard.tsx'), /Next coin:/);
 });
 

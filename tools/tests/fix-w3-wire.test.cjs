@@ -30,39 +30,13 @@ test('T220 need_ticket: the calm offer slot stays built, but Get Tickets (T7, ar
   assert.match(reset, /setCardAfterLoss\(false\);/);
 });
 
-test('T220 first_win and T230 win_vip: one offer at most on a win card, mounted only once the card is up', () => {
+test('T220 T230 under P20: the win card mounts its slot only once it is up, and the slot carries no offer', () => {
   const card = strip(read('src/components/PostWinRewardsModal.tsx'));
   assert.match(card, /\{visible && caught && panel === 'win' && <WinOfferSlot firstWin=\{revealNow && isNewCoin\} coins=\{coinsEarned\} xp=\{xpEarned\}\s*winKey=\{attemptId \?\? null\} closeCard=\{closeCard\} \/>\}/);
   assert.doesNotMatch(card, /FirstWinOfferSlot/, 'the old empty slot is gone');
   const slots = strip(read('src/components/rewards/offerSlots.tsx'));
-  // The Starter card decides first; the VIP line waits for its "not shown" and the win-card pacing.
-  assert.match(slots, /useState<boolean \| null>\(firstWin \? null : false\)/);
-  assert.match(slots, /const vipLine = starterShown === false && nudge && !!line;/);
-  assert.match(slots, /\{firstWin && <CalmOffer placement="first_win" compact onShown=\{setStarterShown\} \/>\}/);
-  assert.match(slots, /<CalmOffer placement="win_vip" vipLine=\{line\} beforeLeave=\{closeCard\}/);
-  assert.match(slots, /const nudge = useVipNudge\(!isVip && winKey != null \? winKey : null\);/);
-  assert.match(slots, /if \(shown\) markVipNudgeShown\(winKey\);/);
-  assert.match(slots, /warmVipPerks\(\)/, 'the server multiplier is loaded, or the line never has numbers');
-});
-
-test('T230 the VIP line says this win\'s own numbers, and nothing for VIP or an empty win', () => {
-  const slots = loadTs('src/components/rewards/offerSlots.tsx', {
-    react: { useContext: () => ({}), useEffect() {}, useState: v => [v, () => undefined] },
-    'react/jsx-runtime': { jsx: () => null, jsxs: () => null, Fragment: 'Fragment' },
-    'react-native': { View: 'View' },
-    '../money/CalmOffer': { default: 'CalmOffer' },
-    '../../context/AuthProvider': { AuthContext: {} },
-    '../../services/money/vipNudge': { useVipNudge: () => false, markVipNudgeShown() {} },
-    '../../services/money/vipPerks': { vipRideMultiplierNow: () => null, warmVipPerks: async () => undefined },
-    '../../services/money/offers': loadTs('src/services/money/offers.ts', {}),
-    // T5 (arcade plan): the shelf gift bar leads the slot; today's server sends no gift, so it draws nothing here.
-    '../tickets/ShelfGiftBar': { default: 'ShelfGiftBar' },
-    '../tickets/shelfGift': { shelfGiftFor: () => null },
-  });
-  assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: false }), 'VIP doubles this: +60 Shark Coins, +50 XP');
-  assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: 2, isVip: true }), null);
-  assert.equal(slots.winVipLine({ coins: 0, xp: 0, multiplier: 2, isVip: false }), null);
-  assert.equal(slots.winVipLine({ coins: 60, xp: 50, multiplier: null, isVip: false }), null, 'no server multiplier, no claim');
+  // P20 (Nov 20, bug 7): no Starter Pack and no VIP line inside a win.
+  assert.doesNotMatch(slots, /placement="first_win"|placement="win_vip"|useVipNudge|winVipLine/);
 });
 
 test('T230 CalmOffer: a win_vip line with nothing to say stays away; the door closes its sheet first', () => {
