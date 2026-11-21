@@ -2202,7 +2202,7 @@ export function ExploreScreenBody() {
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ? parkLabel(park) : null}
           coinUrl={guideCoinUrl} top={slotTop} onHeight={setGuideCardHeight} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
-          loading={nextCoin.state === 'arrive' && !nextCoin.target}
+          loading={nextCoin.loading}
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null}

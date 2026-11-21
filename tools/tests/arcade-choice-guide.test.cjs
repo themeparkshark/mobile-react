@@ -380,3 +380,8 @@ test('C2: the card\'s "9 of 40 coins" counts the whole shelf from the trip goal,
   assert.match(map, /const here = \(tripGoalData\?\.rides \?\? \[\]\)\.filter\(ride => ride && ride\.park_id === park\?\.id\);/);
   assert.match(map, /shelf: parkShelf,/);
 });
+
+test('C2: the card breathes only while the map data loads, never just because nothing is picked', () => {
+  assert.match(read('src/screens/ExploreScreen.tsx'), /loading=\{nextCoin\.loading\}/);
+  assert.match(read('src/components/guide/useNextCoinGuide.ts'), /loading: enabled && !ready \};/);
+});

@@ -117,6 +117,11 @@ export interface NextCoinGuide {
   readonly leavingParkId: number | null;
   /** The arrive card's OK: the welcome is read, the card moves on (to the pick, PLAY! or "pick any coin"). */
   readonly finishArrive: () => void;
+  /**
+   * The map's data is still on its way (the card shows the welcome meanwhile and breathes softly). Nothing picked is
+   * normal now (Dustin, Nov 20), so a card with no coin never breathes for that alone.
+   */
+  readonly loading: boolean;
 }
 
 const adventureFor = (ticket: AdventureTicket | null, parkId: number | null): GuideAdventure | null =>
@@ -359,5 +364,5 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const offer = lineOffer(state, input.dwellRideName ?? null);
   return { target: shown, state, copy, lineOffer: offer, inLineTaskId, rides, targetTask, targetPoint, pathPoint: leaving ? null : pathPoint,
     targetOffMap: !!shown && !targetTask && !!targetCoin, arrivedAt, adventureTab: adventureTab && !leaving,
-    leavingParkId: leaving ? leavingFrom?.parkId ?? null : null, finishArrive: () => setArriveOkKey(visitKey) };
+    leavingParkId: leaving ? leavingFrom?.parkId ?? null : null, finishArrive: () => setArriveOkKey(visitKey), loading: enabled && !ready };
 }

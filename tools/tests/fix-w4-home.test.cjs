@@ -204,7 +204,8 @@ test('T023: while the first coin is picked the card breathes softly (UI thread, 
   assert.match(card, /const breathing = loading && !reduced && ambient;/);
   assert.match(card, /withRepeat\(withTiming\(0\.55, \{ duration: AMBIENT\.breathMs \/ 2, easing: Easing\.bezier\(\.\.\.BEZIER\.inOut\) \}\), -1, true\)/);
   assert.match(card, /<Animated\.View style=\{breathStyle\}><Image source=\{art\}/);
-  assert.match(read('src/screens/ExploreScreen.tsx'), /loading=\{nextCoin\.state === 'arrive' && !nextCoin\.target\}/);
+  // Arcade plan (Nov 20): nothing picked is normal, so it breathes only while the map data loads.
+  assert.match(read('src/screens/ExploreScreen.tsx'), /loading=\{nextCoin\.loading\}/);
 });
 
 test('N11: the ride name under PLAY! is one line, fitted, and a very long name keeps its main words', () => {
