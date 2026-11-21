@@ -49,5 +49,5 @@ test('the bar is two-tone keyed to the chips, and parts never use the held-back 
 });
 
 test('the empty-goal row fits one line on the real Park screen', () => {
-  assert.match(read('src/screens/ParkCollectionHeader.tsx'), /eyebrow: 'NEXT COIN', name: 'Pick a missing coin'/);
+  assert.match(read('src/screens/ParkCollectionHeader.tsx'), /eyebrow: 'PICK ANY COIN', name: 'Tap any empty slot'/);
 });

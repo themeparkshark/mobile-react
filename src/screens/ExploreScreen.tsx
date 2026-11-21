@@ -154,6 +154,8 @@ import { usePlayTapHold } from '../components/guide/playTapHold';
 import { pressTrace } from '../ui/pressTrace';
 import { modalLayers } from '../ui/modalLayers';
 import NextCoinCard, { GUIDE_CARD_HEIGHT, GUIDE_CARD_RIGHT } from '../components/guide/NextCoinCard';
+import NearMeSheet from '../components/guide/NearMeSheet';
+import { ownedTaskIdsFor } from '../components/guide/guideCoins';
 import NewTag from '../components/map/NewTag';
 import useMapGuide from '../components/guide/useMapGuide';
 import { currentAppOpen, retireRungTag, useLadderCounters, useLadderVeteran, useRung, useWonCoinToday } from '../services/reveal/revealLadder';
@@ -169,7 +171,7 @@ import { applyLiveStub, liveStubMode } from '../components/guide/liveStub';
 import { useFlyAnchor, useProfileTabAnchor } from '../components/guide/flyAnchors';
 import { homeShelfPark } from '../components/guide/HomeShelfButton';
 import useHomeLimitedCoins from '../components/guide/useHomeLimitedCoins';
-import { homeLimitedCoin, homePartsCoin } from '../services/guide/homeNext';
+import { homeJarOf, homeLimitedCoin, homeLimitedCount, homePartsCoin } from '../services/guide/homeNext';
 import { practiceInMenu } from '../components/QuickAccessMenu';
 import type { HomeGuide } from './ExploreScreen/HomeExplore';
 import { refreshFeatureFlags } from '../api/endpoints/platform/feature-flags';
@@ -184,6 +186,7 @@ const NO_COINS: readonly CollectedRideCoin[] = [];
 /** Fix w4 T120: the first catch's line shows this long, then hunting goes on (no card, no button). */
 const FIRST_CATCH_TOAST_MS = 2000;
 /** Fix w4 T098: no Rush before the day's first coin (one stable empty list, so memo inputs hold still). */
+const NO_STARS: ReadonlySet<number> = new Set();
 const NO_RUSHES: RushPick[] = [];
 /** Dev-only live feed stub for lane walks (state D: feed off; or a daytime park at night). Never in a store or OTA bundle. */
 const LIVE_STUB = liveStubMode(__DEV__, process.env.EXPO_PUBLIC_GUIDE_LIVE_STUB);
@@ -314,6 +317,8 @@ export function ExploreScreenBody() {
   >();
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
+  // NEAR ME (arcade plan, section 6): every coin here not yet won, one identical row each; the player picks.
+  const [nearMe, setNearMe] = useState<{ canPlay: boolean } | null>(null);
   const [focusedFromChecklist, setFocusedFromChecklist] = useState<TaskType | null>(null);
   // "Find" guide: a dashed path and an edge arrow toward the ride the player asked to find.
   const [findGuide, setFindGuide] = useState<{ taskId: number; latitude: number; longitude: number; requestId: number } | null>(null);
@@ -761,7 +766,7 @@ export function ExploreScreenBody() {
   // Shark Events (server flag live_events): one shared poll; everything renders nothing while it is off or the route 404s.
   const liveEvt = useLiveEvent(park?.id ?? null, { poll: !!player, focused: mapFocused, enabled: !!player });
   const [eventOpen, setEventOpen] = useState(false);
-  const starRides = useStarRides(park?.id ?? null);
+  const eventStarRides = useStarRides(park?.id ?? null);
   const [recapDue, recapSeen] = useRecapDue(liveEvt.event);
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
@@ -918,6 +923,12 @@ export function ExploreScreenBody() {
   const mapRetry = useParkMapRetry(mapLoadFailed && !!park && !!player, mapFocused, refreshMapOpportunities);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
+  // Star Day (Dustin, Nov 20): the event's star shows on every coin or on none, never on one ride, so no coin looks more
+  // important than another. The arcade server puts the bonus on every coin; a one-ride Star from today's server hides.
+  const starRides = useMemo<ReadonlySet<number>>(() => {
+    const rides = visibleTasks.filter(task => Number.isFinite(Number(task.id)));
+    return rides.length > 0 && rides.every(task => eventStarRides.has(task.id)) ? eventStarRides : NO_STARS;
+  }, [visibleTasks, eventStarRides]);
   // PLAY! for the coin the player steps up to, on the GPS fix itself: the map knows every coin's spot and the redeem
   // radius, so PLAY! never waits on a slow server; the server's answer replaces it when it lands (T009). The server's
   // own answer always wins where it has answered, and it is trusted only while the player is still near its coin.
@@ -954,7 +965,9 @@ export function ExploreScreenBody() {
   const activeLiveStatus = activeRedeemable?.type === 'task' ? liveByTask.get(activeRedeemable.model.id)?.status ?? null : null;
   const openRedeemable = nearbyOpportunityOpen(activeRedeemable, activeLiveStatus, mapNow) ? activeRedeemable : undefined;
   const playableTaskId = openRedeemable?.type === 'task' ? openRedeemable.model.id : null;
-  const adventureTaskId = adventure && (adventure.phase === 'discover' || adventure.phase === 'play') ? adventure.ride.task_id : null;
+  // The ADVENTURE tag marks today's Adventure ride only once the player won its coin (phase play): before that every
+  // coin is the same, and the first coin won starts the story (Dustin, Nov 20: the app never picks a ride).
+  const adventureTaskId = adventure && adventure.phase === 'play' ? adventure.ride.task_id : null;
   // An old island selection clears after a 30 m walk, or when PLAY! rises for another coin (T001): a stray tap
   // never leaves a callout that disagrees with PLAY! and the guide card.
   const selectedFrom = useRef<{ id: number; at: { latitude: number; longitude: number } | null } | null>(null);
@@ -1295,6 +1308,18 @@ export function ExploreScreenBody() {
     playableTaskId: playRideShown ? playableTaskId : null,
     adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
   });
+  // NEAR ME rows wear each coin's own art: today's map list carries none, so the trip goal's ride list supplies it.
+  const nearMeTasks = useMemo(() => {
+    const art: Record<number, string> = {};
+    for (const ride of tripGoalData?.rides ?? []) if (ride.coin_url) art[ride.task_id] = ride.coin_url;
+    return visibleTasks.map(task => (task.coin_url || !art[task.id] ? task : { ...task, coin_url: art[task.id] }));
+  }, [visibleTasks, tripGoalData?.rides]);
+  // NEAR ME lists only coins not yet won here: the shelf's owned list plus any coin today's map marks as won.
+  const nearMeOwned = useMemo(() => {
+    const ids = new Set<number>(ownedTaskIdsFor(tripGoalData?.rides, park?.id ?? null));
+    for (const task of visibleTasks) if ((task.times_completed ?? 0) > 0) ids.add(task.id);
+    return ids;
+  }, [tripGoalData?.rides, park?.id, visibleTasks]);
   // Raids reach the map only after coin levels unlock (they cost Energy) and while the park is open (core loop 5.2).
   // Fix w4 T098: and only after the day's first coin.
   const raidOnMap = raidActive && coinLevelsRung.open && parkOpenNow && liveDayStarted;
@@ -1372,15 +1397,13 @@ export function ExploreScreenBody() {
   }, [dailyGiftId]);
   // Daily 3, the Weekly Box and level-up chests (server flags daily_three / level_chests, off by default).
   const openParam = (route.params as { open?: string } | undefined)?.open;
-  // The nearest ride coin on this park map, guided like a checklist tap.
-  const guideToNearestRide = useCallback(() => {
-    const here = location;
-    const tasks = (redeemables?.tasks ?? []).filter(t => Number.isFinite(Number(t.latitude)) && Number.isFinite(Number(t.longitude)));
-    if (!here || !tasks.length) return;
-    const nearest = tasks.reduce((best, t) => calculateDistance(here.latitude, here.longitude, Number(t.latitude), Number(t.longitude))
-      < calculateDistance(here.latitude, here.longitude, Number(best.latitude), Number(best.longitude)) ? t : best);
-    guideTo(nearest);
-  }, [location, redeemables, guideTo]);
+  // Get Tickets' "coins you can play now" opens NEAR ME with "I can play now" on (navigation param nearMe: 'can_play').
+  const nearMeParam = (route.params as { nearMe?: string | boolean } | undefined)?.nearMe;
+  useEffect(() => {
+    if (nearMeParam == null) return;
+    setNearMe({ canPlay: nearMeParam === 'can_play' });
+    navigation.setParams({ nearMe: undefined } as never);
+  }, [nearMeParam]); // eslint-disable-line react-hooks/exhaustive-deps
   // A reward sheet the player opened from the Rewards button is not an automatic open.
   const rewardsTapped = useRef(false);
   const retention = useRetention({
@@ -1397,9 +1420,10 @@ export function ExploreScreenBody() {
     openRequest: openParam === 'daily3' || openParam === 'chest' ? openParam : null,
     onOpenRequestHandled: () => navigation.setParams({ open: undefined }),
     onOpenChest: () => setChestRequested(true),
+    // Daily 3 GO closes the sheet to the map with no target (Dustin, Nov 20: the app never picks a ride). A treat
+    // goal still lights the nearest treat at home (a treat is not a ride).
     onFind: what => {
       if (what === 'snack') { setHighlightNearestFind(Date.now()); return; }
-      guideToNearestRide();
     },
   });
   useEffect(() => {
@@ -1696,6 +1720,16 @@ export function ExploreScreenBody() {
         else if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
         return;
       case 'skip': guide.skipLineStory(); return;
+      // YOUR PICK's X: the player clears their own pick (path, arrow and bob go with it).
+      case 'clear': guide.clearPick(); setGuidePathRequest(n => n + 1); return;
+      // The arrive card's OK: the welcome is read.
+      case 'ok': nextCoin.finishArrive(); return;
+      case 'near_me': setNearMe({ canPlay: false }); return;
+      case 'get_tickets':
+        // The Get Tickets sheet (app-tickets T7) takes this over once it lands; until then the free ways, said plainly.
+        gameAlert('Ways to get Tickets', needTicketLines(guideFlags.queue_tickets === true, guideFlags.ride_rescue_pass === true).join(' '),
+          [{ text: 'NEAR ME', onPress: () => setNearMe({ canPlay: true }) }, { text: 'OK' }], { icon: 'ticket' });
+        return;
       case 'unfold': setAdventureCelebrateRequest(n => n + 1); return;
       case 'shelf':
       case 'plan':
@@ -1703,7 +1737,7 @@ export function ExploreScreenBody() {
         if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
     }
   }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, nextCoin.leavingParkId, openLinePlayFor, openLinePlayHere, claimTickets,
-    guideFlags.queue_tickets, guideFlags.ride_rescue_pass, park, player, welcome]);
+    guideFlags.queue_tickets, guideFlags.ride_rescue_pass, park, player, welcome, nextCoin.finishArrive]);
   // The home guide card (core loop 4.1 "Home", fix pass w4 T007): one true next thing at a time, built from what
   // this player can do now (homeNextStep), never "nothing to do". HomeExplore adds the treats on its map.
   const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;
@@ -1726,10 +1760,13 @@ export function ExploreScreenBody() {
       readyReward: retention.homeNext?.readyReward ?? null,
       daily3: retention.homeNext?.daily3 ?? null,
       limited: homeCoinList.length > 0 ? homeLimitedCoin(homeLimitedTasks, owned, homeParkId) : null,
+      limitedCount: homeCoinList.length > 0 ? homeLimitedCount(homeLimitedTasks, owned) : 0,
       parts: coinLevelsRung.open ? homePartsCoin(homeCoinList.filter(coin => coin.park_id === homeParkId)) : null,
       practice: practiceInMenu(ladderCounters.homeDays, player.completed_tasks_count ?? player.ride_coins_collected ?? 0),
       park: { parkName: tripGoal?.park_name ?? null, tickets: player.tickets ?? 0,
-        plan: homePlan ? ref(homePlan.ride_name, homePlan.coin_url, homePlan.asset_id, homePlan.park_id) : null },
+        plan: homePlan ? ref(homePlan.ride_name, homePlan.coin_url, homePlan.asset_id, homePlan.park_id) : null,
+        // The arcade server's home jar (home Tickets wait in a jar of 20); missing on today's server.
+        jar: homeJarOf(player) },
       veteran: homeCoinList.length > 0,
       welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
     };
@@ -1746,6 +1783,10 @@ export function ExploreScreenBody() {
               return;
             }
             break;
+          case 'limited':
+            // SEE on the limited count: that park's Limited tab, every limited coin shown the same way.
+            RootNavigation.navigate('Park', { park: coin?.parkId ?? homeParkId ?? homeShelfPark(player.current_park_id), player: player.id, tab: 'limited' });
+            return;
           case 'rewards': openRewards(); return;
           case 'find': setHighlightNearestFind(Date.now()); return;
           case 'closet': RootNavigation.navigate('Inventory'); return;
@@ -2161,11 +2202,21 @@ export function ExploreScreenBody() {
         {/* The Next Coin guide (core loop 4.1): exactly one card in the top-left slot, on every park map. */}
         {guideShown && player && <NextCoinCard copy={nextCoin.copy} state={nextCoin.state} parkName={park.name ? parkLabel(park) : null}
           coinUrl={guideCoinUrl} top={slotTop} onHeight={setGuideCardHeight} onAction={onGuideAction} onCardPress={() => onGuideCardPress(onGuideAction)}
-          loading={nextCoin.state === 'arrive' && !nextCoin.target}
+          loading={nextCoin.loading}
           onDotsPress={() => setAdventureSheetRequest(n => n + 1)}
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null}
           lineOffer={nextCoin.lineOffer ?? calloutLineOffer(queueRide, selectedTask?.id ?? null, nextCoin.target?.taskId ?? null, nextCoin.state)} />}
+        {player && <NearMeSheet visible={!!nearMe} canPlayFirst={nearMe?.canPlay ?? false} playerId={player.id}
+          parkName={park.name ? parkLabel(park) : null} tasks={nearMeTasks} ownedTaskIds={nearMeOwned} here={location ?? null}
+          live={livePark} tickets={player.tickets ?? 0} onClose={() => setNearMe(null)}
+          onPick={taskId => {
+            setNearMe(null);
+            guide.setTarget(taskId, 'near_me');
+            const task = visibleTasks.find(t => t.id === taskId);
+            if (task) setSelectedTask(task);
+            setGuidePathRequest(n => n + 1);
+          }} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}
@@ -2229,7 +2280,7 @@ export function ExploreScreenBody() {
               playable={playableTaskId === task.id}
               restingUntil={resting ? gameTimestamp(task.active_from) : null}
               distanceMeters={selectedTask?.id === task.id ? distance : null}
-              ticketCost={task.ticket_cost ?? tripGoalData?.wallet.ticket_cost ?? 1}
+              ticketCost={task.ticket_cost ?? tripGoalData?.wallet.ticket_cost}
               revealDelay={revealRef.current?.delays.get(task.id)}
               control={rideControlByAsset.get(Number(task.asset_id))}
               flagRaiseKey={bossMap.flag?.asset_id === Number(task.asset_id) &&

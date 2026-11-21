@@ -56,33 +56,33 @@ test('T003 and T008: the store goes back to the pick after the coin in passing, 
   assert.equal(G.guide.current().taskId, 1);
   assert.equal(G.guide.resumed().taskId, 3);
   const here = C.guideCardCopy('here', G.guide.current(), ctx({ thenName: G.guide.resumed().name }));
-  assert.equal(here.title, 'You\'re here! Tap PLAY!');
-  assert.match(here.line, /Jungle Cruise · Then: Indiana Jones/);
+  assert.equal(here.title, 'You\'re at Jungle Cruise');
+  assert.doesNotMatch(here.line, /Then|Indiana/, 'no "Then:" line: the card never names where to go next (Dustin, Nov 20)');
   // A pick made while PLAY! is up is the one the card goes back to.
-  G.guide.setTarget(3, 'waittimes');
+  G.guide.setTarget(3, 'wait_times');
   G.guide.resolve(input({ coins: rides, live, playableTaskId: 1 }));
   assert.equal(G.guide.current().taskId, 1);
   assert.equal(G.guide.resumed().taskId, 3);
   // Walking on (PLAY! down): back to Indiana Jones, the player's pick.
   G.guide.resolve(input({ coins: rides, live, playableTaskId: null, location: north(40) }));
   assert.equal(G.guide.current().taskId, 3);
-  assert.equal(G.guide.current().source, 'waittimes');
+  assert.equal(G.guide.current().source, 'wait_times');
   G.guide.reset();
 });
 
-test('T010: after winning a coin in passing, a target the guide or a suggestion handed out gives way to the nearest open coin', () => {
+test('T010: a suggestion card cannot move the pointer; after winning a coin in passing only the player\'s own pick comes back', () => {
   G.guide.reset();
   const rides = [coin(67, 'Main Street', 5), coin(64, 'Haunted Mansion', 270), coin(77, 'Tiki Room', 60)];
   const live = { 67: 'open', 64: 'open', 77: 'open' };
   G.guide.setTarget(64, 'lineplay_recap');
   G.guide.resolve(input({ coins: rides, live, playableTaskId: null }));
-  assert.equal(G.guide.current().taskId, 64);
+  assert.equal(G.guide.current(), null, 'a recap GO is not the player\'s choice: ignored (Dustin, Nov 20)');
   assert.equal(G.guide.plan(), null, 'a suggestion card never becomes the plan');
   G.guide.resolve(input({ coins: rides, live, playableTaskId: 67 }));
   assert.equal(G.guide.current().taskId, 67);
-  // Won Main Street (it leaves the map list): the nearest open coin, never Haunted Mansion 270 m back.
+  // Won Main Street (it leaves the map list): nothing picked, so nothing held (no nearest coin, no ride 270 m back).
   G.guide.resolve(input({ coins: rides.filter(c => c.taskId !== 67), live, playableTaskId: null }));
-  assert.equal(G.guide.current().taskId, 77);
+  assert.equal(G.guide.current(), null);
   // The same walk with a pick of the player's: the pick comes back after the win.
   G.guide.reset();
   G.guide.setTarget(64, 'shelf');
@@ -97,21 +97,20 @@ test('T008: a target holds through a walk; when it closes the card says why in o
   G.guide.reset();
   const rides = [coin(66, 'Jungle Cruise', 180), coin(70, 'Pirates', 90), coin(77, 'Tiki Room', 200, { kind: 'sight' })];
   let live = { 66: 'open', 70: 'open' };
+  G.guide.setTarget(66, 'callout');
   G.guide.resolve(input({ coins: rides, live, playableTaskId: null }));
   const first = G.guide.current().taskId;
+  assert.equal(first, 66);
   // 10 minutes of walking fixes, nearer coins come and go: one target.
   for (let m = 0; m <= 170; m += 10) {
     G.guide.resolve(input({ coins: rides, live, playableTaskId: null, location: north(m) }));
     assert.equal(G.guide.current().taskId, first, `held at ${m} m`);
   }
-  // The held ride closes: the guide moves on and says why.
+  // The picked ride closes: the pick is dropped and the guide picks nothing in its place (Dustin, Nov 20).
   live = { ...live, [first]: 'closed' };
   G.guide.resolve(input({ coins: rides, live, playableTaskId: null, location: north(170) }));
-  assert.notEqual(G.guide.current().taskId, first);
-  const why = G.guide.replacedBy();
-  assert.equal(why.taskId, first);
-  const copy = C.guideCardCopy('walk', G.guide.current(), ctx({ replacedName: why.name }));
-  assert.match(copy.line, new RegExp(`${why.name} is closed now`));
+  assert.equal(G.guide.current(), null);
+  assert.equal(G.guide.replacedBy(), null);
   G.guide.reset();
 });
 
@@ -119,23 +118,21 @@ test('T004: TODAY\'S ADVENTURE only with its stamp dots, whatever set the pointe
   const target = { taskId: 77, parkId: 8, name: 'Tiki Room', kind: 'sight', reason: 'chosen', source: 'find', meters: 165,
     inRange: false, checkRunning: false, leavesOn: null };
   assert.equal(C.guideCardCopy('walk', target, ctx({ adventureDots: [false, false, false] })).kicker, 'TODAY\'S ADVENTURE');
-  assert.equal(C.guideCardCopy('walk', target, ctx()).kicker, 'YOUR NEXT COIN');
-  assert.equal(C.guideCardCopy('walk', { ...target, reason: 'adventure', source: 'guide' }, ctx()).kicker, 'NEXT COIN',
+  assert.equal(C.guideCardCopy('walk', target, ctx()).kicker, 'YOUR PICK');
+  assert.equal(C.guideCardCopy('walk', { ...target, reason: 'adventure', source: 'guide' }, ctx()).kicker, 'YOUR PICK',
     'never the Adventure title without its dots');
-  // The guide picked the nearest ride before today's Adventure arrived: the Adventure takes the card.
   const rides = [coin(76, 'Sword in the Stone', 40), coin(77, 'Tiki Room', 165, { kind: 'sight' })];
   const guideHeld = { taskId: 76, parkId: 8, name: 'Sword in the Stone', kind: 'ride', reason: 'nearest_open', source: 'guide', meters: 40,
     inRange: false, checkRunning: false, leavesOn: null };
-  const t = G.pickNextCoin(input({ coins: rides, live: { 76: 'open' }, current: guideHeld, playableTaskId: null,
-    adventure: { taskId: 77, parkId: 8, phase: 'discover' } }));
-  assert.equal(t.taskId, 77);
-  assert.equal(t.reason, 'adventure');
+  // Today's Adventure never takes the card by itself (Dustin, Nov 20): nothing picked, nothing held.
+  assert.equal(G.pickNextCoin(input({ coins: rides, live: { 76: 'open' }, current: guideHeld, playableTaskId: null,
+    adventure: { taskId: 77, parkId: 8, phase: 'discover' } })), null);
   // A pick of the player's still holds.
   const mine = G.pickNextCoin(input({ coins: rides, live: { 76: 'open' }, current: { ...guideHeld, reason: 'chosen', source: 'shelf' },
     playableTaskId: null, adventure: { taskId: 77, parkId: 8, phase: 'discover' } }));
   assert.equal(mine.taskId, 76);
   // The Adventure sheet names the card's coin when they differ.
-  assert.match(read('src/screens/ExploreScreen/AdventureTicketCard.tsx'), /Your map's next coin: \$\{guideNextName\}/);
+  assert.doesNotMatch(read('src/screens/ExploreScreen/AdventureTicketCard.tsx'), /Your map's next coin/, 'Nov 20: the sheet never names the map coin');
 });
 
 test('T024: a returning player reads today\'s ride by name, never "Your first chapter awaits"', () => {
@@ -206,8 +203,8 @@ test('T014: standing at a coin with no live word, the card says You\'re here! Ta
   const t = { taskId: 66, parkId: 8, name: 'Jungle Cruise', kind: 'ride', reason: 'nearest_unknown', source: 'guide', meters: 5,
     inRange: true, checkRunning: true, leavesOn: null };
   const copy = C.guideCardCopy('here', t, ctx());
-  assert.equal(copy.title, 'You\'re here! Tap PLAY!');
-  assert.equal(copy.line, 'Jungle Cruise · Check it\'s running');
+  assert.equal(copy.title, 'You\'re at Jungle Cruise');
+  assert.equal(copy.line, 'Tap PLAY! · Check it\'s running');
 });
 
 test('T015: the card keeps the target ride\'s own coin art after the trip goal read is late or failed', () => {
@@ -215,15 +212,15 @@ test('T015: the card keeps the target ride\'s own coin art after the trip goal r
   A.coinArtCache.rememberAll([{ task_id: 66, coin_url: 'https://x/jungle.png' }, { task_id: 67, coin_url: '' }]);
   assert.equal(A.coinArtCache.get(66), 'https://x/jungle.png');
   assert.equal(A.coinArtCache.get(67), null);
-  assert.match(read('src/components/guide/useMapGuide.ts'), /return here \|\| coinArtCache\.get\(guideTargetId\);/);
+  assert.match(read('src/components/guide/useMapGuide.ts'), /return here \|\| coinArtCache\.get\(cardTargetId\);/);
 });
 
 test('T016: PLAN plans: the shelf opens with the next coin picker on top, and the card says what PLAN does', () => {
   const home = C.guideCardCopy('home', null, ctx({ planName: null, treatsToTicket: 1 }));
   assert.equal(home.button.label, 'PLAN');
-  assert.equal(home.line, 'Pick your next coin. 1 more treat = 1 Ticket');
+  assert.equal(home.line, 'Tap your shelf to pick a coin. 1 more treat = 1 Ticket');
   assert.equal(C.guideCardCopy('home', null, ctx({ planName: 'Astro Blasters', treatsToTicket: 2 })).line,
-    'Next coin: Astro Blasters. Up to 2 treats = 1 Ticket');
+    'Your pick: Astro Blasters. Up to 2 treats = 1 Ticket');
   assert.match(read('src/screens/ExploreScreen.tsx'), /player: player\.id, plan: true \}\);/);
   assert.match(read('src/screens/ParkScreen.tsx'), /const storyTop = !planVisit && canChooseGoal/);
   assert.match(read('src/components/guide/NextCoinCard.tsx'), /wallet \|\| state === 'home' \? TICKET : COIN_FALLBACK/);

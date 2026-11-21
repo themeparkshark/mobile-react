@@ -167,6 +167,8 @@ test('the gate reads the guide store: a walker closing in on the target is not a
   let now = 9_000_000;
   Date.now = () => now;
   try {
+    // The player picked it (the guide never picks a ride by itself, Dustin, Nov 20).
+    guide.setTarget(41, 'callout');
     guide.resolve({ mode: 'park', parkId: 8, location: { latitude: 33.8100, longitude: -117.9192 }, coins: [coin], live: { 41: 'open' } });
     now += 40_000;
     guide.resolve({ mode: 'park', parkId: 8, location: { latitude: 33.8106, longitude: -117.9196 }, coins: [coin], live: { 41: 'open' } });
@@ -354,7 +356,8 @@ test('the screens wire the one ride question', () => {
   assert.match(journal, /if \(fromRideStep && timedWait != null && Number\.isFinite\(timedWait\)\) setWaitTime/);
   assert.match(journal, /if \(below === 'RideTracker'\) navigation\.goBack\(\);\n\s+else navigation\.dispatch\(StackActions\.replace\('RideTracker'\)\);/);
   const success = read('src/components/RideTracker/RideLogSuccess.tsx');
-  assert.match(success, /label=\{`NEXT COIN: \$\{nextCoinName\}`\}/);
+  assert.match(success, /label="BACK TO MAP"/, 'Ride logged: BACK TO MAP, never NEXT COIN (Dustin, Nov 20)');
+  assert.doesNotMatch(journal, /setTarget\(/);
   assert.match(success, /Next time, just ride\. Your shark asks once when you are done\./);
 });
 
@@ -376,8 +379,9 @@ test('Ride Tracker words: Ride sets, true counts only (no days-in-a-row streak u
 test('Wait Times plans the next coin through the guide', () => {
   const screen = read('src/screens/QueueTimesScreen.tsx');
   assert.match(screen, /guide\.setTarget\(taskId, 'wait_times'\);/);
-  assert.match(screen, /Make this my next coin/);
-  assert.match(screen, /Your next coin/);
+  // Arcade plan (Nov 20): the player's pick, in their words.
+  assert.match(screen, /Make this my pick/);
+  assert.match(screen, /Your pick/);
   // Never on a coin already on the shelf, and the chip follows the guide store, never the tap alone.
   assert.match(screen, /coinTaskId=\{notOwned\(coinTasks\.get\(item\.name\)\)\}/);
   assert.match(screen, /coin => coin\.ride_id/);

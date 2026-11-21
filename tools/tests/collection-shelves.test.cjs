@@ -169,8 +169,9 @@ test('missing coins show their own art as a quiet socket; secret coins stay a my
 
 test('park header only calls a reviewed ride coin a ride; food stands get neutral goal copy', () => {
   const copy = loadTs('src/services/collection/nextCoinCopy.ts');
-  assert.equal(copy.nextCoinEyebrow('ride'), 'YOUR NEXT RIDE COIN');
-  assert.equal(copy.nextCoinEyebrow(null), 'YOUR NEXT COIN');
+  // Arcade plan (Nov 20): the goal is the player's own pick, whatever kind of coin it is.
+  assert.equal(copy.nextCoinEyebrow('ride'), 'YOUR PICK');
+  assert.equal(copy.nextCoinEyebrow(null), 'YOUR PICK');
   assert.equal(copy.ticketsReadyHint(undefined), 'Tickets ready. Head there to play.');
   assert.equal(copy.ticketsReadyHint('ride'), 'Tickets ready. Head to the ride.');
   const open = [{ id: 1, coin_kind: null }], done = [{ id: 7, coin_kind: 'ride' }];

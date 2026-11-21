@@ -17,7 +17,8 @@ import {
   type GuideAdventure, type GuideState, type GuideTarget, type LiveMemo,
 } from '../../services/guide/nextCoin';
 import { nextFreeTicket, type FreeTicketsInput } from '../../services/guide/freeTickets';
-import { guideCardCopy, lineOffer, oneGoldButton, restingSightCopy, type GuideCardCopy } from '../../services/guide/guideCopy';
+import { guideCardCopy, lineOffer, oneGoldButton, restingSightCopy, shelfBarFor, type GuideCardCopy } from '../../services/guide/guideCopy';
+import { servedTicketPrice } from '../tickets/ticketPipsModel';
 import { coinsToday, INSIDE_PARK_METERS, leavingPark, parkDayStore, welcomedToday } from '../../services/guide/parkDay';
 import { goodbyeCoins, serverCoinsWon } from '../../services/guide/parkDayCounts';
 import { getParkDayRecap } from '../../api/endpoints/me/park-day-recap';
@@ -72,6 +73,12 @@ export interface NextCoinGuideInput {
   readonly lineStoryNear?: boolean;
   /** Today's free try exists for this player (ride_rescue_pass on): the Need a Ticket line may promise one tomorrow. */
   readonly freeTryDaily?: boolean;
+  /** The arcade economy is on (flags.arcade_economy): shelf gifts every 5 coins and a park day gift every day. */
+  readonly arcade?: boolean;
+  /** Tickets this park check-in paid as the park day gift (the park answer's welcome_tickets_granted), or null. */
+  readonly parkGiftTickets?: number | null;
+  /** The park's whole shelf from the trip goal's ride list (every coin here, owned or not), when it has answered. */
+  readonly shelf?: { readonly won: number; readonly total: number } | null;
 }
 
 export interface NextCoinGuide {
@@ -108,6 +115,13 @@ export interface NextCoinGuide {
   readonly arrivedAt: number | null;
   /** The goodbye card shows for this park (the one the player is leaving), or null. */
   readonly leavingParkId: number | null;
+  /** The arrive card's OK: the welcome is read, the card moves on (to the pick, PLAY! or "pick any coin"). */
+  readonly finishArrive: () => void;
+  /**
+   * The map's data is still on its way (the card shows the welcome meanwhile and breathes softly). Nothing picked is
+   * normal now (Dustin, Nov 20), so a card with no coin never breathes for that alone.
+   */
+  readonly loading: boolean;
 }
 
 const adventureFor = (ticket: AdventureTicket | null, parkId: number | null): GuideAdventure | null =>
@@ -287,7 +301,8 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   if (dayRecord && arrivedAt != null && welcomeSeen.current?.key !== visitKey) {
     welcomeSeen.current = { key: visitKey, welcomed: welcomedToday(dayRecord, parkId, today) };
   }
-  const welcomed = welcomeSeen.current?.key === visitKey ? welcomeSeen.current.welcomed : true;
+  const [arriveOkKey, setArriveOkKey] = useState<string | null>(null);
+  const welcomed = arriveOkKey === visitKey || (welcomeSeen.current?.key === visitKey ? welcomeSeen.current.welcomed : true);
   const held = enabled && ready && target && target.parkId === parkId ? target : null;
   // "You're here" only while PLAY! is really up for this coin (the server's range check wins over geometry).
   const shown = withPlayRange(held, input.playableTaskId);
@@ -317,6 +332,14 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const thenName = resumed && resumed.taskId !== shown?.taskId ? resumed.name : null;
   const replacedBy = shown ? guide.replacedBy() : null;
   const replacedName = replacedBy && answers[replacedBy.taskId] === 'closed' ? replacedBy.name : null;
+  // The park's shelf: coins won here of every coin here (today's map plus the shelf's owned list), and the next shelf
+  // gift while the arcade economy pays one. The card names no ride with it.
+  // The trip goal's ride list is the whole shelf (today's map list can leave won or resting coins out); the map's own
+  // count stands in until it answers.
+  const shelfBar = shelfBarFor({ won: input.shelf?.won ?? coins.filter(coin => coin.owned).length,
+    total: input.shelf?.total ?? new Set([...coins.map(coin => coin.taskId), ...(input.ownedTaskIds ?? [])]).size,
+    arcade: input.arcade === true });
+  const targetTaskForPrice = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
   const copy = oneGoldButton(restingSightCopy(guideCardCopy(state, shown, {
     parkName: input.parkName, ridesResting, allOwned, outOfReach,
     tickets: input.wallet?.tickets ?? 0, freeStep: input.wallet ? nextFreeTicket(input.wallet) : null,
@@ -324,6 +347,8 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
     welcomed, ownedHere: coins.filter(coin => coin.owned).length + (input.ownedTaskIds?.size ?? 0) > 0 ? 1 : 0, playUp,
     freeTryDaily: input.freeTryDaily, thenName, replacedName, leaving: leaving ? { parkName: leavingFrom?.parkName ?? null,
       coins: goodbyeWon } : null,
+    shelfBar, arcade: input.arcade === true, parkGiftTickets: input.parkGiftTickets ?? null,
+    targetPrice: servedTicketPrice(targetTaskForPrice?.ticket_cost),
   }), shown, ridesResting), playUp);
   const targetTask = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
   const targetCoin = shown ? coins.find(coin => coin.taskId === shown.taskId) ?? null : null;
@@ -339,5 +364,5 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const offer = lineOffer(state, input.dwellRideName ?? null);
   return { target: shown, state, copy, lineOffer: offer, inLineTaskId, rides, targetTask, targetPoint, pathPoint: leaving ? null : pathPoint,
     targetOffMap: !!shown && !targetTask && !!targetCoin, arrivedAt, adventureTab: adventureTab && !leaving,
-    leavingParkId: leaving ? leavingFrom?.parkId ?? null : null };
+    leavingParkId: leaving ? leavingFrom?.parkId ?? null : null, finishArrive: () => setArriveOkKey(visitKey), loading: enabled && !ready };
 }

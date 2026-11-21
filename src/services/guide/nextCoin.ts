@@ -6,23 +6,24 @@
  * card. It is owned by the guide-map lane; every other lane imports it and
  * never edits it.
  *
- * - pickNextCoin(input) is pure: the target order 1 to 11 of blueprint 4.1,
- *   with honest live status and a sticky target.
+ * - pickNextCoin(input) is pure: only the player's own coins (Dustin, Nov 20): the coin PLAY! is up for,
+ *   the line they stand in, the coin they picked. With none of those it returns null (no ride is ever picked).
  * - guideState(input, target) is pure: which of the 13 card states shows.
  * - liveAnswers(memo, live, now) is pure: turns the server's live feed into
  *   open / closed / unknown per coin, where a known-closed ride stays closed
  *   until a fresh answer says it is open.
- * - guide is the one owner of the pointer. Every "go here" in the app calls
- *   guide.setTarget(taskId, source): the shelf's "Make this my next coin",
- *   the Coin Guide rows, Wait Times, Daily 3 GO, the Adventure Ticket, the win
- *   card's NEXT COIN and a tapped coin callout.
+ * - guide is the one owner of the pointer. A player's pick moves it through
+ *   guide.setTarget(taskId, source), only from PLAYER_SOURCES (a tapped coin, a
+ *   coin card, the shelf, NEAR ME, Wait Times, MY GOAL); X clears it.
  *
  * No React and no network here, so it runs in plain node tests.
  */
 import { nextFreeTicket, type FreeTicketsInput } from './freeTickets';
 
 export type GuideState = 'arrive' | 'walk' | 'here' | 'line_story' | 'in_line' | 'claim'
-  | 'free_try' | 'extra_try' | 'need_ticket' | 'level_up' | 'resting' | 'welcome_back' | 'home' | 'goodbye';
+  | 'free_try' | 'extra_try' | 'need_ticket' | 'level_up' | 'resting' | 'welcome_back' | 'home' | 'goodbye'
+  /** Nothing picked (Dustin, Nov 20): "Win any ride coin", the park's count and NEAR ME. Names no ride. */
+  | 'pick';
 
 export type CoinKind = 'ride' | 'sight';
 
@@ -175,6 +176,14 @@ export const PICK_HOLD_MS = 10 * 60 * 1000;
  * "In line?" for 10 minutes after NEXT COIN).
  */
 export const SUGGESTION_SOURCES: ReadonlySet<string> = new Set(['win_card', 'lineplay_recap', 'ride_logged']);
+/**
+ * The only sources that may move the pointer (Dustin, Nov 20: "we shouldn't suggest where they go it's their choice
+ * to play"): a coin the player tapped on the map (callout), picked on a coin card, the shelf, NEAR ME, Wait Times or
+ * Get Tickets, their MY GOAL, a Find from their own checklist, a coin card's GET RIDE PARTS, or LinePlay's DONE putting
+ * back the pick it found. Anything else (a win card, a recap, a ride log, Daily 3's nearest ride) is ignored.
+ */
+export const PLAYER_SOURCES: ReadonlySet<string> = new Set(['pick', 'callout', 'coin_card', 'shelf', 'shelf_next', 'shelf_slot', 'coin_guide', 'near_me',
+  'wait_times', 'my_goal', 'find', 'coin_parts', 'get_tickets', 'lineplay_done']);
 /** Standing this close to today's Adventure ride, its Line story always leads (its line is right here). */
 export const LINE_STORY_NEAR_METERS = 60;
 /** Another coin must be this much nearer than the Adventure ride to take over from its Line story (no flip-flop on GPS jitter). */
@@ -316,10 +325,6 @@ export function playerChose(target: GuideTarget | null | undefined): boolean {
   return !!target && target.source !== 'guide' && !SUGGESTION_SOURCES.has(target.source);
 }
 
-/** Reasons the guide's own pick yields to today's Adventure coin (rule 5 sits above them). */
-const BELOW_ADVENTURE: ReadonlySet<TargetReason> = new Set(['star_rush', 'nearest_open', 'nearest_unknown', 'nearest_sight',
-  'level_up', 'leaves_soon']);
-
 /**
  * The coin PLAY! is up for right now, when it is one to win: the held (or freshly picked) coin first, else the
  * nearest. Null when PLAY! is down. PLAY! is the one thing on screen a kid can press, so the card always names it.
@@ -341,9 +346,13 @@ function heldStillValid(input: GuideInput, coins: readonly GuideCoin[], held: Gu
   if (!coin) return null;                                   // another park, or gone
   if (liveOf(input, coin) === 'closed') return null;        // it closed
   if (!withinReach(input, coin)) return null;               // walked far away
-  // A coin that took over only because PLAY! rose for it lasts while PLAY! is up for it.
-  if (held.reason === 'in_range' && held.source === 'guide' && input.resumeTarget
-    && input.resumeTarget.taskId !== held.taskId && !coinInPlayRange(input, coin)) return null;
+  // Not a pick: the coin PLAY! was up for, or the line the player stood in. It lasts only while that is still true,
+  // so walking on never leaves a path to a ride the player did not choose (Dustin, Nov 20).
+  if (!playerChose(held)) {
+    if (held.reason === 'in_range') return !coin.owned && coinInPlayRange(input, coin) ? coin : null;
+    if (held.reason === 'in_line' || held.reason === 'line_story') return input.inLineTaskId === coin.taskId ? coin : null;
+    return null;
+  }
   if (!coin.owned) return coin;                             // still to win
   if (held.reason === 'level_up') return input.coinLevelsUnlocked && coin.levelUpReady ? coin : null;
   if (held.reason === 'parts') return coin;                 // GET RIDE PARTS holds until a closure, a walk away or a new pick
@@ -404,37 +413,19 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
     now - input.currentPickedAt >= 0 && now - input.currentPickedAt < PICK_HOLD_MS && !!heldStillValid(input, coins, input.current);
   if (line && input.current?.taskId !== line.taskId && !freshPick) return targetFor(input, line, lineReason(line));
 
-  // The held target stays until won, done, closed, too far, or replaced. A coin that only rose for a
-  // moment (PLAY! came up for it) gives way to the target from before once the player walks on. After that
-  // coin was WON, only a target the player chose comes back (T010): a coin the guide or a suggestion card
-  // handed out gives way to a fresh pick (the nearest open coin), never a ride 270 m back.
+  // The held target stays until won, closed, too far, or replaced. It is always the player's own: a coin they
+  // picked, the coin PLAY! is up for (while it is), or the line they stand in (while they do). A coin that only
+  // rose for a moment gives way to the player's pick from before once they walk on (Dustin, Nov 20: the app
+  // never picks a ride).
   const heldCoin = input.current ? heldStillValid(input, coins, input.current) : null;
-  const passing = input.current?.reason === 'in_range' ? coins.find(c => c.taskId === input.current!.taskId) : undefined;
-  const passingWon = input.current?.reason === 'in_range' && (!passing || passing.owned);
   const back = !heldCoin && input.resumeTarget && input.resumeTarget.taskId !== input.current?.taskId
-    && (!passingWon || playerChose(input.resumeTarget))
-    ? heldStillValid(input, coins, input.resumeTarget) : null;
+    && playerChose(input.resumeTarget) ? heldStillValid(input, coins, input.resumeTarget) : null;
   const base = heldCoin ? input.current! : back ? input.resumeTarget! : null;
   const baseCoin = heldCoin ?? back;
 
-  // Today's Adventure (rule 5) outranks the guide's own nearest pick: an Adventure that arrives (or a new one for
-  // the day) after the guide chose the nearest ride takes the card, so the ticket and the card name one coin (T004).
-  // A coin the player chose still holds.
-  if (base && baseCoin && base.source === 'guide' && BELOW_ADVENTURE.has(base.reason)) {
-    const adventure = input.adventure;
-    const ride = adventure && adventure.parkId === input.parkId && adventure.phase === 'discover'
-      ? coins.find(c => c.taskId === adventure.taskId) : undefined;
-    if (ride && ride.taskId !== base.taskId && winnable(input, ride)) return targetFor(input, ride, 'adventure');
-  }
-  // Parts filled the coin while the guide pointed at its line: now it is ready to level up.
+  // Parts filled the coin while the player's pick pointed at its line: now it is ready to level up.
   if (base && baseCoin && base.reason === 'parts' && input.coinLevelsUnlocked && baseCoin.levelUpReady) return targetFor(input, baseCoin, 'level_up', base.source);
   if (base && baseCoin) return targetFor(input, baseCoin, base.reason, base.source);
-
-  // 1. Right after winning today's Adventure coin: that ride, for its line story, then its souvenir.
-  if (adventureLineStory(input)) {
-    const ride = coins.find(c => c.taskId === input.adventure!.taskId);
-    if (ride && liveOf(input, ride) !== 'closed' && withinReach(input, ride)) return targetFor(input, ride, 'line_story');
-  }
 
   // 2. An open coin you do not own, in range right now: handled first, above (PLAY! is up for it).
 
@@ -444,76 +435,47 @@ export function pickNextCoin(input: GuideInput): GuideTarget | null {
   // 4. The coin you chose, if it is open and in this park.
   if (input.chosenTaskId != null) {
     const chosen = coins.find(c => c.taskId === input.chosenTaskId);
-    if (chosen && winnable(input, chosen)) return targetFor(input, chosen, 'chosen');
+    if (chosen && winnable(input, chosen)) return targetFor(input, chosen, 'chosen', 'pick');
   }
 
-  // 5. Today's Adventure ride, if it is open.
-  const adventure = input.adventure;
-  if (adventure && adventure.parkId === input.parkId && adventure.phase === 'discover') {
-    const ride = coins.find(c => c.taskId === adventure.taskId);
-    if (ride && winnable(input, ride)) return targetFor(input, ride, 'adventure');
-  }
-
-  // 6. A Star Ride or a Rush ride, only after their unlock.
-  if (input.starRushUnlocked) {
-    const special = nearest(input, coins.filter(c => c.kind === 'ride' && (c.star || c.rush) && winnable(input, c)));
-    if (special) return targetFor(input, special, 'star_rush');
-  }
-
-  // 7. The nearest ride coin known to be open.
-  const open = nearest(input, coins.filter(c => c.kind === 'ride' && winnable(input, c) && liveOf(input, c) === 'open'));
-  if (open) return targetFor(input, open, 'nearest_open');
-
-  // 8. The nearest ride coin with no live answer (after every known-open ride): "Check it's running".
-  const unknown = nearest(input, coins.filter(c => c.kind === 'ride' && winnable(input, c) && liveOf(input, c) === 'unknown'));
-  if (unknown) return targetFor(input, unknown, 'nearest_unknown');
-
-  // 9. The nearest sight coin you do not own (sights are always open).
-  const sight = nearest(input, coins.filter(c => c.kind === 'sight' && winnable(input, c)));
-  if (sight) return targetFor(input, sight, 'nearest_sight');
-
-  // 10. A coin ready to level up (a coin-card job, not a walk), or a limited coin that leaves soon.
-  if (input.coinLevelsUnlocked) {
-    const level = nearest(input, coins.filter(c => c.owned && c.levelUpReady && liveOf(input, c) !== 'closed'));
-    if (level) return targetFor(input, level, 'level_up');
-  }
-  const leaving = coins
-    .filter(c => !c.owned && !!c.leavesOn && liveOf(input, c) !== 'closed' && withinReach(input, c))
-    .sort((a, b) => String(a.leavesOn).localeCompare(String(b.leavesOn)) || a.name.localeCompare(b.name))[0];
-  if (leaving) return targetFor(input, leaving, 'leaves_soon');
-
+  // Nothing picked, no coin here, no line: the guide holds nothing. The card says "pick any coin" and names no
+  // ride (Dustin, Nov 20: "we shouldn't suggest where they go it's their choice to play"). Rules 1 and 5 to 10
+  // (today's Adventure, Star or Rush, the nearest open, unknown or sight coin, level up, leaves soon) are gone.
   // 11. Nothing to win right now: the resting or closed message.
   return null;
 }
 
-/** Which card state shows for this target (the 4.1 state table). Pure. */
+/** Which card state shows for this target (the arcade plan, section 6). Pure. */
 export function guideState(input: GuideInput, target: GuideTarget | null): GuideState {
   const welcomeBack = finite(input.daysAway) && input.daysAway >= WELCOME_BACK_DAYS && !input.welcomeBackDone;
   if (input.mode === 'home') return welcomeBack ? 'welcome_back' : 'home';
   if (welcomeBack) return 'welcome_back';
   if (input.leaving) return 'goodbye';
-  if (!target) return 'resting';
   const now = finite(input.now) ? input.now : Date.now();
-  // The welcome is for the walk in: standing at a coin PLAY! is up for, the card says Tap PLAY!, never GO.
+  // The welcome is for the walk in (the park day gift and how to play), with or without a pick. Standing at a coin
+  // PLAY! is up for, the card says PLAY!, never the welcome.
   if (finite(input.arrivedAt) && now - input.arrivedAt >= 0 && now - input.arrivedAt < ARRIVE_MS && !input.welcomed
-    && !target.inRange) return 'arrive';
-  // Standing in today's Adventure ride's line after its coin: that is where its line story plays.
-  if (target.reason === 'line_story') return 'line_story';
-  // In its line and PLAY! is up for it: Tap PLAY! stays the card and the in-line offer rides under it (T074),
-  // so the card never alternates between the two.
-  const playUpHere = input.playableTaskId !== undefined ? input.playableTaskId != null && input.playableTaskId === target.taskId
-    : target.inRange;
-  if (input.inLineTaskId != null && input.inLineTaskId === target.taskId && !playUpHere) return 'in_line';
-  if (target.reason === 'level_up') return 'level_up';
-  // Ride Parts come from its line, not from a Ticket: at the ride the card opens LinePlay.
-  if (target.reason === 'parts') return target.inRange ? 'in_line' : 'walk';
+    && !target?.inRange) return 'arrive';
+  if (target) {
+    // Standing in today's Adventure ride's line after its coin: that is where its line story plays.
+    if (target.reason === 'line_story') return 'line_story';
+    // In its line and PLAY! is up for it: PLAY! stays the card and the in-line offer rides under it (T074).
+    const playUpHere = input.playableTaskId !== undefined ? input.playableTaskId != null && input.playableTaskId === target.taskId
+      : target.inRange;
+    if (input.inLineTaskId != null && input.inLineTaskId === target.taskId && !playUpHere) return 'in_line';
+    if (target.reason === 'level_up') return 'level_up';
+    // Ride Parts come from its line, not from a Ticket: at the ride the card opens LinePlay.
+    if (target.reason === 'parts') return target.inRange ? 'in_line' : 'walk';
+  }
   if (input.wallet) {
     const step = nextFreeTicket(input.wallet);
     if (step?.kind === 'claim') return 'claim';
-    if (step?.kind === 'line_ticket' || step?.kind === 'treats') return 'need_ticket';
-    if (step?.kind === 'free_try') return target.inRange ? 'free_try' : 'walk';
-    if (step?.kind === 'extra_try') return target.inRange ? 'extra_try' : 'walk';
+    // Today's server only (a free or extra try PLAY! will use); the arcade server never offers one.
+    if (step?.kind === 'free_try' || step?.kind === 'extra_try') {
+      if (target) return target.inRange ? step.kind : 'walk';
+    } else if (step) return 'need_ticket'; // an empty wallet: "0 Tickets" and GET TICKETS, naming no ride
   }
+  if (!target) return 'pick';
   return target.inRange ? 'here' : 'walk';
 }
 
@@ -634,6 +596,11 @@ export const guide = {
    */
   setTarget(taskId: number, source: string): void {
     if (!finite(taskId)) return;
+    if (!PLAYER_SOURCES.has(source || 'pick')) {
+      // Dev builds only: a screen tried to point the player somewhere they did not choose.
+      if (typeof __DEV__ !== 'undefined' && __DEV__) console.log(`[guide] ignored setTarget(${taskId}, ${source}): not a player choice`);
+      return;
+    }
     if (held?.reason === 'line_story' && held.taskId !== taskId) declinedLineStory = { taskId: held.taskId, phase: lastAdventurePhase };
     pick = { taskId, source: source || 'pick', at: Date.now() };
     // Only a coin the player chose becomes the plan (rule 4). A suggestion card's NEXT COIN or GO moves the pointer
@@ -669,8 +636,7 @@ export const guide = {
   nextAfter(taskId: number | null | undefined): GuideTarget | null {
     if (taskId == null) return held;
     // The held coin is another one the player chose (or today's Adventure, or its Line story): that stays next.
-    if (held && held.taskId !== taskId && (playerChose(held) || held.reason === 'adventure' || held.reason === 'line_story'
-      || held.reason === 'in_range')) return held;
+    if (held && held.taskId !== taskId && playerChose(held)) return held;
     if (!lastInput) return held && held.taskId !== taskId ? held : null;
     // Otherwise the guide's own answer without this ride (T010: the nearest open coin, never a stale suggestion).
     const fresh = pickNextCoin({
@@ -733,6 +699,16 @@ export const guide = {
   pickHoldEndsAt(): number | null {
     if (!held || heldPickedAt === null || held.source === 'guide' || SUGGESTION_SOURCES.has(held.source)) return null;
     return heldPickedAt + PICK_HOLD_MS;
+  },
+  /**
+   * The card's X on YOUR PICK: the player clears their own pick. The path, arrow and bob go, the plan is forgotten,
+   * and the card goes back to "pick any coin" (or the coin PLAY! is up for, or the line they stand in).
+   */
+  clearPick(): void {
+    if (!held && plan === null && !pick && !resume) return;
+    held = null; heldPickedAt = null; pick = null; plan = null; resume = null; resumePickedAt = null; replaced = null;
+    inputVersion++;
+    emit();
   },
   /** Forget the plan once its coin is won or the player signs out. */
   clearPlan(): void {

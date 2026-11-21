@@ -252,8 +252,9 @@ test('the recap: only what you got, "Sign said 20, you waited 11", one GO, the l
     'Win Jungle Cruise’s coin: 2 Parts are waiting');
   assert.equal(step.recapGo({ rideName: 'Jungle Cruise', coinState: 'owned', partsEarned: 1, rideTaskId: 41, upgradeReady: true, nextCoin: null }).kind, 'level_up');
   assert.deepEqual(plain(step.recapGo({ rideName: 'Jungle Cruise', coinState: 'owned', partsEarned: 0, rideTaskId: 41, upgradeReady: false,
-    nextCoin: { taskId: 9, name: 'Haunted Mansion' } })), { kind: 'next_coin', label: 'Next coin: Haunted Mansion', button: 'GO', taskId: 9 });
-  assert.match(screen, /if \(go\.taskId != null\) guide\.setTarget\(go\.taskId, 'lineplay_recap'\);/);
+    nextCoin: { taskId: 9, name: 'Haunted Mansion' } })), { kind: 'shelf', label: 'See your park shelf', button: 'SHELF' },
+    'never a next coin (Dustin, Nov 20): the shelf, where the player picks');
+  assert.doesNotMatch(screen, /setTarget\(go\.taskId, 'lineplay_recap'\)/, 'the recap never moves the pointer');
   assert.match(recap, /variant=\{\(go && onGo\) \|\| goPending \? 'ghost' : undefined\}/, 'Done is the quiet second button, also while the GO is worked out');
   assert.match(screen, /goPending=\{go == null && !goReady\}/);
   // The recap lands the moment the wait ends (never the locked in-line pages, never a near-empty page): the
@@ -340,8 +341,9 @@ test('the recap GO and NEXT COIN follow the guide store, and a coin you do not o
     'no one-time read of the guide during render');
   assert.match(screen, /partsEarned: slotTaskId != null \? slotPartsShown\(recapPartsEarned, slotParts\) : recapPartsEarned/);
   const log = read('src/screens/RideTracker/RideLogScreen.tsx');
-  assert.match(log, /const nextCoin = useGuideTarget\(selectedRide\?\.task_id \?\? null\);/);
-  assert.match(log, /guide\.setTarget\(nextCoin\.taskId, 'ride_logged'\); navigation\.navigate\('Explore'\);/, 'NEXT COIN moves the one pointer, so the map names the same coin');
+  // Ride logged: BACK TO MAP, and it never names or moves to a next coin (Dustin, Nov 20).
+  assert.doesNotMatch(log, /useGuideTarget|setTarget/);
+  assert.match(log, /onBackToMap=\{\(\) => navigation\.navigate\('Explore'\)\}/);
   assert.doesNotMatch(log, /guide\.current\(\)/);
   const hook = read('src/services/lineplay/useGuideTarget.ts');
   assert.match(hook, /useSyncExternalStore\(subscribe, snapshot, snapshot\)/);

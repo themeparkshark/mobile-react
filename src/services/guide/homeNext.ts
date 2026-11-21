@@ -12,7 +12,7 @@ import { guideCardCopy, leavesLine, type GuideAction, type GuideCardCopy } from 
 import { goalGo, homeSideGoal, type GoalGo, type RewardsRowKey } from '../retention/rewardsModel';
 
 /** Home-only card buttons (the shared GuideAction covers the rest). */
-export type HomeAction = GuideAction | 'rewards' | 'find' | 'practice' | 'closet' | 'friends' | 'coin_shelf' | 'coin';
+export type HomeAction = GuideAction | 'rewards' | 'find' | 'practice' | 'closet' | 'friends' | 'coin_shelf' | 'coin' | 'limited';
 
 /** Which picture the card wears for the step (existing art only). */
 export type HomeArt = 'coin' | 'ticket' | 'chest' | 'level_chest' | 'weekly' | 'trail' | 'stamps' | 'events' | 'treat' | 'flame' | 'play';
@@ -42,12 +42,15 @@ export interface HomeNextInput {
   readonly treats: { readonly onMap: number; readonly toTicket: number | null; readonly capped: boolean };
   /** A limited coin in rotation at the next park, not on the shelf yet, with its last day. */
   readonly limited: (HomeCoinRef & { readonly leavesOn: string }) | null;
+  /** How many limited coins are in rotation at the next park and not on the shelf (the card says a count, never one name). */
+  readonly limitedCount?: number;
   /** The owned coin closest to its next level that still needs Ride Parts (they come from waiting in its line). */
   readonly parts: (HomeCoinRef & { readonly partsToGo: number; readonly levelName: string | null }) | null;
   /** Practice games are open for this player (from the first coin won or the 2nd home visit). */
   readonly practice: boolean;
-  /** The next park day: its park, the Tickets ready and the planned coin. */
-  readonly park: { readonly parkName: string | null; readonly tickets: number; readonly plan: HomeCoinRef | null };
+  /** The next park day: its park, the Tickets ready, the player's own pick, and the home jar (arcade server only). */
+  readonly park: { readonly parkName: string | null; readonly tickets: number; readonly plan: HomeCoinRef | null;
+    readonly jar?: { readonly held: number; readonly cap: number; readonly full: boolean } | null };
   /** The player has won a coin: a veteran plans the park day before the treats. */
   readonly veteran?: boolean;
   /** Away 14 days or more: the welcome back card leads. */
@@ -114,6 +117,10 @@ export function homeDaily3Goal(d: HomeNextInput['daily3'], treatsOnMap: number):
 export function homeNextStep(i: HomeNextInput): HomeStep {
   const park = i.park.parkName;
   const meter = i.treats.capped ? null : treatMeterLine(i.treats.toTicket);
+  // "12 Tickets in your jar" on the arcade server (home Tickets wait in a jar of 20), else the Tickets ready.
+  const jar = i.park.jar && Number.isFinite(i.park.jar.held) ? i.park.jar : null;
+  const parkDayTitle = () => jar ? `${tickets(jar.held)} in your jar${jar.full ? ' (full!)' : ''}`
+    : park ? `${park}: ${tickets(i.park.tickets)} ready` : `${tickets(i.park.tickets)} ready`;
   // The planned coin, else the Tickets, picture the park day cards.
   const planArt = (coin: HomeCoinRef | null): { art: HomeArt; coin: HomeCoinRef | null } =>
     coin?.coinUrl ? { art: 'coin', coin } : { art: 'ticket', coin };
@@ -144,20 +151,22 @@ export function homeNextStep(i: HomeNextInput): HomeStep {
       copy: card('DAILY 3', goal.title, goal.line, { label: 'GO', action: goal.action }) };
   }
 
-  // 4. A limited coin at the next park that leaves on a set day, not planned yet.
+  // 4. Limited coins at the next park: a count, never one coin's name (Dustin, Nov 20: no coin is more important than
+  // another). SEE opens that park's Limited tab, where every one shows the same way.
   const planned = i.park.plan;
+  const limitedCount = Math.max(0, Math.floor(i.limitedCount ?? (i.limited ? 1 : 0)));
   const leaves = i.limited ? leavesLine(i.limited.leavesOn) : null;
-  if (i.limited && leaves && planned?.assetId !== i.limited.assetId) {
+  if (i.limited && leaves && limitedCount > 0 && planned?.assetId !== i.limited.assetId) {
     const where = park ? ` at ${park}` : '';
-    return { key: 'limited', action: 'coin', art: i.limited.coinUrl ? 'coin' : 'ticket', coin: i.limited,
-      copy: card('LIMITED COIN', i.limited.name, `Win it${where}. It ${leaves}`, { label: 'SEE IT', action: 'coin' }) };
+    return { key: 'limited', action: 'limited', art: 'ticket', coin: { ...i.limited, name: '', coinUrl: null, assetId: null },
+      copy: card('LIMITED COINS', `${plural(limitedCount, 'limited coin', 'limited coins')}${where}`,
+        'Here for a short time. Pick any one you like', { label: 'SEE', action: 'limited' }) };
   }
 
   // 5. No coin planned yet: pick one (PLAN opens the picker on the shelf). Treats never run out at home, so a player
   // with coins plans the park day before the treats; a brand new player's first goal is the treats and their meter.
   const planStep = (): HomeStep => ({ key: 'plan', action: 'plan', art: 'ticket', coin: null,
-    copy: card('NEXT PARK DAY', park ? `${park}: ${tickets(i.park.tickets)} ready` : `${tickets(i.park.tickets)} ready`,
-      'Pick your next coin', { label: 'PLAN', action: 'plan' }) });
+    copy: card('NEXT PARK DAY', parkDayTitle(), 'Pick any coin on your shelf', { label: 'PLAN', action: 'plan' }) });
   if (!planned && i.veteran) return planStep();
 
   // 6. A treat on the map while the Ticket meter still fills today.
@@ -167,12 +176,10 @@ export function homeNextStep(i: HomeNextInput): HomeStep {
   }
   if (!planned) return planStep();
 
-  // 7. Ride Parts for the coin closest to its next level (they come from waiting in its line on a park day).
+  // 7. Ride Parts grow coins: any ride's line does it, so the card names no coin (Dustin, Nov 20).
   if (i.parts && i.parts.partsToGo > 0) {
-    const level = i.parts.levelName ? ` for ${i.parts.levelName}` : '';
-    return { key: 'parts', action: 'coin', art: i.parts.coinUrl ? 'coin' : 'ticket', coin: i.parts,
-      copy: card('GET RIDE PARTS', i.parts.name, `${plural(i.parts.partsToGo, 'more Ride Part', 'more Ride Parts')}${level}. Wait in its line`,
-        { label: 'SEE IT', action: 'coin' }) };
+    return { key: 'parts', action: 'coin_shelf', art: 'ticket', coin: null,
+      copy: card('GET RIDE PARTS', 'Grow your coins', 'Wait in any ride\'s line to grow its coin', { label: 'SHELF', action: 'coin_shelf' }) };
   }
 
   // 8. Something to play sitting still, with the park day it warms up for.
@@ -182,15 +189,30 @@ export function homeNextStep(i: HomeNextInput): HomeStep {
         { label: 'PLAY', action: 'practice' }) };
   }
 
-  // 9. The next park day and its planned coin.
+  // 9. The next park day: the jar (or the Tickets ready), the treat meter, and the player's own pick.
   return { key: 'park_day', action: 'plan', ...planArt(planned),
-    copy: card('NEXT PARK DAY', park ? `${park}: ${tickets(i.park.tickets)} ready` : `${tickets(i.park.tickets)} ready`,
-      `Next coin: ${planned.name}`, { label: 'PLAN', action: 'plan' }) };
+    copy: card('NEXT PARK DAY', parkDayTitle(), [meter, `Your pick: ${planned.name}`].filter(Boolean).join('. '),
+      { label: 'PLAN', action: 'plan' }) };
+}
+
+/** The arcade server's home jar on the player answer ({held, cap, full}), or null on today's server. */
+export function homeJarOf(player: unknown): { readonly held: number; readonly cap: number; readonly full: boolean } | null {
+  const jar = (player as { home_jar?: { held?: unknown; cap?: unknown; full?: unknown } } | null)?.home_jar;
+  if (!jar || typeof jar.held !== 'number' || !Number.isFinite(jar.held)) return null;
+  const cap = typeof jar.cap === 'number' && Number.isFinite(jar.cap) ? jar.cap : 20;
+  return { held: Math.max(0, Math.floor(jar.held)), cap, full: jar.full === true || jar.held >= cap };
+}
+
+/** How many limited coins are in rotation here with a last day and not on the player's shelf. */
+export function homeLimitedCount<T extends { readonly asset_id?: number;
+  readonly limited?: { readonly active: boolean; readonly ends_on?: string | null } | null }>(tasks: readonly T[], ownedAssetIds: ReadonlySet<number>): number {
+  return tasks.filter(t => t.limited?.active && /^\d{4}-\d{2}-\d{2}$/.test(String(t.limited.ends_on ?? ''))
+    && !(t.asset_id != null && ownedAssetIds.has(Number(t.asset_id)))).length;
 }
 
 /**
- * The limited coin the home card names: in rotation, with a last day, not on the player's shelf, soonest to
- * leave first (then by name). Null when there is none.
+ * A limited coin in rotation (its last day feeds the card's "here for a short time"): not on the player's shelf,
+ * soonest to leave first (then by name). The card never shows its name. Null when there is none.
  */
 export function homeLimitedCoin<T extends { readonly name: string; readonly asset_id?: number; readonly coin_url?: string | null;
   readonly limited?: { readonly active: boolean; readonly ends_on?: string | null } | null }>(

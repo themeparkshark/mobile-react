@@ -64,9 +64,10 @@ test('item 6: the guide and PLAY! read one free try signal (the coin PLAY! is up
 });
 
 test('item 6: Need a Ticket names every real way (no SEE WAYS that repeats it), and an extra try is never called free', () => {
+  // Arcade plan (Nov 20): "0 Tickets" and one GET TICKETS button to the one sheet of free ways; no ride named.
   const need = C.guideCardCopy('need_ticket', null, ctx({ freeTryDaily: true }));
-  assert.equal(need.button, null);
-  assert.match(need.line, /3 treats at home = 1 Ticket\. Tomorrow brings a new free try\./);
+  assert.equal(need.title, '0 Tickets');
+  assert.equal(need.button.action, 'get_tickets');
   assert.doesNotMatch(C.guideCardCopy('need_ticket', null, ctx({ freeTryDaily: false })).line, /free try/i);
   assert.deepEqual(plain(F.needTicketLines(false, false)), ['3 treats at home = 1 Ticket.']);
   const extraLoss = L.lostTryCopy({ usedRescuePass: true, rescueRetryAvailable: true, firstCoinTicketReturned: false, lostTicketCost: 0, rescueSource: 'held' });
@@ -104,8 +105,8 @@ test('item 7: the pick hold ends on screen while standing still (the map re-reso
   const RIDES = [coin(1, 'Jungle Cruise', 10), coin(2, 'Frontierland', 90)];
   G.guide.setTarget(2, 'win_card');
   G.guide.resolve(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, playableTaskId: null }));
-  assert.equal(G.guide.current().taskId, 2);
-  assert.equal(G.guide.pickHoldEndsAt(), null, 'a suggestion never holds, so nothing to wait for');
+  assert.equal(G.guide.current(), null, 'a win card cannot move the pointer at all (Dustin, Nov 20)');
+  assert.equal(G.guide.pickHoldEndsAt(), null, 'nothing held, so nothing to wait for');
   G.guide.setTarget(2, 'shelf');
   G.guide.resolve(input({ coins: RIDES, live: { 1: 'open', 2: 'open' }, playableTaskId: null }));
   const ends = G.guide.pickHoldEndsAt();
@@ -115,31 +116,21 @@ test('item 7: the pick hold ends on screen while standing still (the map re-reso
   G.guide.reset();
 });
 
-test('item 8: no 364 m pull back to an owned Adventure ride past a coin 30 m away; at the ride its Line story leads', () => {
+test('item 8: never a pull back to an owned Adventure ride; standing in its line its Line story leads', () => {
   const lincoln = coin(70, 'Mr. Lincoln', 364, { owned: true, queue: true });
   const alice = coin(71, 'Alice in Wonderland', 30);
   const adventure = { taskId: 70, parkId: 8, phase: 'play' };
-  const t = G.pickNextCoin(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure }));
-  assert.equal(t.taskId, 71, 'the coin 30 m away, never the owned ride 364 m back');
-  // Standing at the ride right after its win: the Line story.
-  const atRide = G.pickNextCoin(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(360) }));
-  assert.equal(atRide.reason, 'line_story');
-  // A ride with no line (a show) has no Line story pull back. Standing at it right after its coin, its story still
-  // leads, so the card and today's ticket name one coin (fix round w3 T004).
-  const show = G.pickNextCoin(input({ coins: [{ ...lincoln, queue: false }, alice], live: { 71: 'open' }, adventure, location: north(250) }));
-  assert.equal(show.taskId, 71, 'away from the show: no pull back');
-  const atShow = G.pickNextCoin(input({ coins: [{ ...lincoln, queue: false }, alice], live: { 71: 'open' }, adventure, location: north(360) }));
-  assert.equal(atShow.taskId, 70);
-  assert.equal(atShow.reason, 'line_story');
-  // Walking away toward a nearer coin passes on the Line story for this step: no flip back on the way.
+  assert.equal(G.pickNextCoin(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, playableTaskId: null })), null,
+    'nothing picked: no pull to the Adventure ride and no nearest coin either (Dustin, Nov 20)');
+  // Standing in its line right after its win: the Line story (where the player stands).
+  const inLine = G.pickNextCoin(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(360), inLineTaskId: 70 }));
+  assert.equal(inLine.reason, 'line_story');
+  // Walking out of the line: nothing held.
   G.guide.reset();
-  G.guide.resolve(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(360) }));
+  G.guide.resolve(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(360), inLineTaskId: 70 }));
   assert.equal(G.guide.current().reason, 'line_story');
-  G.guide.resolve(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(150) }));
-  assert.equal(G.guide.current().taskId, 71);
-  assert.equal(G.guide.current().reason, 'nearest_open');
-  G.guide.resolve(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(330) }));
-  assert.equal(G.guide.current().taskId, 71, 'held: the walk away declined the Line story step');
+  G.guide.resolve(input({ coins: [lincoln, alice], live: { 71: 'open' }, adventure, location: north(150), playableTaskId: null }));
+  assert.equal(G.guide.current(), null);
   G.guide.reset();
 });
 
@@ -171,18 +162,19 @@ test('item 9: one gold button: while PLAY! is up the card\'s LINEPLAY steps down
 });
 
 test('item 10: one welcome per visit, never "First coin" to a veteran, never GO beside PLAY!', () => {
-  const target = { taskId: 9, parkId: 8, name: 'Mad Tea Party', kind: 'ride', reason: 'nearest_open', source: 'guide', meters: 80, inRange: false,
+  const target = { taskId: 9, parkId: 8, name: 'Mad Tea Party', kind: 'ride', reason: 'chosen', source: 'shelf', meters: 80, inRange: false,
     checkRunning: false, leavesOn: null };
   assert.equal(G.guideState(input({ arrivedAt: NOW - 1000 }), target), 'arrive');
   assert.equal(G.guideState(input({ arrivedAt: NOW - 1000, welcomed: true }), target), 'walk', 'a relaunch today never re-greets');
   assert.equal(G.guideState(input({ arrivedAt: NOW - 1000 }), { ...target, inRange: true }), 'here', 'at a coin PLAY! is up for: Tap PLAY!');
   const fresh = C.guideCardCopy('arrive', target, ctx({ ownedHere: 0 }));
   assert.equal(fresh.kicker, 'WELCOME TO DISNEYLAND!');
-  assert.equal(fresh.title, 'First coin: Mad Tea Party');
-  assert.equal(C.guideCardCopy('arrive', target, ctx({ ownedHere: 9 })).title, 'Next coin: Mad Tea Party');
+  assert.equal(fresh.title, 'Your pick: Mad Tea Party', 'the player\'s own pick, never "First coin"');
+  assert.equal(fresh.button.action, 'ok');
+  assert.equal(C.guideCardCopy('arrive', target, ctx({ ownedHere: 9 })).title, 'Your pick: Mad Tea Party');
   const again = C.guideCardCopy('arrive', null, ctx({ welcomed: true }));
   assert.equal(again.kicker, 'DISNEYLAND');
-  assert.equal(again.title, 'Finding your next coin');
+  assert.equal(again.title, 'Every ride has a coin. Pick one!');
 });
 
 test('item 10: a goodbye on leaving, never the next park\'s welcome', () => {

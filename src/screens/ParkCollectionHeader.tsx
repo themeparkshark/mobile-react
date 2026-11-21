@@ -76,6 +76,8 @@ interface Props {
   readonly planned?: boolean;
   /** Energy for growing coins, shown once coin levels open (rung 3). */
   readonly energy?: number | null;
+  /** The next shelf gift ("1 more: +3 Tickets"), only while the arcade server pays one; null hides it. */
+  readonly giftLine?: string | null;
 }
 
 /** The slim park header: one shelf count ("9 of 35 coins"), the next trophy, the Rides, Sights and Limited tabs, and the next coin with GO. */
@@ -86,7 +88,7 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
   rescuePassAvailable = false, goalStale = false,
   goalReportedDown = false, alternateRideName, nearbyReportedOpen = false, nearbyHint = null, parkResting = null,
   secretMilestones, holdCount = false, tickKey, nextCoinKind, tab, onTab, tabs, trophyWins, onGo, goLabel = 'GO',
-  planned = false, energy = null }: Props) {
+  planned = false, energy = null, giftLine = null }: Props) {
   const reduced = useReducedGameMotion();
   const shownCollected = holdCount ? Math.max(0, collected - 1) : collected;
   const rate = available > 0 ? Math.max(0, Math.min(100, shownCollected / available * 100))
@@ -139,13 +141,15 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
       : ticketsNeeded > 0 ? `${ticketsNeeded} more ${ticketsNeeded === 1 ? 'Ticket' : 'Tickets'} to play.`
       : ticketsReadyHint(nextCoinKind),
   } : nearbyRideName ? {
-    eyebrow: 'NEXT COIN',
+    // The player's own pick from the map (a tapped coin, NEAR ME, Wait Times): never a coin the app chose.
+    eyebrow: 'YOUR PICK',
     name: nearbyRideName,
-    hint: nearbyHint ?? (nearbyReportedOpen ? 'Nearest coin, reported open.' : 'The nearest coin you can win next.'),
+    hint: nearbyHint ?? 'The map shows the way.',
   } : parkResting ? {
-    eyebrow: 'NEXT COIN', name: parkResting.title, hint: parkResting.hint,
+    eyebrow: 'RIDES ARE RESTING', name: parkResting.title, hint: parkResting.hint,
   } : isOwnPark ? {
-    eyebrow: 'NEXT COIN', name: 'Pick a missing coin', hint: 'Tap an empty slot on the shelf.',
+    // Nothing picked: every coin is open in any order (Dustin, Nov 20). No ride named.
+    eyebrow: 'PICK ANY COIN', name: 'Tap any empty slot', hint: 'Every coin here is yours to play, in any order.',
   } : null;
   const canGo = !!onGo && !!goal && (!!nextRideName || !!nearbyRideName) && !goalReportedDown && (!nextRideOwned || ownedGo);
 
@@ -172,6 +176,11 @@ export default function ParkCollectionHeader({ parkName, isOwnPark = true, colle
           </>}
         </Animated.View>
       </View>
+      {/* The shelf gift (arcade server only): "1 more: +3 Tickets", a Ticket picture first. */}
+      {!!giftLine && isOwnPark && <View testID="shelf-gift-line" style={styles.trophyLine} accessible accessibilityLabel={giftLine}>
+        <GameIcon name="ticket" size={18} />
+        <Text style={styles.trophyText} numberOfLines={1}>{giftLine}</Text>
+      </View>}
       {typeof trophyWins === 'number' && isOwnPark && <View style={styles.trophyLine} accessible
         accessibilityLabel={`${nextTrophyLine(trophyWins)}. ${TROPHY_HELP}`}>
         <GameIcon name={trophyIcon(trophyWins)} size={18} />

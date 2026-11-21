@@ -131,7 +131,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         points: [
           { icon: 'ride', text: 'Walk up to a ride and tap PLAY! to win its coin.' },
           { icon: 'coin', text: 'Every coin from this park lands here.' },
-          { icon: 'map', text: 'Tap GO on the next coin to see the path.' },
+          { icon: 'map', text: 'Tap any empty slot to pick a coin.' },
         ] },
       { key: 'levels', hero: 'park_levels', headline: 'Level up your coins',
         points: [
@@ -147,7 +147,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
       { key: 'coins', hero: 'basics_park', headline: 'Win ride coins',
         points: [
           { icon: 'map', text: 'Ride coins wait at the rides on the map.' },
-          { icon: 'ticket', text: 'Walk up and tap PLAY! One Ticket, one game.' },
+          { icon: 'ticket', text: 'Walk up and tap PLAY! Bigger rides cost more Tickets.' },
           { icon: 'coin', text: 'Win to put the coin on your shelf.' },
         ] },
       { key: 'line', hero: 'basics_line', headline: 'Line time pays',
@@ -196,7 +196,7 @@ export const HELP_SHEETS: Readonly<Record<HelpSheetId, HelpSheetSpec>> = {
         ] },
       { key: 'park', hero: 'basics_park', headline: 'Win at the park',
         points: [
-          { icon: 'ride', text: 'Walk up to a ride and tap PLAY! One Ticket.' },
+          { icon: 'ride', text: 'Tap PLAY! at a ride. Bigger rides cost more Tickets.' },
           { icon: 'coin', text: 'Win to put that ride\'s coin on your shelf.' },
         ] },
     ],

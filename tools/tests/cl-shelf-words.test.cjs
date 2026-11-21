@@ -385,12 +385,12 @@ test('round 3: the shelf NEXT COIN names the coin the map guide holds, so the sh
   assert.equal(copy.guideShelfPick({ ...target, taskId: 9 }, 8, true, rows), null, 'a coin this shelf does not list');
   assert.equal(copy.guideShelfHint('in_line'), 'You are in its line. Play while you wait!');
   assert.equal(copy.guideShelfHint('level_up'), 'Ready to level up!');
-  assert.equal(copy.guideShelfHint('nearest_open'), 'The map shows the way.');
-  assert.equal(copy.guideShelfHint('plan'), 'Your plan. The map shows the way.');
+  assert.equal(copy.guideShelfHint('nearest_open'), 'Your pick. The map shows the way.');
+  assert.equal(copy.guideShelfHint('plan'), 'Your pick. The map shows the way.');
   const park = read('src/screens/ParkScreen.tsx');
-  assert.match(park, /const guideTarget = useSyncExternalStore\(guide\.subscribe, guide\.current, guide\.current\);/);
+  assert.match(park, /const guideHeld = useSyncExternalStore\(guide\.subscribe, guide\.current, guide\.current\);\n[^\n]*\n\s*const guideTarget = guideHeld && playerChose\(guideHeld\) \? guideHeld : null;/);
   assert.match(park, /const nextCoinTask = levelUpTask \?\? guideTask \?\? \(/, 'GO goes where the card says');
-  assert.match(park, /nearbyRideName=\{guideTask \? guideTask\.name : guideOverGoal \? null : nearbySuggestion\?\.task\.name\}/);
+  assert.match(park, /nearbyRideName=\{guideTask \? guideTask\.name : null\}/);
   assert.match(park, /nextRideName=\{levelUpTask \? levelUpTask\.name : guideOverGoal \? null : parkTripGoal\?\.ride_name\}/);
 });
 
@@ -488,45 +488,14 @@ test('round 4: the unfound sight card says Sight Coin (the tab word) and its pri
   assert.match(card, /<TicketPips price=\{task\.ticket_cost\} held=\{player\?\.tickets \?\? null\} size="card" showNumber \/>/);
 });
 
-test('round 5: the shelf NEXT COIN never names a closed, down or refurbishing ride; at night the sights stay open', () => {
+test('round 5 (arcade plan, Nov 20): the shelf never suggests a coin of its own; only the player\'s pick, else Tap any empty slot', () => {
   const copy = loadTs('src/services/collection/nextCoinCopy.ts');
-  // Nearest first: Tiki Room, then Jungle Cruise, then Walt Statue (a sight).
-  const rows = [{ id: 1, name: 'Tiki Room' }, { id: 2, name: 'Jungle Cruise' }, { id: 3, name: 'Walt Statue', sight: true }];
-  const nearest = eligible => rows.find(eligible) ?? null;
-  const pick = (status, extra = {}) => copy.shelfNearbyPick({ feedFresh: true, isSight: row => !!row.sight, nearest,
-    status: row => status[row.name] ?? null, anyRideOpen: Object.values(status).includes('OPERATING'), ...extra });
-  // Daytime: Tiki Room is CLOSED, Jungle Cruise is open. The shelf names Jungle Cruise, reported open.
-  let next = pick({ 'Tiki Room': 'CLOSED', 'Jungle Cruise': 'OPERATING' });
-  assert.equal(next.row.name, 'Jungle Cruise'); assert.equal(next.reportedOpen, true);
-  assert.equal(next.hint, 'Nearest coin, reported open.');
-  for (const shut of ['CLOSED', 'DOWN', 'REFURBISHMENT']) {
-    next = pick({ 'Tiki Room': shut, 'Jungle Cruise': 'OPERATING' });
-    assert.notEqual(next.row.name, 'Tiki Room', `${shut} is never the nearest coin you can win next`);
-  }
-  // A ride with no live answer comes after every open ride, with a check-it line.
-  next = pick({ 'Tiki Room': null, 'Jungle Cruise': 'OPERATING' });
-  assert.equal(next.row.name, 'Jungle Cruise');
-  next = pick({ 'Tiki Room': 'CLOSED', 'Jungle Cruise': 'DOWN', 'Space Mountain': 'OPERATING' });
-  assert.equal(next.row.name, 'Walt Statue', 'no open coin ride left: the sight, always open');
-  assert.equal(next.hint, 'Sights are always open.');
-  // Night capture: every ride CLOSED. Rides rest, the sight stays open with GO.
-  next = pick({ 'Tiki Room': 'CLOSED', 'Jungle Cruise': 'CLOSED' });
-  assert.equal(next.kind, 'coin'); assert.equal(next.row.name, 'Walt Statue');
-  assert.equal(next.hint, 'Rides are resting. Sights stay open.');
-  // Night with the sight already won: the park is closed (no GO).
-  const noSight = copy.shelfNearbyPick({ feedFresh: true, anyRideOpen: false, isSight: row => !!row.sight,
-    status: () => 'CLOSED', nearest: eligible => rows.filter(r => !r.sight).find(eligible) ?? null });
-  assert.deepEqual({ ...noSight }, { kind: 'closed', title: 'The park is closed', hint: 'See you next park day.' });
-  // No live feed yet: the nearest coin, as before.
-  next = copy.shelfNearbyPick({ feedFresh: false, anyRideOpen: false, isSight: () => false, status: () => null, nearest });
-  assert.equal(next.row.name, 'Tiki Room'); assert.equal(next.hint, 'The nearest coin you can win next.');
-
+  assert.equal(copy.shelfNearbyPick, undefined, 'the nearest-open suggestion is gone');
   const park = read('src/screens/ParkScreen.tsx');
-  assert.match(park, /shelfNearbyPick<TaskType>\(\{/);
-  assert.match(park, /anyRideOpen: !!freshWaitEntries\?\.some\(entry => entry\.status === 'OPERATING'\)/);
-  assert.match(park, /parkResting=\{/);
+  assert.doesNotMatch(park, /shelfNearbyPick|nearbyUncollectedRide|alternateRide/);
   const header = read('src/screens/ParkCollectionHeader.tsx');
-  assert.match(header, /\} : parkResting \? \{\n\s*eyebrow: 'NEXT COIN', name: parkResting\.title, hint: parkResting\.hint,/);
+  assert.match(header, /eyebrow: 'PICK ANY COIN', name: 'Tap any empty slot'/);
+  assert.doesNotMatch(header, /Nearest coin, reported open|The nearest coin you can win next|eyebrow: 'NEXT COIN'/);
 });
 
 test('round 5: GET RIDE PARTS never leaves the old coin on the outgoing shelf, and the map starts 34 ms later', () => {
@@ -570,7 +539,7 @@ test('round 5: Profile counts shelf coins in the shelf word with the coin pictur
   assert.match(stats, /label: 'Shelf Coins',\n\s*value: rideCoins,\n\s*iconIndex: 1,\n\s*gameIcon: 'coin'/);
   assert.doesNotMatch(stats, /player\.park_coins_count/);
   assert.doesNotMatch(stats, /label: 'Ride Coins'/);
-  assert.match(read('src/components/Tutorial/steps.ts'), /Then follow the glowing coin on the map\./);
+  assert.match(read('src/components/Tutorial/steps.ts'), /Then pick any coin on the map\./);
 });
 
 test('round 5: the park day story waits on top after park_day_done', () => {

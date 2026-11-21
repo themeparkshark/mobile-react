@@ -216,7 +216,7 @@ test('T048 the win card shows the Parts and XP granted, and the next coin by a s
   assert.equal(win.shortCoinName("Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson"), 'Adventureland Treehouse');
   assert.equal(win.shortCoinName('Star Wars: Rise of the Resistance'), 'Star Wars');
   assert.equal(win.nextCoinButton({ taskId: 9, name: "Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson", meters: 85, reason: 'nearest_open' }, 4).detail,
-    'Adventureland Treehouse, 85 m');
+    null, 'the win card never names a next coin (Dustin, Nov 20)');
 });
 
 /* T143: the coin flies to the Shelf. */

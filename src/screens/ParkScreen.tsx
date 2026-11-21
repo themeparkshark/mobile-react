@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { goalCoinKind, guideShelfHint, levelUpGoalHint, shelfGuidePick, shelfNearbyPick, stalePlan } from '../services/collection/nextCoinCopy';
+import { goalCoinKind, guideShelfHint, levelUpGoalHint, shelfGuidePick, stalePlan } from '../services/collection/nextCoinCopy';
 import { levelUpGoal } from '../services/collection/levelUpGoal';
 import { parkDaySignal } from '../services/guide/parkDay';
 import { localDay } from '../services/reveal/revealLadder';
@@ -29,7 +29,6 @@ import UnfoundCoinModal from '../components/UnfoundCoinModal';
 import ParkDayRecapCard from './ParkDayRecapCard';
 import ParkCollectionHeader from './ParkCollectionHeader';
 import ParkRideDirectory from './ParkRideDirectory';
-import { nearbyUncollectedRide } from './parkRideSuggestion';
 import { reportedRideStatus } from './parkRideAvailability';
 import { useTutorial } from '../components/Tutorial';
 import { InformationModalEnums } from '../models/information-modal-enums';
@@ -41,7 +40,10 @@ import { shelfEdition, splitParkShelf } from '../services/collection/limitedCoin
 import type { RideType } from '../api/endpoints/rides';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
 import { getParkDayRecap, type ParkDayRecap } from '../api/endpoints/me/park-day-recap';
-import { guide } from '../services/guide/nextCoin';
+import { guide, playerChose } from '../services/guide/nextCoin';
+import { useGuideFlags } from '../services/guide/guideFlags';
+import TicketPips from '../components/tickets/TicketPips';
+import { shelfBarFor, shelfGiftHeaderLine } from '../services/guide/guideCopy';
 import { useRung } from '../services/reveal/revealLadder';
 import GameIcon from '../ui/GameIcon';
 import { openingTab } from '../services/collection/shelfModel';
@@ -71,7 +73,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const { width, height } = useWindowDimensions();
   // Keep the familiar five-coin rows inside their shelves on smaller phones.
   const shelfCoinSize = Math.max(40, Math.min(62, (width - 88) / 5));
-  const { park, player, earnedCoin, openMastery, focusCoin, plan: planVisit } = route.params as {
+  const { park, player, earnedCoin, openMastery, focusCoin, plan: planVisit, tab: tabParam } = route.params as {
     park: number; player: number; earnedCoin?: EarnedShelfArrival;
     /** "Upgrade Your Coin": open mastery as soon as the coin lands (one hop). */
     openMastery?: boolean;
@@ -79,6 +81,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     focusCoin?: { assetId: number };
     /** The home card's PLAN: the next park day's coin picker leads, never yesterday's park story (fix round w3 T016). */
     plan?: boolean;
+    /** Open on this shelf tab (the home card's limited count opens 'limited'). */
+    tab?: ShelfTab;
   };
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const isFocused = useIsFocused();
@@ -114,13 +118,15 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const [rideOnly, setRideOnly] = useState(false);
   // The shelf's tabs: Rides, Sights and Limited (Past events at the bottom of Limited).
   const [tab, setTab] = useState<ShelfTab>('rides');
-  useEffect(() => { setTab('rides'); }, [park]);
+  useEffect(() => { setTab(tabParam === 'limited' || tabParam === 'sights' ? tabParam : 'rides'); }, [park, tabParam]);
   // Unfound secret slots ("?") show once coin levels open (rung 3); secret coins you won always show.
   const coinLevels = useRung('coin_levels');
   // The guide's plan: GO and "Make this my next coin" both point the one guide (guide.setTarget).
   const guidePlan = useSyncExternalStore(guide.subscribe, guide.plan, guide.plan);
   // The coin the map guide holds now: the shelf's NEXT COIN names it too, so the two never disagree.
-  const guideTarget = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
+  const guideHeld = useSyncExternalStore(guide.subscribe, guide.current, guide.current);
+  // Only a coin the player chose shows on the shelf (a coin they stood at or a line they stood in is not a pick).
+  const guideTarget = guideHeld && playerChose(guideHeld) ? guideHeld : null;
   // Today's park day story, read once here so the card can sit on top after a park day.
   const recapCache = useRef<{ at: number; parkId: number; recap: ParkDayRecap } | null>(null);
   const [todayRecap, setTodayRecap] = useState<ParkDayRecap | null>(null);
@@ -154,6 +160,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const { labels } = useCrumbs();
   const { data: tripGoalData, stale: tripGoalStale, choose: chooseTripGoal } = useTripGoal();
   const canChooseGoal = viewer?.id === Number(player);
+  // The arcade economy (flags.arcade_economy) pays a shelf gift every 5 coins: the header says how many more.
+  const shelfFlags = useGuideFlags(viewerId);
   const requestKey = canChooseGoal && isEarnedShelfArrival(earnedCoin)
     ? `${player}:${park}:${earnedCoin.attemptId}` : null;
   // Coin Map 2.0: permanent coins keep the Ride Coins row; limited coins get their own.
@@ -260,26 +268,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     Date.now() - waitSnapshot.checkedAt < 120_000 ? waitSnapshot.entries : null;
   const goalReportedDown = !!(parkTripGoal && !parkTripGoal.coin_owned &&
     freshWaitEntries && reportedRideStatus(freshWaitEntries, Number(park), parkTripGoal.ride_name) === 'DOWN');
-  // The shelf's own next coin when the guide holds nothing here: the nearest open ride, then a ride
-  // with no live answer, then a sight. A closed, down or refurbishing ride is never suggested, and at
-  // night the sights stay open (or the park is closed). Pure rules: nextCoinCopy.shelfNearbyPick.
-  const rideTaskIds = currentPark?.ride_passport_task_ids;
-  const nearbyPick = canChooseGoal && inThisPark && !parkTripGoal ? shelfNearbyPick<TaskType>({
-    feedFresh: !!freshWaitEntries?.length,
-    anyRideOpen: !!freshWaitEntries?.some(entry => entry.status === 'OPERATING'),
-    isSight: task => {
-      if (rideTaskIds?.length) return !rideTaskIds.includes(task.id);
-      const kind = (task as TaskType & { coin_kind?: string | null }).coin_kind;
-      return !!kind && kind !== 'ride';
-    },
-    status: task => (freshWaitEntries ? reportedRideStatus(freshWaitEntries, Number(park), task.name) : null),
-    nearest: eligible => nearbyUncollectedRide(tasks, completedTasks, location, eligible)?.task ?? null,
-  }) : null;
-  const nearbySuggestion = nearbyPick?.kind === 'coin' ? { task: nearbyPick.row } : null;
-  const nearbyReportedOpenRide = nearbyPick?.kind === 'coin' && nearbyPick.reportedOpen;
-  const alternateRide = goalReportedDown && freshWaitEntries
-    ? nearbyUncollectedRide(tasks, completedTasks, location,
-      task => reportedRideStatus(freshWaitEntries, Number(park), task.name) === 'OPERATING') : null;
+  // The shelf never suggests a coin of its own (Dustin, Nov 20: "we shouldn't suggest where they go it's their choice
+  // to play"): no nearest open ride, no nearby alternative when a goal ride is down. Only the player's own pick shows.
   // GO on the shelf's next coin, and "Make this my next coin" on a coin card: one pointer for the
   // whole app (guide.setTarget). At this park the map opens with the path; away it is the plan.
   // Until the map resolves a target (or while it rests), the guide's plan (GO, GET RIDE PARTS, a coin pick) stands in.
@@ -309,12 +299,11 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     : null;
   const nextCoinTask = levelUpTask ?? guideTask ?? (parkTripGoal && !parkTripGoal.coin_owned
     ? [...tasks, ...limitedTasks].find(task => task.id === parkTripGoal.task_id) ?? null
-    : nearbySuggestion?.task ?? null);
+    : null);
   // The coin guide's top row names the same coin as the NEXT COIN card at the top of the shelf
   // (fix round W1 item 17: the top said Frontierland while the guide row said Jungle Cruise).
   const directoryNext = directoryNextCoin({ levelUpId: levelUpTask?.id ?? null, guideId: guideTask?.id ?? null, guideOverGoal,
-    goalId: parkTripGoal?.task_id ?? null, goalReportedDown, alternateId: alternateRide?.task.id ?? null,
-    nearbyId: nearbySuggestion?.task.id ?? null, nearbyReportedOpen: !!nearbyReportedOpenRide });
+    goalId: parkTripGoal?.task_id ?? null, goalReportedDown, alternateId: null, nearbyId: null, nearbyReportedOpen: false });
   const goToCoin = useCallback((task: TaskType, source: string) => {
     guide.setTarget(task.id, source);
     if (inThisPark) RootNavigation.navigate('Explore', { focusRide: { parkId: Number(park), task } });
@@ -560,6 +549,10 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     onChooseGoal={canChooseGoal ? () => chooseNextCoin(task as TaskType) : undefined}
                     onShowOnMap={canChooseGoal && inThisPark
                       ? () => goToCoin(task as TaskType, 'shelf_slot') : undefined} />
+                  {/* Its price as Ticket pictures under the empty slot, filled up to the wallet (arcade plan, section 6). */}
+                  {canChooseGoal && <TicketPips testID={`shelf-slot-pips-${task.id}`} price={(task as TaskType).ticket_cost}
+                    held={viewer?.tickets ?? null} size="island"
+                    style={{ position: 'absolute', top: coinSize + 2, left: 0, right: 0, justifyContent: 'center' }} />}
                   {/* Parts you earned in this ride's line before winning its coin wait in its slot. */}
                   {canChooseGoal && partsWaiting(task) > 0 && <View pointerEvents="none" style={{ position: 'absolute',
                     right: -6, bottom: -4, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#fff8e4',
@@ -656,21 +649,20 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                     ownedGo={!!levelUpTask}
                     nextCoinKind={goalCoinKind(parkTripGoal?.task_id, tasks, completedTasks, archivedTasks)}
                     ownedGoalHint={levelUpHint ?? ownedGoalHint}
-                    nearbyRideName={guideTask ? guideTask.name : guideOverGoal ? null : nearbySuggestion?.task.name}
-                    nearbyReportedOpen={!guideOverGoal && !!nearbyReportedOpenRide}
-                    nearbyHint={guideTask ? guideShelfHint(shelfGuide?.reason) : nearbyPick?.kind === 'coin' ? nearbyPick.hint : null}
-                    parkResting={!guideTask && !guideOverGoal && nearbyPick?.kind === 'closed' ? nearbyPick : null}
+                    nearbyRideName={guideTask ? guideTask.name : null}
+                    nearbyHint={guideTask ? guideShelfHint(shelfGuide?.reason) : null}
                     ticketsNeeded={parkTripGoal && !parkTripGoal.coin_owned
                       ? tripGoalData?.wallet.tickets_needed ?? 0 : 0}
                     rescuePassAvailable={inThisPark && !!tripGoalData?.wallet.rescue_pass_available}
                     goalStale={tripGoalStale}
                     goalReportedDown={!guideOverGoal && !levelUpTask && goalReportedDown}
-                    alternateRideName={alternateRide?.task.name}
                     secretMilestones={currentPark.completed_secret_tasks_count}
                     onGo={onGoNext}
                     goLabel={inThisPark ? 'GO' : 'PLAN'}
                     planned={!!nextCoinTask && guidePlan === nextCoinTask.id}
                     energy={canChooseGoal && coinLevels.open ? viewer?.energy ?? 0 : null}
+                    giftLine={canChooseGoal ? shelfGiftHeaderLine(shelfBarFor({ won: totals.collected, total: totals.available,
+                      arcade: shelfFlags.arcade_economy === true })) : null}
                   />
                 </View>
                 <View
@@ -722,8 +714,6 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                             completed={completedTasks}
                             isOwnPark={canChooseGoal}
                             goalTaskId={directoryNext.goalTaskId}
-                            nearbyRideId={directoryNext.nearbyRideId}
-                            nearbyRideReportedOpen={directoryNext.nearbyReportedOpen}
                             savedGoalReportedDown={goalReportedDown}
                             rideTaskIds={currentPark.ride_passport_task_ids}
                             rideOnly={passportMode}

@@ -189,6 +189,9 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
   const coinUrl = ticket.discover?.coin_url || ticket.ride.coin_url;
   const coinSource = coinUrl ? { uri: coinUrl } : COIN_FALLBACK;
   const complete = ticket.phase === 'complete';
+  // Before the first win the story is open to any coin (Dustin, Nov 20): the sheet names no ride, and its one button
+  // goes back to the map where the player picks. Today's server may still seed a ride on arrival; it never shows.
+  const openStart = ticket.phase === 'discover';
   const close = () => { pending.current = null; unfoldOnShow.current = false; setOpen(false); };
   const transact = async (operation: () => Promise<unknown>) => {
     if (locked.current) return false;
@@ -329,16 +332,12 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
             {!detours.length && <Text style={styles.support}>No other open attractions can host an adventure right now. Your stamps are saved.</Text>}
             <GameButton variant="ghost" label="Back to my ticket" accessibilityLabel="Back to my ticket" onPress={() => setPicker(false)} />
           </> : <>
-            <Souvenir ticket={ticket} reduced={reduced} unfold={unfold} />
-            <Text style={styles.title}>{prompt.title}</Text>
-            {!prompt.title.includes(ticket.ride.ride_name) && <Text style={styles.ride}>{ticket.ride.ride_name}</Text>}
-            {/* The map's card points at another coin (the player chose it, or walked on): say so here, so the
-                ticket and the card never read as two different orders (T004). */}
-            {!!guideNextName && guideNextName !== ticket.ride.ride_name && !complete &&
-              <Text style={styles.support} testID="adventure-guide-next">{`Your map's next coin: ${guideNextName}. This story waits for you.`}</Text>}
-            <Text style={styles.support}>{prompt.detail}</Text>
+            {!openStart && <Souvenir ticket={ticket} reduced={reduced} unfold={unfold} />}
+            <Text style={styles.title} testID="adventure-title">{openStart ? 'Win any ride coin to start your story' : prompt.title}</Text>
+            {!openStart && !prompt.title.includes(ticket.ride.ride_name) && <Text style={styles.ride}>{ticket.ride.ride_name}</Text>}
+            <Text style={styles.support}>{openStart ? 'Your first coin today becomes your Adventure: its line story, then a souvenir.' : prompt.detail}</Text>
             <View style={styles.chapters}>
-              {[{ label: 'Discover', detail: ticket.discover ? `${ticket.discover.ride_name}, ${ticket.discover.kind === 'owned_coin' ? 'already on your shelf' : 'coin collected'}` : 'Win this ride\'s coin challenge.' },
+              {[{ label: 'Discover', detail: ticket.discover ? `${ticket.discover.ride_name}, ${ticket.discover.kind === 'owned_coin' ? 'already on your shelf' : 'coin collected'}` : 'Win any ride coin.' },
                 { label: 'Play', detail: ticket.play ? `${ticket.play.chapter_title}${ticket.play.route_name ? `, ${ticket.play.route_name}` : ''}` : 'Finish a short queue story in its line.' },
                 { label: 'Celebrate', detail: complete ? 'Your souvenir is saved. Look at it any time.' : 'Bring your coin and story together.' }].map((chapter, index) =>
                 <View key={chapter.label} style={[styles.chapter, index < 2 && styles.perforation]}>
@@ -346,21 +345,16 @@ export default function AdventureTicketCard({ ticket, data, closed, stale, top, 
                   <View style={{ flex: 1 }}><Text style={styles.chapterTitle}>{chapter.label}</Text><Text style={styles.chapterDetail}>{chapter.detail}</Text></View>
                 </View>)}
             </View>
-            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && !!ticketsLine && <View style={styles.resource}>
-              <GameIcon name="ticket" size={34} />
-              <Text style={styles.resourceText}>{ticketsLine}</Text>
-            </View>}
-            {ticket.phase === 'discover' && data.wallet.tickets_needed > 0 && claimableTickets > 0 && !!onClaim &&
-              <GameButton variant="secondary" size="compact" label="CLAIM" icon="ticket" accessibilityLabel={`Claim ${claimableTickets} stamp Tickets`}
-                loading={claiming} disabled={claiming} onPress={claimHere} style={{ alignSelf: 'center', marginTop: 10 }} />}
+            {/* The Tickets-needed and CLAIM rows were for a seeded ride before its coin; the story now starts on any coin. */}
             <View style={styles.primaryRow}>
-              <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}
+              {openStart && !stale ? <GameButton testID="adventure-back-to-map" label="BACK TO MAP" accessibilityLabel="Back to the map" icon="map"
+                onPress={close} /> : <GameButton label={stale ? 'Refresh my ticket' : prompt.action} accessibilityLabel={stale ? 'Refresh Adventure Ticket' : prompt.action}
                 // Its line story wears LinePlay's own picture (ledger 37): the pocket watch means Wait Times only.
                 image={prompt.intent === 'play' ? LINEPLAY_ICON : undefined}
                 icon={prompt.intent === 'find_line' || prompt.intent === 'discover' ? 'map' : undefined}
-                loading={busy} disabled={busy} onPress={next} />
+                loading={busy} disabled={busy} onPress={next} />}
             </View>
-            {ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && prompt.intent !== 'detour' && <GameButton variant="ghost" label="Pick another ride"
+            {!openStart && ticket.phase !== 'complete' && ticket.phase !== 'celebrate' && prompt.intent !== 'detour' && <GameButton variant="ghost" label="Pick another ride"
               accessibilityLabel="Pick another ride for the adventure" disabled={busy} onPress={() => setPicker(true)} />}
             {onDismiss && <GameButton variant="ghost" label="Hide for today" accessibilityLabel="Hide the Adventure Ticket for today"
               disabled={busy} onPress={tuckAway} />}

@@ -9,7 +9,8 @@ export type NextUpRoute =
   | { readonly kind: 'retention'; readonly open: 'chest' | 'daily3' }
   | { readonly kind: 'trail' }
   | { readonly kind: 'task'; readonly taskId: number }
-  | { readonly kind: 'nearest_ride' }
+  /** "Win a ride coin": the map, with no target (Dustin, Nov 20: the app never picks a ride). */
+  | { readonly kind: 'map' }
   | { readonly kind: 'home_find' }
   | { readonly kind: 'none' };
 
@@ -25,7 +26,7 @@ export function nextUpRoute(action: NextUpAction | { readonly type: string } | n
       const id = Number((action as { task_id?: unknown }).task_id);
       return Number.isFinite(id) ? { kind: 'task', taskId: id } : { kind: 'none' };
     }
-    case 'ride': return { kind: 'nearest_ride' };
+    case 'ride': return { kind: 'map' };
     case 'home_find': return { kind: 'home_find' };
     default: return { kind: 'none' };
   }

@@ -141,15 +141,16 @@ export default function CoinShelfScreen({ route }: {
   const energy = preview ? 18 : player?.energy ?? 0;
   const ready = coins.filter(coin => isUpgradeReady(coin, energy));
   const missing = catalogRides.filter(ride => !ride.coin_owned);
+  // Only the player's own pick (their saved goal), never the first missing coin in a list (Dustin, Nov 20).
   const nextCoin = catalog?.goal && !catalog.goal.coin_owned
-    ? missing.find(ride => ride.asset_id === catalog.goal?.asset_id) ?? missing[0] : missing[0];
+    ? missing.find(ride => ride.asset_id === catalog.goal?.asset_id) ?? null : null;
 
   const chooseNextCoin = async (ride: TripGoalRide) => {
     if (goalSaving || goalSavingRef.current || preview) return;
     goalSavingRef.current = true;
     setGoalSaving(true);
-    try { setCatalog(await setTripGoal(ride.task_id)); setCatalogStale(false); showToast(`Next coin: ${ride.ride_name}`, 'success'); }
-    catch { setCatalogStale(true); showToast('Couldn’t save your next coin. Try again.', 'warning'); }
+    try { setCatalog(await setTripGoal(ride.task_id)); setCatalogStale(false); showToast(`Your pick: ${ride.ride_name}`, 'success'); }
+    catch { setCatalogStale(true); showToast('Couldn’t save your pick. Try again.', 'warning'); }
     finally { goalSavingRef.current = false; setGoalSaving(false); }
   };
   const openPark = (parkId: number | null, assetId?: number) => {
@@ -179,16 +180,22 @@ export default function CoinShelfScreen({ route }: {
             </View>
           </View>
 
-          {nextCoin && <Pressable accessibilityRole="button" disabled={goalSaving} onPress={() => void chooseNextCoin(nextCoin)}
-            style={styles.next}>
+          {nextCoin ? <View testID="all-parks-pick" accessible style={styles.next}
+            accessibilityLabel={`Your pick: ${nextCoin.ride_name}, ${nextCoin.park_name}`}>
             <View style={styles.nextIcon}><GameIcon name="star" size={28} /></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.nextEyebrow}>{catalog?.goal?.asset_id === nextCoin.asset_id ? 'YOUR NEXT COIN' : 'PICK YOUR NEXT COIN'}</Text>
+              <Text style={styles.nextEyebrow}>YOUR PICK</Text>
               <Text style={styles.nextName} numberOfLines={1}>{nextCoin.ride_name}</Text>
               <Text style={styles.nextPark} numberOfLines={1}>{nextCoin.park_name}</Text>
             </View>
-            {catalog?.goal?.asset_id !== nextCoin.asset_id && <Text style={styles.nextAction}>SET GOAL</Text>}
-          </Pressable>}
+          </View> : missing.length > 0 && <View testID="all-parks-pick" accessible style={styles.next}
+            accessibilityLabel="Tap any empty slot to pick">
+            <View style={styles.nextIcon}><GameIcon name="star" size={28} /></View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.nextEyebrow}>PICK ANY COIN</Text>
+              <Text style={styles.nextName} numberOfLines={1}>Tap any empty slot to pick</Text>
+            </View>
+          </View>}
 
           {ready.length > 0 && <View style={styles.readyCard}>
             <Text style={styles.readyTitle}>READY TO LEVEL UP</Text>
@@ -238,7 +245,7 @@ export default function CoinShelfScreen({ route }: {
                     {shownGhosts.map((ride, index) => {
                       const isNext = nextCoin?.asset_id === ride.asset_id;
                       return <Pressable key={`ghost-${ride.asset_id}`} accessibilityRole="button"
-                        accessibilityLabel={`${ride.ride_name}, not found yet.${isNext ? ' Your next coin.' : ' Tap to make it your next coin.'}`}
+                        accessibilityLabel={`${ride.ride_name}, not found yet.${isNext ? ' Your pick.' : ' Tap to make it your pick.'}`}
                         onPress={() => { if (!isNext) void chooseNextCoin(ride); }}
                         style={[{ margin: 5 }, isNext && styles.ghostNext]}>
                         <ShelfCoin coinUrl={ride.coin_url} level={1} size={50} phase={group.coins.length + index} dimmed />

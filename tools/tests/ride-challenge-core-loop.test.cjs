@@ -489,7 +489,7 @@ test('one team sentence after a team pick, never points or Captain; nothing befo
 
 test('exactly one primary and one secondary: NEXT COIN (or the Adventure\'s line story) and See my shelf', () => {
   assert.deepEqual({ ...win.nextCoinButton({ taskId: 5, name: 'Jungle Cruise', meters: 120.4, reason: 'nearest_open' }, 4) },
-    { kind: 'next', label: 'NEXT COIN', detail: 'Jungle Cruise, 120 m' });
+    { kind: 'map', label: 'Back to Map', detail: null }, 'never NEXT COIN (Dustin, Nov 20)');
   assert.deepEqual({ ...win.nextCoinButton({ taskId: 4, name: 'Tiki Room', meters: 0, reason: 'line_story' }, 4) },
     { kind: 'line_story', label: 'Play its line story', detail: null });
   assert.equal(win.nextCoinButton(null, 4).kind, 'map');
@@ -757,7 +757,7 @@ test('today\'s Adventure coin won: the big button plays its line story, even bef
   const story = win.nextCoinButton({ taskId: 60, name: 'Frontierland', meters: 52, reason: 'nearest_open' }, 77, true);
   assert.deepEqual({ ...story }, { kind: 'line_story', label: 'Play its line story', detail: null });
   const next = win.nextCoinButton({ taskId: 60, name: 'Frontierland', meters: 52, reason: 'nearest_open' }, 77, false);
-  assert.deepEqual({ ...next }, { kind: 'next', label: 'NEXT COIN', detail: 'Frontierland, 52 m' });
+  assert.deepEqual({ ...next }, { kind: 'map', label: 'Back to Map', detail: null });
   const modal = read('src/components/RedeemRedeemableModal.tsx');
   assert.match(modal, /setLineStoryNext\(adventureLineStoryNext\(goal\.adventure_ticket, attempt\.task_id, park\.id\)\);/);
   assert.match(modal, /adventureLineStory=\{lineStoryNext\}/);

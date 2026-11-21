@@ -85,8 +85,9 @@ test('item 16: Wait Times says SKIP LINE (not "LL"), the Ride Journal says Likel
   assert.match(journal, /high: 'Likely', medium: 'Maybe', low: 'Not sure'/);
   assert.doesNotMatch(journal, /colors\.error/, 'a guess the app is not sure of is never red');
   assert.match(journal, /\{time\} • about \{dwellMin\} min/, 'the app font draws ~ like a minus: never "-10 min"');
-  assert.match(read('src/services/help/helpSheets.ts'), /One Ticket, one game\./);
-  assert.match(read('src/services/help/helpTopics.ts'), /One Ticket plays one game\./);
+  // Arcade plan (Nov 20): one game per PLAY!, and bigger rides cost more Tickets (never "one Ticket").
+  assert.match(read('src/services/help/helpSheets.ts'), /Walk up and tap PLAY! Bigger rides cost more Tickets\./);
+  assert.match(read('src/services/help/helpTopics.ts'), /Its Tickets play one game\./);
 });
 
 test('item 16: "This ride\'s game" only where the server deals one game per ride and day', () => {
@@ -128,7 +129,8 @@ test('item 17: the shelf\'s trophies stand in size order and the coin guide name
     { goalTaskId: 9, nearbyRideId: 12, nearbyReportedOpen: true }, 'a goal reported down names the open ride beside it, as the card does');
   assert.deepEqual({ ...model.directoryNextCoin({ ...base, nearbyId: 41, nearbyReportedOpen: true }) },
     { goalTaskId: undefined, nearbyRideId: 41, nearbyReportedOpen: true });
-  assert.match(park, /goalTaskId=\{directoryNext\.goalTaskId\}\n\s+nearbyRideId=\{directoryNext\.nearbyRideId\}/);
+  // Arcade plan (Nov 20): the Coin Guide shows only the player's goal, never a nearest-coin row.
+  assert.match(park, /goalTaskId=\{directoryNext\.goalTaskId\}\n\s+savedGoalReportedDown=/);
 });
 
 test('item 17: at home the guide says which coin can level up now, and LEVEL UP opens it', () => {

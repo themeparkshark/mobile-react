@@ -14,7 +14,7 @@ import type { CurrentRedeemableType } from '../../models/current-redeemable-type
 import type { LivePark } from '../../api/endpoints/parks/live';
 import type { AdventureTicket, TripGoalData } from '../../api/endpoints/me/trip-goal';
 import { attentionGate, attentionQueue, autoOpenAllowed, guideBusy } from '../../screens/ExploreScreen/mapPresentationQueue';
-import { guide } from '../../services/guide/nextCoin';
+import { guide, playerChose } from '../../services/guide/nextCoin';
 import type { GuideAction } from '../../services/guide/guideCopy';
 import { freeTrySignal } from '../../services/guide/freeTickets';
 import { useGuideFlags } from '../../services/guide/guideFlags';
@@ -31,13 +31,13 @@ const AT_PARK_METERS = 1500;
 const GUIDE_DATA_WAIT_MS = 4000;
 /** The calm stand-in island for a target that left today's map (a won Adventure coin on its Line story). */
 const PARKED_TASK = { id: -1, name: '', latitude: '0', longitude: '0', coin_url: '', coins: 0, completion_goal: 0, experience: 0,
-  times_completed: 0, asset_id: -1, ticket_cost: 1 } as unknown as TaskType;
+  times_completed: 0, asset_id: -1 } as unknown as TaskType;
 
 type Point = { readonly latitude: number; readonly longitude: number };
 
 export interface MapGuideInput {
   readonly player: PlayerType | null | undefined;
-  readonly park: { readonly id: number; readonly name: string } | null | undefined;
+  readonly park: { readonly id: number; readonly name: string; readonly welcome_tickets_granted?: number } | null | undefined;
   readonly mapFocused: boolean;
   readonly location: Point | null | undefined;
   readonly redeemables: unknown;
@@ -105,6 +105,11 @@ export default function useMapGuide(input: MapGuideInput) {
     ...freeTrySignal({ dailyOn: guideFlags.ride_rescue_pass === true, heldPasses: player.rescue_passes, playUp, usedTodayHere }),
   }) : null, [player, guideFlags, claimable.loaded, claimable.sources, playUp, usedTodayHere]);
   const rushTaskIds = useMemo(() => new Set(rushes.map(pick => pick.task.id)), [rushes]);
+  // The park's whole shelf (every coin here, owned or not) for the card's "9 of 40 coins".
+  const parkShelf = useMemo(() => {
+    const here = (tripGoalData?.rides ?? []).filter(ride => ride && ride.park_id === park?.id);
+    return here.length ? { won: here.filter(ride => ride.coin_owned).length, total: here.length } : null;
+  }, [tripGoalData?.rides, park?.id]);
   // The guide picks its first coin once the islands, the live feed and today's Adventure are in (or
   // GUIDE_DATA_WAIT_MS ran out: a missing feed never stalls it), so a half-loaded map never sets a
   // target that would then hold.
@@ -150,6 +155,9 @@ export default function useMapGuide(input: MapGuideInput) {
     daysAway: welcome.daysAway, welcomeBackDone: welcome.done,
     lineStoryNear: adventureGate?.state !== 'far',
     freeTryDaily: guideFlags.ride_rescue_pass === true,
+    arcade: guideFlags.arcade_economy === true,
+    parkGiftTickets: guideFlags.arcade_economy === true ? park?.welcome_tickets_granted ?? null : null,
+    shelf: parkShelf,
   });
   const guideShown = !!player && !!park;
   // Really at the park: in park mode AND within reach of one of its coins (or no reading yet). The place
@@ -161,22 +169,26 @@ export default function useMapGuide(input: MapGuideInput) {
       return Math.hypot((Number(task.latitude) - location.latitude) * 111_320, (Number(task.longitude) - location.longitude) * 111_320 * k)
         <= AT_PARK_METERS;
     }));
-  const guideTargetId = nextCoin.target?.taskId ?? null;
+  // The path, edge arrow, camera fit and the bobbing coin follow only a coin the player chose (Dustin, Nov 20): the coin
+  // PLAY! is up for, or the line they stand in, gets the card's words but no pointer on the map.
+  const pickedTarget = nextCoin.target && playerChose(nextCoin.target) ? nextCoin.target : null;
+  const guideTargetId = pickedTarget?.taskId ?? null;
   // The target's own coin art: the map list has none, so the trip goal's ride list (or PLAY!'s coin) supplies it.
   // Every read that names coin art is remembered, so a late or failed trip goal read never leaves the card on the
   // generic gold coin (T015).
   coinArtCache.rememberAll(tripGoalData?.rides);
   if (activeRedeemable?.type === 'task') coinArtCache.remember((activeRedeemable.model as TaskType).id, (activeRedeemable.model as TaskType).coin_url);
+  const cardTargetId = nextCoin.target?.taskId ?? null;
   const guideCoinUrl = useMemo(() => {
-    if (guideTargetId == null) return null;
+    if (cardTargetId == null) return null;
     const fromMap = nextCoin.targetTask?.coin_url;
     if (fromMap) return fromMap;
-    const fromTrip = tripGoalData?.rides?.find(ride => ride.task_id === guideTargetId)?.coin_url;
+    const fromTrip = tripGoalData?.rides?.find(ride => ride.task_id === cardTargetId)?.coin_url;
     if (fromTrip) return fromTrip;
-    const here = activeRedeemable?.type === 'task' && (activeRedeemable.model as TaskType).id === guideTargetId
+    const here = activeRedeemable?.type === 'task' && (activeRedeemable.model as TaskType).id === cardTargetId
       ? (activeRedeemable.model as TaskType).coin_url : null;
-    return here || coinArtCache.get(guideTargetId);
-  }, [guideTargetId, nextCoin.targetTask, tripGoalData?.rides, activeRedeemable]);
+    return here || coinArtCache.get(cardTargetId);
+  }, [cardTargetId, nextCoin.targetTask, tripGoalData?.rides, activeRedeemable]);
   // Until the first coin is won, the guide's "Tap PLAY!" picture shows every time PLAY! rises.
   const hasWonACoin = (player?.completed_tasks_count ?? 0) > 0 || (player?.ride_coins_collected ?? 0) > 0 || parkWins > 0;
 
@@ -188,10 +200,10 @@ export default function useMapGuide(input: MapGuideInput) {
     ? { latitude: Number(nextCoin.targetTask.latitude), longitude: Number(nextCoin.targetTask.longitude) } : null);
   // The souvenir step unfolds anywhere: no dotted path and no edge arrow back to the ride (pathPoint null).
   const pathPoint = nextCoin.pathPoint;
-  const guideMapTarget = useMemo(() => pathPoint && nextCoin.target
+  const guideMapTarget = useMemo(() => pathPoint && pickedTarget
     ? { latitude: pathPoint.latitude, longitude: pathPoint.longitude,
-      requestId: nextCoin.target.taskId * 1000 + guidePathRequest } : null,
-  [pathPoint?.latitude, pathPoint?.longitude, nextCoin.target?.taskId, guidePathRequest]); // eslint-disable-line react-hooks/exhaustive-deps
+      requestId: pickedTarget.taskId * 1000 + guidePathRequest } : null,
+  [pathPoint?.latitude, pathPoint?.longitude, pickedTarget?.taskId, guidePathRequest]); // eslint-disable-line react-hooks/exhaustive-deps
   // That off-map target's island: the coin it is (owned, calm), at its ride, so the card, the dotted
   // path and the edge arrow all point at something on the map (core loop 4.1, one owner).
   const lineStoryIsland = useMemo<TaskType | null>(() => {
