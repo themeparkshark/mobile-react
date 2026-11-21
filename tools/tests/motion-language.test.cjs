@@ -309,7 +309,8 @@ test('wave 3: no big moment waits on the network or reflows at its payoff', () =
   const modal = read('src/components/CoinLevelingModal.tsx');
   const success = modal.slice(modal.indexOf("{state === 'success' && (\n                  <Reanimated.View"), modal.indexOf('MAX LEVEL STATE'));
   assert.ok(!success.includes('OneTimeTip'), 'the first level-up tip never mounts inside the card (no layout jump)');
-  assert.ok(/bottom: 18 \}\}>\s*<OneTimeTip id="first_level_up"/.test(modal), 'it floats under the card instead');
+  assert.ok(/bottom: '100%', marginBottom: 8, zIndex: 40 \}\}>\s*<OneTimeTip id="first_level_up"/.test(modal),
+    'it floats just above the card instead (P24: never over its buttons or the footer)');
   const tip = read('src/components/help/CoachTip.tsx');
   assert.ok(/okPill: \{[^}]*minHeight: 40/.test(tip), 'OK is a real gold button');
   const demo = read('src/components/CoinUpgradeDemo.tsx');

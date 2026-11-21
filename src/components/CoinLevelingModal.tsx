@@ -557,6 +557,14 @@ export default function CoinLevelingModal({
         maxHeight: SCREEN_H * 0.82,
         alignItems: 'center',
       }}>
+        {/* The first level-up tip sits just above the card (bug 32: at the bottom it covered the card's buttons and the
+            footer). Outside the card's flow, so the card never jumps when it appears. */}
+        {state === 'success' && (
+          <View pointerEvents="box-none" testID="first-level-up-tip"
+            style={{ position: 'absolute', left: 0, right: 0, bottom: '100%', marginBottom: 8, zIndex: 40 }}>
+            <OneTimeTip id="first_level_up" ready={visible && state === 'success'} compact />
+          </View>
+        )}
         {/* Behind the card: the big gold fan reaches past its edges on the success beat. */}
         {anchor && (state === 'leveling' || state === 'success') && (
           <View pointerEvents="none" style={{ position: 'absolute', left: anchor.x - SCREEN_W * fanScale / 2, top: anchor.y - SCREEN_W * fanScale / 2,
@@ -1284,12 +1292,6 @@ export default function CoinLevelingModal({
         </View>
       </Animated.View>
 
-      {/* The first level-up tip floats under the card (never inside it), so the card never jumps when it appears. */}
-      {state === 'success' && (
-        <View pointerEvents="box-none" style={{ position: 'absolute', left: 16, right: 16, bottom: 18 }}>
-          <OneTimeTip id="first_level_up" ready={visible && state === 'success'} compact />
-        </View>
-      )}
 
       {crowningSlot.visible && (
         <Crowning rideName={rideCoin.ride_name} coinUrl={rideCoin.coin_url} boss={rideCoin.boss ?? null}
