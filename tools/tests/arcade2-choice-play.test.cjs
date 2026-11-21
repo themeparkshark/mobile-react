@@ -166,3 +166,13 @@ test('P5: the first Ride Part tip is one short line and never promises leveling 
   assert.doesNotMatch(H.TIP_COPY.first_ride_part.body, /Energy|level up/i);
   assert.match(read('src/screens/LinePlay/LinePlayScreen.tsx'), /body=\{firstPartTipBody\(coinOwned\)\} \/>/);
 });
+
+test('P14: an unwon slot wears the server\'s parts_waiting badge (S21); a missing field draws none', () => {
+  const shelf = read('src/screens/ParkScreen.tsx');
+  assert.match(shelf, /\{canChooseGoal && partsWaiting\(task\) > 0 && <View pointerEvents="none"/);
+  assert.match(shelf, /Ride \$\{partsWaiting\(task\) === 1 \? 'Part' : 'Parts'\} saved for this coin\. Win it to use them\./);
+  const M = loadTs('src/services/collection/shelfModel.ts');
+  assert.equal(M.partsWaiting({ parts_waiting: 2 }), 2);
+  assert.equal(M.partsWaiting({}), 0, 'today\'s server: no badge');
+  assert.equal(M.partsWaiting({ parts_waiting: 0 }), 0, 'won: the Parts are the coin\'s own');
+});
