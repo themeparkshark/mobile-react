@@ -33,7 +33,7 @@ test('Next Up actions route to the right map surface; unknown or broken actions 
   assert.equal(route.nextUpRoute({ type: 'trail' }).kind, 'trail');
   assert.deepEqual(plain(route.nextUpRoute({ type: 'show_ride', task_id: 11 })), { kind: 'task', taskId: 11 });
   assert.equal(route.nextUpRoute({ type: 'show_ride' }).kind, 'none');
-  assert.equal(route.nextUpRoute({ type: 'ride' }).kind, 'nearest_ride');
+  assert.equal(route.nextUpRoute({ type: 'ride' }).kind, 'map', 'the map with no target, never the nearest ride (Dustin, Nov 20)');
   assert.equal(route.nextUpRoute({ type: 'home_find' }).kind, 'home_find');
   assert.equal(route.nextUpRoute({ type: 'mystery_from_v9' }).kind, 'none');
   assert.equal(route.nextUpRoute(null).kind, 'none');

@@ -186,6 +186,7 @@ const NO_COINS: readonly CollectedRideCoin[] = [];
 /** Fix w4 T120: the first catch's line shows this long, then hunting goes on (no card, no button). */
 const FIRST_CATCH_TOAST_MS = 2000;
 /** Fix w4 T098: no Rush before the day's first coin (one stable empty list, so memo inputs hold still). */
+const NO_STARS: ReadonlySet<number> = new Set();
 const NO_RUSHES: RushPick[] = [];
 /** Dev-only live feed stub for lane walks (state D: feed off; or a daytime park at night). Never in a store or OTA bundle. */
 const LIVE_STUB = liveStubMode(__DEV__, process.env.EXPO_PUBLIC_GUIDE_LIVE_STUB);
@@ -765,7 +766,7 @@ export function ExploreScreenBody() {
   // Shark Events (server flag live_events): one shared poll; everything renders nothing while it is off or the route 404s.
   const liveEvt = useLiveEvent(park?.id ?? null, { poll: !!player, focused: mapFocused, enabled: !!player });
   const [eventOpen, setEventOpen] = useState(false);
-  const starRides = useStarRides(park?.id ?? null);
+  const eventStarRides = useStarRides(park?.id ?? null);
   const [recapDue, recapSeen] = useRecapDue(liveEvt.event);
   const liveByTask = useMemo(() => new globalThis.Map<number, LiveRide>(
     (livePark?.rides ?? []).map(r => [r.task_id, r])), [livePark]);
@@ -922,6 +923,12 @@ export function ExploreScreenBody() {
   const mapRetry = useParkMapRetry(mapLoadFailed && !!park && !!player, mapFocused, refreshMapOpportunities);
   const visibleTasks = useMemo(() => (redeemables?.tasks ?? [])
     .filter(task => opportunityIsActive(task, mapNow)), [redeemables?.tasks, mapNow]);
+  // Star Day (Dustin, Nov 20): the event's star shows on every coin or on none, never on one ride, so no coin looks more
+  // important than another. The arcade server puts the bonus on every coin; a one-ride Star from today's server hides.
+  const starRides = useMemo<ReadonlySet<number>>(() => {
+    const rides = visibleTasks.filter(task => Number.isFinite(Number(task.id)));
+    return rides.length > 0 && rides.every(task => eventStarRides.has(task.id)) ? eventStarRides : NO_STARS;
+  }, [visibleTasks, eventStarRides]);
   // PLAY! for the coin the player steps up to, on the GPS fix itself: the map knows every coin's spot and the redeem
   // radius, so PLAY! never waits on a slow server; the server's answer replaces it when it lands (T009). The server's
   // own answer always wins where it has answered, and it is trusted only while the player is still near its coin.
@@ -958,7 +965,9 @@ export function ExploreScreenBody() {
   const activeLiveStatus = activeRedeemable?.type === 'task' ? liveByTask.get(activeRedeemable.model.id)?.status ?? null : null;
   const openRedeemable = nearbyOpportunityOpen(activeRedeemable, activeLiveStatus, mapNow) ? activeRedeemable : undefined;
   const playableTaskId = openRedeemable?.type === 'task' ? openRedeemable.model.id : null;
-  const adventureTaskId = adventure && (adventure.phase === 'discover' || adventure.phase === 'play') ? adventure.ride.task_id : null;
+  // The ADVENTURE tag marks today's Adventure ride only once the player won its coin (phase play): before that every
+  // coin is the same, and the first coin won starts the story (Dustin, Nov 20: the app never picks a ride).
+  const adventureTaskId = adventure && adventure.phase === 'play' ? adventure.ride.task_id : null;
   // An old island selection clears after a 30 m walk, or when PLAY! rises for another coin (T001): a stray tap
   // never leaves a callout that disagrees with PLAY! and the guide card.
   const selectedFrom = useRef<{ id: number; at: { latitude: number; longitude: number } | null } | null>(null);

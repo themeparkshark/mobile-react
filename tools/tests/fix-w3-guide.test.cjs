@@ -132,7 +132,7 @@ test('T004: TODAY\'S ADVENTURE only with its stamp dots, whatever set the pointe
     playableTaskId: null, adventure: { taskId: 77, parkId: 8, phase: 'discover' } }));
   assert.equal(mine.taskId, 76);
   // The Adventure sheet names the card's coin when they differ.
-  assert.match(read('src/screens/ExploreScreen/AdventureTicketCard.tsx'), /Your map's next coin: \$\{guideNextName\}/);
+  assert.doesNotMatch(read('src/screens/ExploreScreen/AdventureTicketCard.tsx'), /Your map's next coin/, 'Nov 20: the sheet never names the map coin');
 });
 
 test('T024: a returning player reads today\'s ride by name, never "Your first chapter awaits"', () => {

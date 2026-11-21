@@ -44,14 +44,15 @@ function card(phase='discover', options={}) {
  return {app,calls:calls.filter(c=>c!=='haptic'),raw:calls,work,button,modal,get calls(){return calls.filter(c=>c!=='haptic');}};
 }
 test('ticket hands off only after UIKit reports its native sheet gone, and reduced motion stays still',async()=>{
- const p=card();assert.equal(p.modal().props.animationInTiming,0);
- p.button('Find this coin').props.onPress();p.app.render();assert.equal(p.modal().props.isVisible,false);assert.deepEqual(p.calls,[]);
+ // Arcade plan (Nov 20): before a win the sheet only goes back to the map, so the hand-off is shown on its line step.
+ const p=card('play',{gate:{state:'far',meters:300}});assert.equal(p.modal().props.animationInTiming,0);
+ p.button('Show me the line').props.onPress();p.app.render();assert.equal(p.modal().props.isVisible,false);assert.deepEqual(p.calls,[]);
  // The JS hide is not enough on iOS: the walk to the ride starts once the native sheet is gone (the settle
  // after the hide, or onDismiss), never into a leaving sheet.
  p.modal().props.onModalHide();assert.deepEqual(p.calls,[]);
  const [[settle,ms]]=[...p.app.timers.entries()].map(([id,fn])=>[fn,p.app.delays.get(id)]).filter(([,d])=>d===150);
- assert.equal(ms,150);settle();assert.deepEqual(p.calls,['discover']);
- p.modal().props.onDismiss();assert.deepEqual(p.calls,['discover'],'once');
+ assert.equal(ms,150);settle();assert.deepEqual(p.calls,['line']);
+ p.modal().props.onDismiss();assert.deepEqual(p.calls,['line'],'once');
  const q=card('complete');q.button('Visit my coin').props.onPress();q.app.unmount();q.modal().props.onDismiss();assert.deepEqual(q.calls,[]);
 });
 test('full motion: the sheet slides in and out with real timings',()=>{

@@ -379,8 +379,9 @@ test('Ride Tracker words: Ride sets, true counts only (no days-in-a-row streak u
 test('Wait Times plans the next coin through the guide', () => {
   const screen = read('src/screens/QueueTimesScreen.tsx');
   assert.match(screen, /guide\.setTarget\(taskId, 'wait_times'\);/);
-  assert.match(screen, /Make this my next coin/);
-  assert.match(screen, /Your next coin/);
+  // Arcade plan (Nov 20): the player's pick, in their words.
+  assert.match(screen, /Make this my pick/);
+  assert.match(screen, /Your pick/);
   // Never on a coin already on the shelf, and the chip follows the guide store, never the tap alone.
   assert.match(screen, /coinTaskId=\{notOwned\(coinTasks\.get\(item\.name\)\)\}/);
   assert.match(screen, /coin => coin\.ride_id/);

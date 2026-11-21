@@ -358,3 +358,17 @@ test('C8: the home card: NEXT PARK DAY with the jar and the treat meter, a limit
   assert.match(screen, /RootNavigation\.navigate\('Park', \{ park: coin\?\.parkId \?\? homeParkId \?\? homeShelfPark\(player\.current_park_id\), player: player\.id, tab: 'limited' \}\);/);
   assert.match(read('src/screens/ParkScreen.tsx'), /setTab\(tabParam === 'limited' \|\| tabParam === 'sights' \? tabParam : 'rides'\);/);
 });
+
+test('C9: Today\'s Adventure starts on any coin; Star Day is every coin or none; Next Up ride opens the map with no target', () => {
+  const sheet = read('src/screens/ExploreScreen/AdventureTicketCard.tsx');
+  assert.match(sheet, /const openStart = ticket\.phase === 'discover';/);
+  assert.match(sheet, /\{openStart \? 'Win any ride coin to start your story' : prompt\.title\}/);
+  assert.match(sheet, /testID="adventure-back-to-map" label="BACK TO MAP"/);
+  assert.doesNotMatch(sheet, /Your map's next coin/, 'the sheet never names the map\'s coin');
+  const screen = read('src/screens/ExploreScreen.tsx');
+  assert.match(screen, /const adventureTaskId = adventure && adventure\.phase === 'play' \? adventure\.ride\.task_id : null;/,
+    'no ADVENTURE tag on a seeded ride before its coin is won');
+  assert.match(screen, /rides\.every\(task => eventStarRides\.has\(task\.id\)\) \? eventStarRides : NO_STARS/);
+  const R = loadTs('src/components/nextUp/nextUpRoute.ts');
+  assert.equal(R.nextUpRoute({ type: 'ride' }).kind, 'map');
+});
