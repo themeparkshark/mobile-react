@@ -210,9 +210,9 @@ test('T048 the win card shows the Parts and XP granted, and the next coin by a s
   const win = loadTs('src/components/rewards/postWinModel.ts', { '../../services/lineplay/rideLines': { taskHasLine: () => false } });
   const labels = [...win.winRewardChips({ coins: 10, tickets: 1, parts: 4, energy: 40, xp: 25, coinLevelsOpen: true, dailyOpen: false })].map(c => c.label);
   assert.deepEqual(labels, ['Shark Coins', 'Ticket', 'Ride Parts', 'Energy', 'XP']);
-  // Fix w4 T097: before coin levels open, Parts and Energy fly to the Shelf with no chip (one new idea per win).
+  // Ride Parts bug 26 (Nov 20): Parts always show at a win; before coin levels open only Energy flies chipless.
   const early = [...win.winRewardChips({ coins: 10, tickets: 1, parts: 4, energy: 40, xp: 25, coinLevelsOpen: false, dailyOpen: false })].map(c => c.label);
-  assert.deepEqual(early, ['Shark Coins', 'Ticket', 'XP']);
+  assert.deepEqual(early, ['Shark Coins', 'Ticket', 'Ride Parts', 'XP']);
   assert.equal(win.shortCoinName("Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson"), 'Adventureland Treehouse');
   assert.equal(win.shortCoinName('Star Wars: Rise of the Resistance'), 'Star Wars');
   assert.equal(win.nextCoinButton({ taskId: 9, name: "Adventureland Treehouse inspired by Walt Disney's Swiss Family Robinson", meters: 85, reason: 'nearest_open' }, 4).detail,

@@ -42,13 +42,13 @@ import { ensureRideQuestionLedger, linePlayBoardingAsked, linePlayBoardingPendin
   takeLinePlayBoarding } from '../../services/lineplay/rideQuestionLedger';
 import { dropAnsweredRideDetections } from '../../services/RideDetectionService';
 import { adventureRideStampDue, recapGo, rideStepJournalParams, rideStepLog, rideStepLogId, signSaidLine,
-  timedWaitMinutes, type RecapGo } from '../../services/lineplay/rideStep';
+  timedWaitMinutes, stillInLineTimedOut, type RecapGo } from '../../services/lineplay/rideStep';
 import { keepRideStepLog, releaseRideLogHold } from '../../services/rideLogOutbox';
 import { useGuideTarget } from '../../services/lineplay/useGuideTarget';
 import { slotPartsShown, waitingSlotParts } from '../../services/lineplay/slotParts';
 import { celebrateAdventureTicket, getTripGoal } from '../../api/endpoints/me/trip-goal';
 import { lineZoneForRide, loadParkRides, rideTypeForRide } from '../../services/lineplay/resolveRide';
-import { startAwayCopy, startAwayMeters } from '../../services/lineplay/lineZone';
+import { insideLineZone, startAwayCopy, startAwayMeters } from '../../services/lineplay/lineZone';
 import { readCheckpoint } from '../../services/lineplay/checkpoint';
 import { guide, playerChose } from '../../services/guide/nextCoin';
 import { doneKeepsTarget } from '../../services/lineplay/recapExit';
@@ -136,7 +136,9 @@ const WELCOME_BACK_AFTER_MS = 20_000;
 /** The dialog answers that end the wait at the tap: the dialog fades once the recap is drawn under it. */
 const GAMES_DONE: readonly number[] = [0];
 const RODE_OR_LEFT: readonly number[] = [0, 1];
-const RODE: readonly number[] = [1];
+/** The ride question's answers, in button order (Ride Parts bug 21). */
+const RIDE_Q_LEFT = 0;
+const RIDE_Q_RODE = 1;
 /** The longest the "Saving your wait" card waits for the recap's rewards and GO before the recap opens anyway. */
 const RECAP_SETTLE_MAX_MS = 6000;
 /** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
@@ -217,6 +219,7 @@ const tabLabel = tabWord;
 import OneTimeTip from '../../components/help/OneTimeTip';
 import { useHelp } from '../../components/help/HelpProvider';
 import { lineNudgeReady, linePlayTipReady } from '../../services/help/tipGate';
+import { firstPartTipBody } from '../../services/help/helpTopics';
 import { chapterMissionIds, chapterPlayNow, railPageIcon, crewRowInBand, PAGE_FRAME_V, railBackAction, crewRowLent, lentBoardViewport, lineScreenFit, railNextIndex, pageRailMode, pageWindowShown, PAGES_DIM_HOLD_MAX_MS, PAGES_DIP_MS, PAGES_DIP_OPACITY,
   PAGES_RISE_FALLBACK_MS, PAGES_RISE_MS, queueToastSpot, FIRST_LINEPLAY_ROUND, firstLinePlayCalm } from '../../services/lineplay/lineLayout';
 // Fin-ister Nights: registers the haunt-line deck for "fright-" chapters (side effect).
@@ -806,6 +809,24 @@ export default function LinePlayScreen() {
   useEffect(() => {
     if (boardingAsk) void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
   }, [boardingAsk]);
+  // "Still in line" while the phone stays out of the line zone: after 4 minutes the wait ends quietly (the calm
+  // wrap-up card with RESUME, then the recap with Undo). Back inside the zone, the check stops (Ride Parts bug 21).
+  const stillInLineAt = useRef<number | null>(null);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (stillInLineAt.current == null) return;
+      const snap = session.snapshot();
+      if (snap.state !== 'active' && snap.state !== 'paused') { stillInLineAt.current = null; return; }
+      const here = latestLocationSampleRef.current;
+      const zone = snap.ride?.zone ?? null;
+      if (here && zone && insideLineZone(here, zone)) { stillInLineAt.current = null; return; }
+      if (stillInLineTimedOut({ answeredAt: stillInLineAt.current, now: Date.now(), here, zone })) {
+        stillInLineAt.current = null;
+        session.beginEnding(false, 'left_queue');
+      }
+    }, 15_000);
+    return () => clearInterval(timer);
+  }, [session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // TriviaGame holds its question cursor in the source. Keep one source for
   // the whole round even while LinePlay emits a new timer snapshot each second.
@@ -1033,8 +1054,10 @@ export default function LinePlayScreen() {
     releaseRideStep();
     if (go.kind === 'level_up') { await handleOpenCoin(); return; }
     if (go.kind === 'shelf') { await handleOpenPark(); return; }
-    // Win this ride's coin: back to the map where the player stands at it (PLAY! rises there). The recap never moves
-    // the pointer (Dustin, Nov 20: no app pick).
+    // Win this ride's coin: back to the map where the player stands at it, and PLAY! plays this coin, not a neighbour
+    // (Ride Parts bug 1). The guest tapped GO on this ride's own coin, so it is their pick; the recap still never names
+    // another ride (Dustin, Nov 20: no app pick).
+    if (go.kind === 'win_coin' && go.taskId != null) guide.setTarget(go.taskId, 'lineplay_done');
     try {
       await session.complete();
       if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();
@@ -2080,7 +2103,8 @@ export default function LinePlayScreen() {
       {/* Never shown before the card is measured, so not one frame sits at a guessed spot over Details. */}
       {/* While the page window has stepped aside (an iPhone SE reading long Details), a tip waits: it would sit over the rail's one button. */}
       <OneTimeTip id="first_ride_part" ready={lineTipReady && partTipPending && pagesShown && waitCardBottom != null} autoHideMs={0}
-        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip} />
+        style={[styles.tip, waitCardBottom != null && { top: waitCardBottom + 6 }]} onVisibleChange={onPartTip}
+        body={firstPartTipBody(coinOwned)} />
 
       {/* Toasts land just under the wait card, in the crew row's slot: never over the card's numbers, its buttons or the header. */}
       <QueueToast message={toast} onDone={() => setToast(null)} top={toastSpot?.top} slim={toastSpot?.slim} />
@@ -2153,26 +2177,38 @@ export default function LinePlayScreen() {
         message="Your games and wait are saved either way."
         icon="ride"
         haptic="none"
+        // Ride Parts bug 21: three true answers. I RODE IT logs the ride; I LEFT THE LINE ends the wait with no ride
+        // logged and the Parts kept; STILL IN LINE goes back to the wait (and ends it quietly after 4 minutes away).
+        // The dialog stacks its main action on top: I RODE IT, then I LEFT THE LINE, then STILL IN LINE.
         buttons={[
+          { text: 'I left the line', variant: 'secondary' },
+          { text: 'I rode it' },
           { text: 'Still in line', style: 'cancel', variant: 'secondary' },
-          { text: 'I got to the ride' },
         ]}
-        // "I got to the ride" ends the wait at the tap, and the dialog fades only once the recap's hero is drawn
-        // under it (never a flash of the wait page while the dialog closes).
-        holdUntilHidden={RODE}
+        // "I rode it" and "I left the line" end the wait at the tap, and the dialog fades only once the recap's hero is
+        // drawn under it (never a flash of the wait page while the dialog closes).
+        holdUntilHidden={RODE_OR_LEFT}
         onPick={index => {
-          if (index !== 1) return;
+          if (index !== RIDE_Q_RODE && index !== RIDE_Q_LEFT) return;
           noteRideQuestionAnswered();
+          stillInLineAt.current = null;
           const state = session.getState();
-          if (state === 'complete') session.confirmRodeAfterWrapUp();
-          else void session.endNow(true).catch(finishFailed);
+          if (index === RIDE_Q_RODE) {
+            if (state === 'complete') session.confirmRodeAfterWrapUp();
+            else void session.endNow(true).catch(finishFailed);
+            return;
+          }
+          // I left the line: no ride logged, the Parts stay. A wait already wrapped up just takes the answer.
+          session.dismissBoardingSuggestion();
+          if (state !== 'complete') void session.endNow(false).catch(finishFailed);
         }}
         onAnswer={index => {
-          if (index === 1) return;
+          if (index === RIDE_Q_RODE || index === RIDE_Q_LEFT) return;
           noteRideQuestionAnswered();
           const state = session.getState();
-          // "Still in line": back to the wait (a wrapped-up one picks up where it left off).
+          // "Still in line": back to the wait (a wrapped-up one picks up where it left off), with the 4 minute check.
           session.dismissBoardingSuggestion();
+          stillInLineAt.current = Date.now();
           if (state === 'ending') session.undoEnd();
           else if (state === 'complete') void session.continueInLine();
         }}

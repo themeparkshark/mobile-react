@@ -1,3 +1,4 @@
+import { insideLineZone, type LineZone } from './lineZone';
 /**
  * The ride step (core loop blueprint 2, step 6): "I got to the ride" is the one
  * ride record.
@@ -157,4 +158,23 @@ export function recapGo(input: {
   }
   // Never a next coin (Dustin, Nov 20: the app never picks a ride): the line just waited in, a level up, or the shelf.
   return { kind: 'shelf', label: 'See your park shelf', button: 'SHELF' };
+}
+
+/**
+ * Ride Parts bug 21 (Nov 20): "Still in line" after the ride question, but the phone stays out of the line zone. After
+ * this long away the wait ends quietly (the calm "Looks like you left the line" wrap-up, then the recap with Undo),
+ * so it never sits on "Checking you're in line" with no end.
+ */
+export const STILL_IN_LINE_AWAY_MS = 4 * 60_000;
+
+/** Pure: the guest said "Still in line" at `answeredAt` and has been out of the line zone since, for 4 minutes. */
+export function stillInLineTimedOut(input: {
+  readonly answeredAt: number | null;
+  readonly now: number;
+  readonly here: { readonly latitude: number; readonly longitude: number } | null | undefined;
+  readonly zone: LineZone | null | undefined;
+}): boolean {
+  if (input.answeredAt == null || !input.zone || !input.here) return false;
+  if (insideLineZone(input.here, input.zone)) return false;
+  return input.now - input.answeredAt >= STILL_IN_LINE_AWAY_MS;
 }

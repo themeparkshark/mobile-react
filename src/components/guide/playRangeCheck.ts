@@ -145,3 +145,53 @@ export function provisionalPlay<T extends { readonly id: number; readonly latitu
   }
   return best;
 }
+
+/**
+ * Which coin PLAY! plays (Ride Parts bug 1, Nov 20: "it's their choice to play"). The server's range answer names the
+ * first coin within 16 m in its own order, so two coins close together (Peter Pan's Flight and The Sword in the Stone,
+ * 11 m; Radiator Springs Racers and the Cars coin, 13 m; Courthouse Square and The Theatre, 1 m) played the coin the
+ * guest did not tap. The guest's own choice decides, never the server's order or the nearest coin:
+ *  - a coin the guest chose (tapped on the map, picked from stacked coins, picked in NEAR ME, on the shelf, from a recap
+ *    GO) and standing within range of it: PLAY! plays that coin;
+ *  - no such coin and two or more coins in range: no PLAY! yet; the map asks "Which coin?" with one equal row each;
+ *  - otherwise (one coin or none): `play` is null and `choices` empty, and PLAY! follows the range answer as before.
+ * The server still checks the spot of the coin PLAY! starts (it allows the ride's own radius), so a choice never
+ * plays a coin the guest is not at. Pure, unit tested in tools/tests/arcade2-choice-play.test.cjs.
+ */
+export interface PlayChoice<T> {
+  /** The coin the guest chose, in range now: PLAY! plays it. */
+  readonly play: T | null;
+  /** Two or more coins in range and none chosen: the "Which coin?" rows, A to Z (no order that favours one). */
+  readonly choices: readonly T[];
+}
+
+export function choosePlayCoin<T extends { readonly id: number; readonly name?: string | null; readonly latitude: unknown;
+  readonly longitude: unknown }>(input: {
+  readonly tasks: readonly T[];
+  readonly here: RangePoint | null | undefined;
+  readonly failed: ReadonlySet<number>;
+  /** The guest's own choices, strongest first: the tapped island, then their pick (the guide's plan). */
+  readonly chosenIds: readonly (number | null | undefined)[];
+}): PlayChoice<T> {
+  const none: PlayChoice<T> = { play: null, choices: [] };
+  const here = input.here;
+  if (!here || !Number.isFinite(here.latitude) || !Number.isFinite(here.longitude)) return none;
+  const inRange: T[] = [];
+  const near = new globalThis.Map<number, T>();
+  for (const task of input.tasks) {
+    const spot = { latitude: Number(task.latitude), longitude: Number(task.longitude) };
+    if (!Number.isFinite(spot.latitude) || !Number.isFinite(spot.longitude) || input.failed.has(task.id)) continue;
+    const m = meters(here, spot);
+    // A chosen coin holds a few steps of GPS wander past the radius, so PLAY! never flickers to the "Which coin?" card.
+    if (m <= PLAY_ANSWER_RADIUS_METERS + PLAY_ANSWER_SLACK_METERS) near.set(task.id, task);
+    if (m <= PLAY_ANSWER_RADIUS_METERS && !inRange.some(other => other.id === task.id)) inRange.push(task);
+  }
+  for (const id of input.chosenIds) {
+    if (id == null) continue;
+    const chosen = near.get(id);
+    if (chosen) return { play: chosen, choices: [] };
+  }
+  if (inRange.length < 2) return none;
+  const byName = (a: T, b: T) => String(a.name ?? '').localeCompare(String(b.name ?? ''), 'en', { sensitivity: 'base' }) || a.id - b.id;
+  return { play: null, choices: [...inRange].sort(byName) };
+}

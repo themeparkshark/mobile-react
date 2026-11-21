@@ -8,6 +8,7 @@
  * Owned by the guide-map lane (src/services/guide/**).
  */
 import type { GuideState, GuideTarget } from './nextCoin';
+import { QUEUE_RIDE_TYPES } from '../../constants/queueRideTypes';
 import { shortParkName } from '../../helpers/parkName';
 import { plainRideName } from '../../helpers/plainRideName';
 import { treatMeterLine, type FreeTicketStep } from './freeTickets';
@@ -26,6 +27,7 @@ export type GuideAction =
   | 'skip'          // Line story or souvenir: pick another coin (the guide moves on to the next one)
   | 'story'         // Goodbye: the shelf of the park you just left, with today's park story on top
   | 'near_me'       // NEAR ME: every coin not yet won, one identical row each (the player picks)
+  | 'which_coin'    // two or more coins here and none picked: one equal row each, the player picks which to play
   | 'get_tickets'   // the Get Tickets sheet (free ways first)
   | 'clear'         // the X on YOUR PICK: clear the player's own pick
   | 'ok';           // the arrive card's OK: the welcome is read
@@ -185,13 +187,24 @@ export function lineOffer(state: string, dwellRideName: string | null | undefine
 }
 
 /**
+ * A ride type with a real line to play in (QUEUE_RIDE_TYPES), or no type known (today's catalog: keep the offer).
+ * Shows, walk-throughs, transport, restaurants and 'other' have none (Ride Parts bug 11).
+ */
+export function lineRideType(type: string | null | undefined): boolean {
+  return type == null || type === '' || (QUEUE_RIDE_TYPES as readonly string[]).includes(type);
+}
+
+/**
  * A tapped queue ride (T078): its callout makes it the guide's target, and the card offers PLAY IN LINE as the
  * white LinePlay picture button, one tap from the map (Wait Times is no longer the only way in). Only for a ride
  * with a real line (the queue catalog resolved it) and while the card is about that ride. Pure.
  */
-export function calloutLineOffer(queueRide: { readonly rideId: number } | null | undefined, selectedTaskId: number | null,
-  targetTaskId: number | null, state: string): { readonly title: string; readonly label: string; readonly action: GuideAction } | null {
+export function calloutLineOffer(queueRide: { readonly rideId: number; readonly rideType?: string | null } | null | undefined,
+  selectedTaskId: number | null, targetTaskId: number | null, state: string): { readonly title: string; readonly label: string; readonly action: GuideAction } | null {
   if (!queueRide || !(queueRide.rideId > 0) || selectedTaskId == null || selectedTaskId !== targetTaskId) return null;
+  // Ride Parts bug 11: a show, a fountain, a walk-through or a food cart has no line, so no PLAY IN LINE (it opened
+  // "No Parts here", then "Wait not timed"). A catalog with no type yet keeps today's offer.
+  if (!lineRideType(queueRide.rideType)) return null;
   if (state === 'in_line' || state === 'line_story' || state === 'goodbye' || state === 'home') return null;
   return { title: '', label: 'PLAY IN LINE', action: 'lineplay' };
 }
@@ -464,6 +477,22 @@ export function guideCardCopy(state: GuideState, target: GuideTarget | null, ctx
         shelfBar: ctx.shelfBar ?? null,
       });
   }
+}
+
+/** The card states a "Which coin?" ask may take over: nothing urgent of its own (no claim, no 0 Tickets, no line). */
+const WHICH_COIN_STATES: ReadonlySet<GuideState> = new Set<GuideState>(['pick', 'walk', 'here', 'resting']);
+
+/**
+ * Ride Parts bug 1 (Nov 20): two or more coins are in PLAY! range and the guest picked none of them. PLAY! waits, and
+ * the card asks which, naming no ride (every coin is the same size on the rows it opens). Fewer than two: unchanged.
+ */
+export function whichCoinCopy(copy: GuideCardCopy, state: GuideState, choices: number, parkName: string | null): GuideCardCopy {
+  if (!(choices > 1) || !WHICH_COIN_STATES.has(state)) return copy;
+  const kicker = (parkName ?? 'the park').toUpperCase();
+  const line = `${choices} coins are here. Pick one to play`;
+  const button: GuideButton = { label: 'PICK ONE', action: 'which_coin' };
+  return { kicker, title: 'Which coin?', line, button, secondary: null, dots: null, pointsAtPlay: false, badge: null, clear: null,
+    pips: null, shelfBar: null, howTo: false, a11y: `${kicker}. Which coin? ${line}. Button: ${button.label}` };
 }
 
 /** Retired (Nov 20): the resting card names no sight. Returns the card unchanged. */

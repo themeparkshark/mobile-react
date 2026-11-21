@@ -8,12 +8,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import TicketPips from '../tickets/TicketPips';
+import CalmModal from '../retention/CalmModal';
 import { cleanSort, nearMeLine, nearMeRows, nearMeSortKey, type NearMeInput, type NearMeRow, type NearMeSort } from './nearMeModel';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
@@ -29,6 +29,11 @@ export interface NearMeSheetProps {
   readonly tickets: number;
   /** Open with "I can play now" on (from Get Tickets). */
   readonly canPlayFirst?: boolean;
+  /**
+   * "Which coin?" (Ride Parts bug 1): only these coins, the ones in PLAY! range, A to Z with no switches. The row the
+   * guest taps becomes the coin PLAY! plays. Null: the whole NEAR ME list.
+   */
+  readonly onlyTaskIds?: readonly number[] | null;
   readonly onPick: (taskId: number) => void;
   readonly onClose: () => void;
 }
@@ -55,8 +60,11 @@ function Switch({ label, on, onPress, testID }: { label: string; on: boolean; on
   </Pressable>;
 }
 
+const NO_OWNED: ReadonlySet<number> = new Set();
+
 export default function NearMeSheet({ visible, playerId, parkName, tasks, ownedTaskIds, here, live, tickets, canPlayFirst = false,
-  onPick, onClose }: NearMeSheetProps) {
+  onlyTaskIds = null, onPick, onClose }: NearMeSheetProps) {
+  const which = !!onlyTaskIds && onlyTaskIds.length > 0;
   const reduced = useReducedGameMotion();
   const insets = useSafeAreaInsets();
   const [sort, setSort] = useState<NearMeSort>('az');
@@ -74,22 +82,28 @@ export default function NearMeSheet({ visible, playerId, parkName, tasks, ownedT
     setSort(next);
     try { void AsyncStorage.setItem(nearMeSortKey(playerId), next).catch(() => undefined); } catch { /* not remembered */ }
   };
-  const rows = useMemo(() => visible ? nearMeRows({ tasks, ownedTaskIds, here, live, tickets, sort, canPlayOnly }) : [],
-    [visible, tasks, ownedTaskIds, here?.latitude, here?.longitude, live, tickets, sort, canPlayOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rows = useMemo(() => {
+    if (!visible) return [];
+    if (!which) return nearMeRows({ tasks, ownedTaskIds, here, live, tickets, sort, canPlayOnly });
+    const only = new Set(onlyTaskIds);
+    return nearMeRows({ tasks: tasks.filter(task => only.has(task.id)), ownedTaskIds: NO_OWNED, here, live, tickets, sort: 'az', canPlayOnly: false });
+  }, [visible, which, onlyTaskIds, tasks, ownedTaskIds, here?.latitude, here?.longitude, live, tickets, sort, canPlayOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <Modal isVisible={visible} onBackdropPress={onClose} onBackButtonPress={onClose} onSwipeComplete={onClose}
-    style={styles.modal} backdropColor={BRAND.navy} backdropOpacity={0.3} useNativeDriver hideModalContentWhileAnimating
-    animationIn={reduced ? 'fadeIn' : 'slideInUp'} animationOut={reduced ? 'fadeOut' : 'slideOutDown'}
-    backdropTransitionInTiming={reduced ? 0 : 180} backdropTransitionOutTiming={reduced ? 0 : 180}>
+  // CalmModal (the reward cards' host), not react-native-modal: drawn from the map's view, react-native-modal's sheet sat
+  // 116 pt below the window's bottom edge (the map's own top), so its last rows were off screen.
+  return <CalmModal visible={visible} reducedMotion={reduced} fullBleed fadeOnly backdropColor={BRAND.navy} backdropOpacity={0.3}
+    onBackdropPress={onClose} onBackButtonPress={onClose}>
+    <View style={styles.bottom} pointerEvents="box-none">
     <View testID="near-me-sheet" style={[styles.sheet, { paddingBottom: Math.max(12, insets.bottom) }]}>
       <View style={styles.header}>
         <GameIcon name="map" size={26} />
-        <Text style={styles.title} numberOfLines={1} maxFontSizeMultiplier={1.3}>NEAR ME{parkName ? ` · ${parkName.toUpperCase()}` : ''}</Text>
+        <Text style={styles.title} numberOfLines={1} maxFontSizeMultiplier={1.3}>{which ? 'WHICH COIN?'
+          : `NEAR ME${parkName ? ` · ${parkName.toUpperCase()}` : ''}`}</Text>
         <Pressable testID="near-me-close" accessibilityRole="button" accessibilityLabel="Close" onPress={onClose} style={styles.close}>
           <GameIcon name="close" size={22} />
         </Pressable>
       </View>
-      <View style={styles.controls}>
+      {!which && <View style={styles.controls}>
         <Switch testID="near-me-sort-az" label="A TO Z" on={sort === 'az'} onPress={() => chooseSort('az')} />
         <Switch testID="near-me-sort-distance" label="DISTANCE" on={sort === 'distance'} onPress={() => chooseSort('distance')} />
         <Pressable testID="near-me-can-play" accessibilityRole="button" accessibilityState={{ selected: canPlayOnly }}
@@ -99,7 +113,8 @@ export default function NearMeSheet({ visible, playerId, parkName, tasks, ownedT
           <GameIcon name="ticket" size={16} />
           <Text style={[styles.switchText, canPlayOnly && styles.switchTextOn]} maxFontSizeMultiplier={1.3}>I CAN PLAY NOW</Text>
         </Pressable>
-      </View>
+      </View>}
+      {which && <Text testID="near-me-which-line" style={styles.whichLine} maxFontSizeMultiplier={1.3}>Tap the coin you want to play</Text>}
       <FlatList data={rows} keyExtractor={row => String(row.taskId)} style={styles.list} contentContainerStyle={styles.listBody}
         showsVerticalScrollIndicator={false} initialNumToRender={12}
         renderItem={({ item }) => <Row row={item} tickets={tickets} onPress={() => onPick(item.taskId)} />}
@@ -108,11 +123,12 @@ export default function NearMeSheet({ visible, playerId, parkName, tasks, ownedT
           <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>{canPlayOnly ? 'No coin here fits your Tickets yet' : 'Every coin here is on your shelf!'}</Text>
         </View>} />
     </View>
-  </Modal>;
+    </View>
+  </CalmModal>;
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'flex-end', margin: 0 },
+  bottom: { flex: 1, justifyContent: 'flex-end' },
   sheet: { maxHeight: '82%', backgroundColor: BRAND.cream, borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 3,
     borderColor: BRAND.white, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 18, paddingRight: 8, backgroundColor: BRAND.blueBright, minHeight: 56 },
@@ -127,6 +143,7 @@ const styles = StyleSheet.create({
   chip: { flexDirection: 'row', alignItems: 'center', gap: 5, minHeight: 34, paddingHorizontal: 10, borderRadius: 17,
     backgroundColor: BRAND.white, borderWidth: 2, borderColor: BRAND.blueBright, borderBottomWidth: 4 },
   chipOn: { backgroundColor: BRAND.gold, borderColor: BRAND.white, borderBottomColor: BRAND.goldLip },
+  whichLine: { fontFamily: 'Knockout', fontSize: 15, color: BRAND.navy, paddingHorizontal: 16, paddingTop: 12, paddingBottom: 6 },
   list: { flexGrow: 0 },
   listBody: { paddingHorizontal: 14, paddingBottom: 8, gap: 8 },
   // Every row the same: the house blue card with the white rim (no gold row, no top pick).

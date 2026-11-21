@@ -460,10 +460,10 @@ test('the win that reaches a trophy is its moment on the win card (fix round W1 
 test('one reward row on the ladder; a member\'s double coins as one +N VIP chip; every reward flies home', () => {
   const row = input => [...win.winRewardChips(input)].map(c => `${c.label}:${c.amount}:${c.flyTo}`);
   const base = { coins: 10, tickets: 1, parts: 1, energy: 10, xp: 25, coinLevelsOpen: false, dailyOpen: false };
-  // Fix w4 T097: XP always shows; Ride Parts and Energy get chips once coin levels are open, and fly to the Shelf before.
-  assert.deepEqual(row(base), ['Shark Coins:10:coins', 'Ticket:1:tickets', 'XP:25:xp']);
+  // Fix w4 T097 and Ride Parts bug 26: XP and Ride Parts always show; Energy gets its chip once coin levels are open.
+  assert.deepEqual(row(base), ['Shark Coins:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'XP:25:xp']);
   assert.equal(win.silentEnergy({ energy: 10, coinLevelsOpen: false }), 10, 'it still flies to the Shelf button');
-  assert.equal(win.silentParts({ parts: 1, lineParts: 2, coinLevelsOpen: false }), 3, 'Parts still fly to the Shelf button');
+  assert.equal(win.silentParts({ parts: 1, lineParts: 2, coinLevelsOpen: false }), 0, 'Parts have their chips now');
   assert.equal(win.silentParts({ parts: 1, coinLevelsOpen: true }), 0);
   assert.deepEqual(row({ ...base, vipCoins: 10, coinLevelsOpen: true, dailyOpen: true }),
     ['Shark Coins:10:coins', 'VIP:10:coins', 'Ticket:1:tickets', 'Ride Part:1:energy', 'Energy:10:energy', 'XP:25:xp']);

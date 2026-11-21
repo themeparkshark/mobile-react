@@ -31,7 +31,8 @@ import {
   WAIT_COLOR_TIERS,
 } from '../constants/parkWaitTimes';
 import { LocationContext } from '../context/LocationProvider';
-import { coinTasksByRideName, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { coinTasksByRideName, resolveRideContext, resolveRideContextOrOffline } from '../services/lineplay/resolveRide';
+import { lineRideType } from '../services/guide/guideCopy';
 import { guide, playerChose } from '../services/guide/nextCoin';
 import getRideCoins from '../api/endpoints/me/ride-coins';
 import { queuePlayPolicy } from '../services/lineplay/queuePlayPolicy';
@@ -125,8 +126,11 @@ const RideCard = ({
   isNextCoin = false,
   isPlanned = false,
   onMakeNextCoin,
+  rideType = null,
 }: {
   entry: WikiLiveEntry;
+  /** The ride catalog's type for this row (null: not known yet, today's offer stays). */
+  rideType?: string | null;
   onStartSession: (entry: WikiLiveEntry) => void;
   /** This ride's coin (null: no coin to win here). */
   coinTaskId?: number | null;
@@ -143,7 +147,8 @@ const RideCard = ({
   const returnTime = hasLL ? formatReturnTime(ll?.returnStart) : null;
   // A temporary stop can be the most boring part of a wait. Games stay available
   // there, but this session must never claim proximity-based Parts.
-  const canStartSession = queuePlayPolicy(entry.status).canPlay;
+  // Ride Parts bug 11: a show or walk-through (Castle Walkthrough) has no line, so no PLAY IN LINE there.
+  const canStartSession = queuePlayPolicy(entry.status).canPlay && lineRideType(rideType);
 
   return (
     <View style={[styles.card, { borderLeftColor: badge.color, borderLeftWidth: 3, flexWrap: 'wrap' }]}>
@@ -375,6 +380,21 @@ export default function QueueTimesScreen({ route }: { route: any }) {
       .then(tasks => { if (live) setCoinTasks(tasks); }).catch(() => undefined);
     return () => { live = false; };
   }, [selectedPark, attractionNames]);
+  // Each row's catalog ride type, so a show or walk-through never offers PLAY IN LINE (Ride Parts bug 11).
+  const [rideTypes, setRideTypes] = useState<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    if (!attractionNames || previewEntries) return;
+    let live = true;
+    void Promise.all(attractionNames.split('|').map(name => resolveRideContext(selectedPark, name, null)
+      .then(ride => [name, ride?.rideType ?? null] as const).catch(() => [name, null] as const)))
+      .then(rows => {
+        if (!live) return;
+        const out = new Map<string, string>();
+        for (const [name, type] of rows) if (type) out.set(name, type);
+        setRideTypes(out);
+      }).catch(() => undefined);
+    return () => { live = false; };
+  }, [selectedPark, attractionNames, previewEntries]);
   const notOwned = (taskId: number | undefined) => taskId != null && !ownedTasks.has(taskId) ? taskId : null;
   const makeNextCoin = useCallback((taskId: number) => {
     guide.setTarget(taskId, 'wait_times');
@@ -533,10 +553,11 @@ export default function QueueTimesScreen({ route }: { route: any }) {
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => <RideCard entry={item} onStartSession={handleStartSession}
             coinTaskId={notOwned(coinTasks.get(item.name))}
+            rideType={rideTypes.get(item.name) ?? null}
             isNextCoin={coinTasks.get(item.name) != null && coinTasks.get(item.name) === guidePick.current}
             isPlanned={coinTasks.get(item.name) != null && coinTasks.get(item.name) === guidePick.plan}
             onMakeNextCoin={makeNextCoin} />}
-          extraData={`${guidePick.current}-${guidePick.plan}-${coinTasks.size}-${ownedTasks.size}`}
+          extraData={`${guidePick.current}-${guidePick.plan}-${coinTasks.size}-${ownedTasks.size}-${rideTypes.size}`}
           estimatedItemSize={80}
           contentContainerStyle={{ ...styles.listContent, paddingBottom: pad.bottom }}
           refreshControl={

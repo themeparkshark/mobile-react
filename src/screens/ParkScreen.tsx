@@ -557,7 +557,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
                   {canChooseGoal && partsWaiting(task) > 0 && <View pointerEvents="none" style={{ position: 'absolute',
                     right: -6, bottom: -4, flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: '#fff8e4',
                     borderColor: '#ffcf3b', borderWidth: 2, borderRadius: 10, paddingHorizontal: 4, paddingVertical: 1 }}
-                    accessible accessibilityLabel={`${partsWaiting(task)} Ride Parts waiting for this coin`}>
+                    accessible accessibilityLabel={`${partsWaiting(task)} Ride ${partsWaiting(task) === 1 ? 'Part' : 'Parts'} saved for this coin. Win it to use them.`}>
                     <GameIcon name="parts" size={14} />
                     <Text style={{ fontFamily: 'Shark', fontSize: 12, color: '#05346e' }}>{partsWaiting(task)}</Text>
                   </View>}

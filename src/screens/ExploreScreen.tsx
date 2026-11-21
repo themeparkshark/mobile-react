@@ -47,7 +47,7 @@ import { resolveMapQueueContext, resolveQueueStoryContext } from '../services/li
 import type { RideContext } from '../services/lineplay/LinePlaySession';
 import currentRedeemable from '../api/endpoints/me/current-redeemable';
 import { pictureOnlyFor } from '../services/playPrefs';
-import { createRangeChecker, playAnswerNear, provisionalPlay, selectionStale } from '../components/guide/playRangeCheck';
+import { choosePlayCoin, createRangeChecker, playAnswerNear, provisionalPlay, selectionStale } from '../components/guide/playRangeCheck';
 import { coinArtCache } from '../components/guide/coinArtCache';
 import ParkMapRetryCard, { useParkMapRetry } from './ExploreScreen/ParkMapRetry';
 import { CurrentRedeemableType } from '../models/current-redeemable-type';
@@ -317,8 +317,11 @@ export function ExploreScreenBody() {
   >();
   const [failedTaskIds, setFailedTaskIds] = useState<Set<number>>(new Set());
   const [selectedTask, setSelectedTask] = useState<TaskType | null>(null);
+  // The guest's own pick (NEAR ME, shelf, Wait Times, a recap GO, a callout tap): PLAY! plays it when they stand at it.
+  const [guidePlan, setGuidePlan] = useState<number | null>(() => guide.plan());
+  useEffect(() => guide.subscribe(() => setGuidePlan(guide.plan())), []);
   // NEAR ME (arcade plan, section 6): every coin here not yet won, one identical row each; the player picks.
-  const [nearMe, setNearMe] = useState<{ canPlay: boolean } | null>(null);
+  const [nearMe, setNearMe] = useState<{ canPlay: boolean; only?: readonly number[] } | null>(null);
   const [focusedFromChecklist, setFocusedFromChecklist] = useState<TaskType | null>(null);
   // "Find" guide: a dashed path and an edge arrow toward the ride the player asked to find.
   const [findGuide, setFindGuide] = useState<{ taskId: number; latitude: number; longitude: number; requestId: number } | null>(null);
@@ -934,12 +937,29 @@ export function ExploreScreenBody() {
   // own answer always wins where it has answered, and it is trusted only while the player is still near its coin.
   const provisionalTask = useMemo(() => provisionalPlay({ tasks: visibleTasks, here: location, askedAt: rangeAskedAt,
     failed: failedTaskIds, tickets: player?.tickets ?? 0 }), [visibleTasks, location?.latitude, location?.longitude, rangeAskedAt, failedTaskIds, player?.tickets]); // eslint-disable-line react-hooks/exhaustive-deps
+  // PLAY! plays the coin the guest chose (Ride Parts bug 1): the tapped island, else their own pick, when they stand
+  // in its range. With none chosen and two or more coins in range, PLAY! waits and the card asks "Which coin?".
+  const playChoice = useMemo(() => choosePlayCoin({ tasks: visibleTasks, here: location, failed: failedTaskIds,
+    chosenIds: [selectedTask?.id, guidePlan] }),
+    [visibleTasks, location?.latitude, location?.longitude, failedTaskIds, selectedTask?.id, guidePlan]); // eslint-disable-line react-hooks/exhaustive-deps
+  const playChoiceIdsRef = useRef<readonly number[]>([]);
+  playChoiceIdsRef.current = playChoice.choices.map(task => task.id);
   const activeRedeemable = useMemo<CurrentRedeemableType | undefined>(() => {
-    if (playAnswerNear(rangeAnswer, location)) return rangeAnswer;
+    const answerNear = playAnswerNear(rangeAnswer, location);
+    const chosen = playChoice.play;
+    if (chosen) {
+      // The server answered for the same coin: its fuller copy (free try fields, the game it deals).
+      if (answerNear && rangeAnswer?.type === 'task' && rangeAnswer.model.id === chosen.id) return rangeAnswer;
+      return { type: 'task', provisional: true,
+        model: { ...chosen, coin_url: chosen.coin_url || coinArtCache.get(chosen.id) || '' } } as unknown as CurrentRedeemableType;
+    }
+    // Two or more ride coins here and none chosen: no PLAY! for a coin the guest did not pick.
+    if (playChoice.choices.length > 1 && (!answerNear || rangeAnswer?.type === 'task')) return undefined;
+    if (answerNear) return rangeAnswer;
     if (!provisionalTask) return undefined;
     return { type: 'task', provisional: true,
       model: { ...provisionalTask, coin_url: provisionalTask.coin_url || coinArtCache.get(provisionalTask.id) || '' } } as unknown as CurrentRedeemableType;
-  }, [rangeAnswer, provisionalTask, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [rangeAnswer, provisionalTask, playChoice, location?.latitude, location?.longitude]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Rides that open later today rest on the map with "Back 2:00 PM" instead of vanishing.
   const restingTasks = useMemo(() => (redeemables?.tasks ?? []).filter(task => {
@@ -1307,6 +1327,7 @@ export function ExploreScreenBody() {
     // once PLAY! is drawn.
     playableTaskId: playRideShown ? playableTaskId : null,
     adventureGate, activeRedeemable, refreshPlayer, parkWins, redeemFlowOpen, parkLoaded, homeLocationConfirmed, setSelectedTask,
+    playChoices: playChoice.choices.length,
   });
   // NEAR ME rows wear each coin's own art: today's map list carries none, so the trip goal's ride list supplies it.
   const nearMeTasks = useMemo(() => {
@@ -1725,6 +1746,8 @@ export function ExploreScreenBody() {
       // The arrive card's OK: the welcome is read.
       case 'ok': nextCoin.finishArrive(); return;
       case 'near_me': setNearMe({ canPlay: false }); return;
+      // "Which coin?": only the coins in range, one equal row each; the row the guest taps is the coin PLAY! plays.
+      case 'which_coin': setNearMe({ canPlay: false, only: playChoiceIdsRef.current }); return;
       case 'get_tickets':
         // Merged with app-tickets (Nov 20): their Get Tickets panel lives on the coin card a player is short at (it needs
         // that coin's price); this top card names no coin, so it lists the free ways plainly, the arcade park gift included.
@@ -2188,8 +2211,10 @@ export function ExploreScreenBody() {
         {statusEntries.length > 0 && <MapStatusStack entries={statusEntries} compact={!bossMap.moment && !receiptNeedsCheck} />}
         {/* Fix w4 T101: a Ticket grant with no card of its own (the park day starter) flies to the header with its reason. */}
         {/* It waits for a settled map with Finn done (a first open's warm-up comes first, the grant right after). */}
+        {/* The grant's toast sits just over the footer, where PLAY! and its caption stand: it waits while PLAY! is up, so
+            it never covers PLAY!'s caption (the map's one layout owner, mapChrome: nothing over a button). */}
         <TicketGrantMoment calm={mapFocused && mapCalm && !finnOwnsMap && !mapCovered && !redeemFlowOpen && !retentionOccluding
-          && !showPrepItemModal && !bossOpen && !showTooFarModal && !showCommunityCenterModal} />
+          && !showPrepItemModal && !bossOpen && !showTooFarModal && !showCommunityCenterModal && !playRideShown} />
         {/* Shark Events (after their rung): the sweep and the gain toast sit under the guide card, never over it or PLAY!. */}
         {player && liveEvt.event && eventsShown && <>
           <View pointerEvents="none" style={[StyleSheet.absoluteFill, { overflow: 'hidden', zIndex: 37 }]}><FrenzySweep event={liveEvt.event} /></View>
@@ -2209,16 +2234,6 @@ export function ExploreScreenBody() {
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null}
           lineOffer={nextCoin.lineOffer ?? calloutLineOffer(queueRide, selectedTask?.id ?? null, nextCoin.target?.taskId ?? null, nextCoin.state)} />}
-        {player && <NearMeSheet visible={!!nearMe} canPlayFirst={nearMe?.canPlay ?? false} playerId={player.id}
-          parkName={park.name ? parkLabel(park) : null} tasks={nearMeTasks} ownedTaskIds={nearMeOwned} here={location ?? null}
-          live={livePark} tickets={player.tickets ?? 0} onClose={() => setNearMe(null)}
-          onPick={taskId => {
-            setNearMe(null);
-            guide.setTarget(taskId, 'near_me');
-            const task = visibleTasks.find(t => t.id === taskId);
-            if (task) setSelectedTask(task);
-            setGuidePathRequest(n => n + 1);
-          }} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}
@@ -2353,6 +2368,19 @@ export function ExploreScreenBody() {
           the header and footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
       <MapLaunchCover variant="sky" blockTouches style={SKY_COVER_STYLE} />
 
+      {/* NEAR ME and "Which coin?": drawn at the screen's root like the other sheets, so the sheet sits on the window's
+          bottom edge (inside the park map's view it was pushed 116 pt down and its last rows were off screen). */}
+      {player && park && <NearMeSheet visible={!!nearMe} canPlayFirst={nearMe?.canPlay ?? false} playerId={player.id}
+        onlyTaskIds={nearMe?.only ?? null}
+        parkName={park.name ? parkLabel(park) : null} tasks={nearMeTasks} ownedTaskIds={nearMeOwned} here={location ?? null}
+        live={livePark} tickets={player.tickets ?? 0} onClose={() => setNearMe(null)}
+        onPick={taskId => {
+          setNearMe(null);
+          guide.setTarget(taskId, 'near_me');
+          const task = visibleTasks.find(t => t.id === taskId);
+          if (task) setSelectedTask(task);
+          setGuidePathRequest(n => n + 1);
+        }} />}
       {/* Community Center Modal */}
       {lateOverlays && <CommunityCenterModal
         visible={showCommunityCenterModal}
