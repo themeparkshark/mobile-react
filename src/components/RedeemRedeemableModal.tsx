@@ -441,7 +441,12 @@ export default function RedeemRedeemableModal({
   const freeStep = outOfTickets && stepReady ? challengeNextStep(wallet) : null;
   const freeSteps = outOfTickets && stepReady ? challengeFreeSteps(wallet) : [];
   const playsNow = !outOfTickets || freeStep?.kind === 'free_try' || freeStep?.kind === 'extra_try';
-  const needTicket = outOfTickets && stepReady && (freeStep?.kind === 'line_ticket' || freeStep?.kind === 'treats');
+  const arcade = useArcadeEconomy();
+  // T7 (arcade plan): short on Tickets the card is Get Tickets, claim included as its first row. Only a held Extra try
+  // (it still pays for one try until it turns into Tickets) keeps its own PLAY!.
+  const needTicket = outOfTickets && stepReady && (arcade
+    ? freeStep?.kind !== 'free_try' && freeStep?.kind !== 'extra_try'
+    : freeStep?.kind === 'line_ticket' || freeStep?.kind === 'treats');
   const needCopy = needTicketCopy(queueTicketsOn, !!redeemable?.rescue_pass_used_today);
   const rideRewardTask = isTaskType ? redeemable.model as TaskType | SecretTaskType : null;
   // Before coin levels open the card promises Shark Coins only. From rung 3 a coin already on the shelf
@@ -1051,7 +1056,6 @@ export default function RedeemRedeemableModal({
 
   // T4 (arcade plan, Nov 20 2026): a Ticket is spent win or lose. No VIP try, no ad try, no free retry the app
   // offers on its own: only a Ticket today's server really gave back (first_coin_ticket_returned) plays free.
-  const arcade = useArcadeEconomy();
   // T6 (arcade plan): round 1 starting on screen is the began mark. A first meeting with a game shows its how-to card
   // first (MiniGameSelector), so whether one is ahead is read before the game goes live; then the mark waits for the
   // kid's first touch on the game (the card's own START), so shutting the app on the how-to card leaves the try unbegun.

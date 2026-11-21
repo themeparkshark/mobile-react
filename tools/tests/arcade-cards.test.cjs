@@ -148,3 +148,8 @@ test('T8 the treat meter fills to a Ticket in the jar; a full jar pays Shark Coi
   assert.match(read('src/components/PrepItemRedeemModal.tsx'), /\{jar && <View style=\{\{ marginTop: 10 \}\}><TreatJar model=\{jar\} reduced=\{reducedMotion\} \/><\/View>\}/);
   assert.match(read('src/screens/ExploreScreen/HomeCatchMoment.tsx'), /setJar\(data\.replayed \? null : treatJarModel\(data as unknown as TreatJarAnswer\)\);/);
 });
+
+test('T7 on the arcade server a short card is Get Tickets (the stamp claim is its first row); a held Extra try keeps its PLAY!', () => {
+  const modal = read('src/components/RedeemRedeemableModal.tsx');
+  assert.match(modal, /const needTicket = outOfTickets && stepReady && \(arcade\n\s+\? freeStep\?\.kind !== 'free_try' && freeStep\?\.kind !== 'extra_try'\n\s+: freeStep\?\.kind === 'line_ticket' \|\| freeStep\?\.kind === 'treats'\);/);
+});
