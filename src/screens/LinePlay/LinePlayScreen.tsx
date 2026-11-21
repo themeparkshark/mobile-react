@@ -1033,8 +1033,10 @@ export default function LinePlayScreen() {
     releaseRideStep();
     if (go.kind === 'level_up') { await handleOpenCoin(); return; }
     if (go.kind === 'shelf') { await handleOpenPark(); return; }
-    // Win this ride's coin: back to the map where the player stands at it (PLAY! rises there). The recap never moves
-    // the pointer (Dustin, Nov 20: no app pick).
+    // Win this ride's coin: back to the map where the player stands at it, and PLAY! plays this coin, not a neighbour
+    // (Ride Parts bug 1). The guest tapped GO on this ride's own coin, so it is their pick; the recap still never names
+    // another ride (Dustin, Nov 20: no app pick).
+    if (go.kind === 'win_coin' && go.taskId != null) guide.setTarget(go.taskId, 'lineplay_done');
     try {
       await session.complete();
       if (!session.snapshot().rewardsPending) await session.forgetCheckpoint();

@@ -8,12 +8,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import Modal from 'react-native-modal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { haptic } from '../../gamekit/Haptics';
 import useReducedGameMotion from '../../hooks/useReducedGameMotion';
 import { BRAND, GameIcon } from '../../ui';
 import TicketPips from '../tickets/TicketPips';
+import CalmModal from '../retention/CalmModal';
 import { cleanSort, nearMeLine, nearMeRows, nearMeSortKey, type NearMeInput, type NearMeRow, type NearMeSort } from './nearMeModel';
 
 const COIN_FALLBACK = require('../../../assets/images/coingold.png');
@@ -89,10 +89,11 @@ export default function NearMeSheet({ visible, playerId, parkName, tasks, ownedT
     return nearMeRows({ tasks: tasks.filter(task => only.has(task.id)), ownedTaskIds: NO_OWNED, here, live, tickets, sort: 'az', canPlayOnly: false });
   }, [visible, which, onlyTaskIds, tasks, ownedTaskIds, here?.latitude, here?.longitude, live, tickets, sort, canPlayOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <Modal isVisible={visible} onBackdropPress={onClose} onBackButtonPress={onClose} onSwipeComplete={onClose}
-    style={styles.modal} backdropColor={BRAND.navy} backdropOpacity={0.3} useNativeDriver hideModalContentWhileAnimating
-    animationIn={reduced ? 'fadeIn' : 'slideInUp'} animationOut={reduced ? 'fadeOut' : 'slideOutDown'}
-    backdropTransitionInTiming={reduced ? 0 : 180} backdropTransitionOutTiming={reduced ? 0 : 180}>
+  // CalmModal (the reward cards' host), not react-native-modal: drawn from the map's view, react-native-modal's sheet sat
+  // 116 pt below the window's bottom edge (the map's own top), so its last rows were off screen.
+  return <CalmModal visible={visible} reducedMotion={reduced} fullBleed fadeOnly backdropColor={BRAND.navy} backdropOpacity={0.3}
+    onBackdropPress={onClose} onBackButtonPress={onClose}>
+    <View style={styles.bottom} pointerEvents="box-none">
     <View testID="near-me-sheet" style={[styles.sheet, { paddingBottom: Math.max(12, insets.bottom) }]}>
       <View style={styles.header}>
         <GameIcon name="map" size={26} />
@@ -122,11 +123,12 @@ export default function NearMeSheet({ visible, playerId, parkName, tasks, ownedT
           <Text style={styles.emptyText} maxFontSizeMultiplier={1.3}>{canPlayOnly ? 'No coin here fits your Tickets yet' : 'Every coin here is on your shelf!'}</Text>
         </View>} />
     </View>
-  </Modal>;
+    </View>
+  </CalmModal>;
 }
 
 const styles = StyleSheet.create({
-  modal: { justifyContent: 'flex-end', margin: 0 },
+  bottom: { flex: 1, justifyContent: 'flex-end' },
   sheet: { maxHeight: '82%', backgroundColor: BRAND.cream, borderTopLeftRadius: 30, borderTopRightRadius: 30, borderWidth: 3,
     borderColor: BRAND.white, overflow: 'hidden' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 18, paddingRight: 8, backgroundColor: BRAND.blueBright, minHeight: 56 },

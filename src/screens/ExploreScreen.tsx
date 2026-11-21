@@ -2232,17 +2232,6 @@ export function ExploreScreenBody() {
           teachPlay={!hasWonACoin} slam={adventureMoment.slam} onSlamDone={adventureMoment.markSeen}
           adventureTab={nextCoin.adventureTab && adventure && tripGoalData ? adventureTabProps : null}
           lineOffer={nextCoin.lineOffer ?? calloutLineOffer(queueRide, selectedTask?.id ?? null, nextCoin.target?.taskId ?? null, nextCoin.state)} />}
-        {player && <NearMeSheet visible={!!nearMe} canPlayFirst={nearMe?.canPlay ?? false} playerId={player.id}
-          onlyTaskIds={nearMe?.only ?? null}
-          parkName={park.name ? parkLabel(park) : null} tasks={nearMeTasks} ownedTaskIds={nearMeOwned} here={location ?? null}
-          live={livePark} tickets={player.tickets ?? 0} onClose={() => setNearMe(null)}
-          onPick={taskId => {
-            setNearMe(null);
-            guide.setTarget(taskId, 'near_me');
-            const task = visibleTasks.find(t => t.id === taskId);
-            if (task) setSelectedTask(task);
-            setGuidePathRequest(n => n + 1);
-          }} />}
         {/* Today's Adventure: its sheet stays for the stamps and the souvenir, opened from the guide card on its ride. */}
         {adventure && tripGoalData && player && <AdventureTicketCard key={`adventure-${player.id}-${park.id}-${adventure.id}`} sheetOnly
           openRequest={adventureSheetRequest} celebrateRequest={adventureCelebrateRequest}
@@ -2377,6 +2366,19 @@ export function ExploreScreenBody() {
           the header and footer), so a kid sees one loading bar finish, then the map and its buttons in one fade. */}
       <MapLaunchCover variant="sky" blockTouches style={SKY_COVER_STYLE} />
 
+      {/* NEAR ME and "Which coin?": drawn at the screen's root like the other sheets, so the sheet sits on the window's
+          bottom edge (inside the park map's view it was pushed 116 pt down and its last rows were off screen). */}
+      {player && park && <NearMeSheet visible={!!nearMe} canPlayFirst={nearMe?.canPlay ?? false} playerId={player.id}
+        onlyTaskIds={nearMe?.only ?? null}
+        parkName={park.name ? parkLabel(park) : null} tasks={nearMeTasks} ownedTaskIds={nearMeOwned} here={location ?? null}
+        live={livePark} tickets={player.tickets ?? 0} onClose={() => setNearMe(null)}
+        onPick={taskId => {
+          setNearMe(null);
+          guide.setTarget(taskId, 'near_me');
+          const task = visibleTasks.find(t => t.id === taskId);
+          if (task) setSelectedTask(task);
+          setGuidePathRequest(n => n + 1);
+        }} />}
       {/* Community Center Modal */}
       {lateOverlays && <CommunityCenterModal
         visible={showCommunityCenterModal}

@@ -129,3 +129,15 @@ test('P1 wiring: the map passes the tapped island and the pick into choosePlayCo
   assert.match(explore, /playChoices: playChoice\.choices\.length/);
   assert.match(read('src/components/guide/NearMeSheet.tsx'), /WHICH COIN\?/);
 });
+
+test('P1: the LinePlay recap GO on this ride\'s own coin makes it the guest\'s pick, so PLAY! plays it (never a neighbour)', () => {
+  const screen = read('src/screens/LinePlay/LinePlayScreen.tsx');
+  assert.match(screen, /if \(go\.kind === 'win_coin' && go\.taskId != null\) guide\.setTarget\(go\.taskId, 'lineplay_done'\);/);
+  assert.doesNotMatch(screen, /setTarget\([^)]*'lineplay_recap'\)/);
+});
+
+test('P1: NEAR ME and "Which coin?" are hosted by CalmModal at the window\'s bottom edge (react-native-modal sat 116 pt low)', () => {
+  const sheet = read('src/components/guide/NearMeSheet.tsx');
+  assert.match(sheet, /<CalmModal visible=\{visible\}/);
+  assert.doesNotMatch(sheet, /from 'react-native-modal'/);
+});
