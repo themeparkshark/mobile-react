@@ -173,7 +173,7 @@ test('C2: the top card, state by state (PLAN section 6); never "Next coin", "Fir
 
   const all = [arrive, nothing, walk, here, inLine, resting, empty, back, claim]
     .flatMap(c => [c.kicker, c.title, c.line, c.a11y, c.button?.label]).filter(Boolean).join(' | ');
-  assert.doesNotMatch(all, /Next coin|NEXT COIN|First coin|Then:|glowing|follow the path|one Ticket per|—/i);
+  assert.doesNotMatch(all, /Next coin|NEXT COIN|First coin|Then:|glowing|follow the path|one Ticket per|\u2014/i);
   // Dates in words, never a countdown; distances rounded.
   assert.equal(C.leavesLine('2026-10-31'), 'leaves Saturday, Oct 31');
   assert.equal(C.leavesLine('soon'), null);
