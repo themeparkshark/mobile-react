@@ -1632,7 +1632,8 @@ export default function LinePlayScreen() {
               entranceWaitMinutes={snapshot.entranceWaitMinutes}
               entranceWaitObservedAt={snapshot.entranceWaitObservedAt}
               entranceWaitChangeMinutes={snapshot.entranceWaitChangeMinutes}
-              elapsedSeconds={clock.elapsedSeconds}
+              // P9: 'In line N min' is the time the server counted while Parts are tracked, never wall time.
+              elapsedSeconds={rewards.tracking ? clock.verifiedEligibleSeconds : clock.elapsedSeconds}
               rewardTrackingAvailable={rewards.tracking}
               rewardUnavailable={rewards.unavailable}
               rewardConnectionIssue={snapshot.rewardConnectionIssue}
