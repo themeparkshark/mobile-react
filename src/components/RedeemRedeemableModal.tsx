@@ -1721,8 +1721,6 @@ export default function RedeemRedeemableModal({
                 taskName={taskName}
                 preferredGame={selectedGame}
                 attemptSeed={attemptRef.current?.seed}
-                // The began mark at the game's own GO (app-parts round-start), so a how-to card is never the start.
-                onRoundStart={sendBegan}
                 rewardMode="task-attempt"
                 // T060 (play-teach): the coin being played for, so the game's HUD shows its own coin art.
                 coinImageUrl={coinUri ?? undefined}
@@ -1735,6 +1733,8 @@ export default function RedeemRedeemableModal({
                 triviaDeal={attemptRef.current?.trivia ?? null}
                 onClose={onGameLose}
                 onComplete={onGameWin}
+                // The began mark at the game's own GO (app-parts round-start), so a how-to card is never the start.
+                onRoundStart={sendBegan}
               />
               </RideChallengeContext.Provider>
             </View>
