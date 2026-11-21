@@ -105,6 +105,11 @@ export default function useMapGuide(input: MapGuideInput) {
     ...freeTrySignal({ dailyOn: guideFlags.ride_rescue_pass === true, heldPasses: player.rescue_passes, playUp, usedTodayHere }),
   }) : null, [player, guideFlags, claimable.loaded, claimable.sources, playUp, usedTodayHere]);
   const rushTaskIds = useMemo(() => new Set(rushes.map(pick => pick.task.id)), [rushes]);
+  // The park's whole shelf (every coin here, owned or not) for the card's "9 of 40 coins".
+  const parkShelf = useMemo(() => {
+    const here = (tripGoalData?.rides ?? []).filter(ride => ride && ride.park_id === park?.id);
+    return here.length ? { won: here.filter(ride => ride.coin_owned).length, total: here.length } : null;
+  }, [tripGoalData?.rides, park?.id]);
   // The guide picks its first coin once the islands, the live feed and today's Adventure are in (or
   // GUIDE_DATA_WAIT_MS ran out: a missing feed never stalls it), so a half-loaded map never sets a
   // target that would then hold.
@@ -152,6 +157,7 @@ export default function useMapGuide(input: MapGuideInput) {
     freeTryDaily: guideFlags.ride_rescue_pass === true,
     arcade: guideFlags.arcade_economy === true,
     parkGiftTickets: guideFlags.arcade_economy === true ? park?.welcome_tickets_granted ?? null : null,
+    shelf: parkShelf,
   });
   const guideShown = !!player && !!park;
   // Really at the park: in park mode AND within reach of one of its coins (or no reading yet). The place

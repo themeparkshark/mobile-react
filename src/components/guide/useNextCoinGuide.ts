@@ -77,6 +77,8 @@ export interface NextCoinGuideInput {
   readonly arcade?: boolean;
   /** Tickets this park check-in paid as the park day gift (the park answer's welcome_tickets_granted), or null. */
   readonly parkGiftTickets?: number | null;
+  /** The park's whole shelf from the trip goal's ride list (every coin here, owned or not), when it has answered. */
+  readonly shelf?: { readonly won: number; readonly total: number } | null;
 }
 
 export interface NextCoinGuide {
@@ -327,8 +329,11 @@ export default function useNextCoinGuide(raw: NextCoinGuideInput): NextCoinGuide
   const replacedName = replacedBy && answers[replacedBy.taskId] === 'closed' ? replacedBy.name : null;
   // The park's shelf: coins won here of every coin here (today's map plus the shelf's owned list), and the next shelf
   // gift while the arcade economy pays one. The card names no ride with it.
-  const shelfBar = shelfBarFor({ won: coins.filter(coin => coin.owned).length,
-    total: new Set([...coins.map(coin => coin.taskId), ...(input.ownedTaskIds ?? [])]).size, arcade: input.arcade === true });
+  // The trip goal's ride list is the whole shelf (today's map list can leave won or resting coins out); the map's own
+  // count stands in until it answers.
+  const shelfBar = shelfBarFor({ won: input.shelf?.won ?? coins.filter(coin => coin.owned).length,
+    total: input.shelf?.total ?? new Set([...coins.map(coin => coin.taskId), ...(input.ownedTaskIds ?? [])]).size,
+    arcade: input.arcade === true });
   const targetTaskForPrice = shown ? input.tasks.find(task => task.id === shown.taskId) ?? null : null;
   const copy = oneGoldButton(restingSightCopy(guideCardCopy(state, shown, {
     parkName: input.parkName, ridesResting, allOwned, outOfReach,

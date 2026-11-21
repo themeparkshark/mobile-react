@@ -372,3 +372,11 @@ test('C9: Today\'s Adventure starts on any coin; Star Day is every coin or none;
   const R = loadTs('src/components/nextUp/nextUpRoute.ts');
   assert.equal(R.nextUpRoute({ type: 'ride' }).kind, 'map');
 });
+
+test('C2: the card\'s "9 of 40 coins" counts the whole shelf from the trip goal, so it never jumps as the map list changes', () => {
+  const hook = read('src/components/guide/useNextCoinGuide.ts');
+  assert.match(hook, /won: input\.shelf\?\.won \?\? coins\.filter\(coin => coin\.owned\)\.length,/);
+  const map = read('src/components/guide/useMapGuide.ts');
+  assert.match(map, /const here = \(tripGoalData\?\.rides \?\? \[\]\)\.filter\(ride => ride && ride\.park_id === park\?\.id\);/);
+  assert.match(map, /shelf: parkShelf,/);
+});
