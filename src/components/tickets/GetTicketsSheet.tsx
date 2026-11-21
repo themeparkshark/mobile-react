@@ -6,7 +6,7 @@
  * One host, mounted by the map (RedeemModal). Drawn on a real anchor view so it always opens centered (P13).
  */
 import { useCallback, useContext, useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import Modal from 'react-native-modal';
 import { AuthContext } from '../../context/AuthProvider';
 import { getTicketSources, type TicketSources } from '../../api/endpoints/me/task-attempts';
@@ -101,6 +101,8 @@ export default function GetTicketsSheet({ atPark }: { readonly atPark: boolean }
         hideModalContentWhileAnimating
       >
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
+          {/* A tap beside the card closes it (the scroll view covers the backdrop). */}
+          <Pressable accessible={false} style={StyleSheet.absoluteFill} onPress={closeGetTickets} />
           <View style={styles.card} testID="get-tickets-sheet">
             <GetTicketsPanel price={null} tickets={tickets} have={ways.have} rows={ways.rows} footer={ways.footer}
               busy={claiming ? 'claim' : null} onRow={onRow} />

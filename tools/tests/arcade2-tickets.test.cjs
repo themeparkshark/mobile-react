@@ -16,6 +16,8 @@ test('P13 the unwon coin card is anchored on a real view, so it opens centered f
   // It can always be closed: the backdrop, a swipe and Not now (or Got It!) all close it.
   assert.match(src, /onBackdropPress=\{\(\) => setVisible\(false\)\}/);
   assert.match(src, /onSwipeComplete=\{\(\) => setVisible\(false\)\}/);
+  // The scroll view fills the sheet and would swallow a backdrop tap: a layer behind the card closes it.
+  assert.match(src, /<Pressable testID="unfound-coin-outside" accessible=\{false\} style=\{StyleSheet\.absoluteFill\} onPress=\{\(\) => setVisible\(false\)\} \/>\n\s+<View style=\{\{ alignItems: 'center', width: '85%', zIndex: 10 \}\}>/);
   assert.match(src, />Not now</);
   assert.match(src, /text="Got It!" onPress=\{\(\) => setVisible\(false\)\}/);
 });

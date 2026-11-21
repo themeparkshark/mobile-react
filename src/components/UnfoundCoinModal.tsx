@@ -162,6 +162,9 @@ export default function UnfoundCoinModal({ task, isSecret = false, isArchived = 
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1,
           alignItems: 'center', justifyContent: 'center', paddingVertical: 20 }}
           showsVerticalScrollIndicator={false}>
+          {/* P13: the scroll view fills the sheet, so a tap beside the card lands here, never on the backdrop under
+              it. This layer behind the card closes it, like the backdrop. */}
+          <Pressable testID="unfound-coin-outside" accessible={false} style={StyleSheet.absoluteFill} onPress={() => setVisible(false)} />
           <View style={{ alignItems: 'center', width: '85%', zIndex: 10 }}>
             <Ribbon text={copy.ribbon} />
 
