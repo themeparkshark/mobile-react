@@ -276,7 +276,7 @@ test('the dev preview runs one clock for the card and its hero', () => {
   // Read once per render, so the card and the hero cannot be a tick apart.
   assert.equal((screen.match(/shownClock\(snapshot\)/g) ?? []).length, 1, 'one shownClock read per render');
   assert.match(screen, /const clock = shownClock\(snapshot\);/);
-  assert.equal((screen.match(/elapsedSeconds=\{clock\.elapsedSeconds\}/g) ?? []).length, 2, 'card and hero share one clock');
+  assert.equal((screen.match(/elapsedSeconds=\{lineSeconds\}/g) ?? []).length, 2, 'card and hero share one clock');
   assert.match(screen, /verifiedEligibleSeconds=\{clock\.verifiedEligibleSeconds\}/);
   assert.match(screen, /verifiedPresenceAt=\{clock\.verifiedPresenceAt\}/);
   assert.equal((screen.match(/creditedParts=\{clock\.creditedParts\}/g) ?? []).length, 2, 'and one Parts count');

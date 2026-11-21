@@ -1562,6 +1562,8 @@ export default function LinePlayScreen() {
   const clock = shownClock(snapshot);
   const wait = shownWait(snapshot);
   const rewards = shownRewards(snapshot, ride);
+  // P9: the card's and the hero's 'In line N min' are the time the server counted while Parts are tracked, never wall time.
+  const lineSeconds = rewards.tracking ? clock.verifiedEligibleSeconds : clock.elapsedSeconds;
   // The first-wait line says what the card shows: never "powers this coin" beside "No Parts here".
   const introLine = introLineOn && snapshot.state === 'active' ? LINEPLAY_INTRO_LINE[linePartsState(rewards)] : null;
 
@@ -1632,8 +1634,7 @@ export default function LinePlayScreen() {
               entranceWaitMinutes={snapshot.entranceWaitMinutes}
               entranceWaitObservedAt={snapshot.entranceWaitObservedAt}
               entranceWaitChangeMinutes={snapshot.entranceWaitChangeMinutes}
-              // P9: 'In line N min' is the time the server counted while Parts are tracked, never wall time.
-              elapsedSeconds={rewards.tracking ? clock.verifiedEligibleSeconds : clock.elapsedSeconds}
+              elapsedSeconds={lineSeconds}
               rewardTrackingAvailable={rewards.tracking}
               rewardUnavailable={rewards.unavailable}
               rewardConnectionIssue={snapshot.rewardConnectionIssue}
@@ -1670,7 +1671,7 @@ export default function LinePlayScreen() {
                 waitScreen={snapshot.waitScreen}
                 creditedParts={clock.creditedParts}
                 bonusParts={snapshot.bonus?.slots.filter(slot => slot.state === 'claimed').length ?? 0}
-                elapsedSeconds={clock.elapsedSeconds}
+                elapsedSeconds={lineSeconds}
                 plannedWaitMinutes={wait.plannedWaitMinutes}
                 waitSource={wait.waitSource}
                 playerEnergy={player?.energy ?? null}

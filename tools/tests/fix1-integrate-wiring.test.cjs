@@ -36,7 +36,8 @@ test('P2: shelf PLAY IN LINE opens the coin\'s own ride by coin id; Wait Times r
 
 test('P9: the wait card\'s In line minutes are the counted seconds while Parts are tracked', () => {
   const src = read('src/screens/LinePlay/LinePlayScreen.tsx');
-  assert.match(src, /elapsedSeconds=\{rewards\.tracking \? clock\.verifiedEligibleSeconds : clock\.elapsedSeconds\}/);
+  assert.match(src, /const lineSeconds = rewards\.tracking \? clock\.verifiedEligibleSeconds : clock\.elapsedSeconds;/);
+  assert.equal((src.match(/elapsedSeconds=\{lineSeconds\}/g) ?? []).length, 2, 'the card and the hero');
 });
 
 test('P18: a top level coin is never the shelf LEVEL UP GOAL and its slot never says level it up', () => {
