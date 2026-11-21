@@ -336,7 +336,7 @@ test('the screens wire the one ride question', () => {
   // The boarding ask uses the ride step's words, once per wait, and counts as the ride question.
   assert.match(screen, /title="Did you get to the ride\?"/);
   // Ride Parts bug 21: three true answers, I rode it, I left the line, Still in line.
-  assert.match(screen, /\{ text: 'I rode it' \},\n\s+\{ text: 'I left the line', variant: 'secondary' \},\n\s+\{ text: 'Still in line', style: 'cancel', variant: 'secondary' \},/);
+  assert.match(screen, /\{ text: 'I left the line', variant: 'secondary' \},\n\s+\{ text: 'I rode it' \},\n\s+\{ text: 'Still in line', style: 'cancel', variant: 'secondary' \},/);
   assert.match(screen, /if \(boardingAsked\.current === waitKey\) return;/);
   assert.match(screen, /noteRidePrompt\(\);\n[^\n]*\n\s+const boardedAt = detection\.boardedAt \?\? detection\.exitedAt;\n\s+session\.suggestBoarded\(/);
   // "Line done?" with its seconds countdown is gone: leaving ends quietly, the card keeps RESUME, the recap offers Undo.

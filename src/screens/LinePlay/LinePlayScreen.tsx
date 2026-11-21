@@ -137,8 +137,8 @@ const WELCOME_BACK_AFTER_MS = 20_000;
 const GAMES_DONE: readonly number[] = [0];
 const RODE_OR_LEFT: readonly number[] = [0, 1];
 /** The ride question's answers, in button order (Ride Parts bug 21). */
-const RIDE_Q_RODE = 0;
-const RIDE_Q_LEFT = 1;
+const RIDE_Q_LEFT = 0;
+const RIDE_Q_RODE = 1;
 /** The longest the "Saving your wait" card waits for the recap's rewards and GO before the recap opens anyway. */
 const RECAP_SETTLE_MAX_MS = 6000;
 /** The longest the resume countdown waits on the 1 for the arcade or the page it is handing over to. */
@@ -2179,9 +2179,10 @@ export default function LinePlayScreen() {
         haptic="none"
         // Ride Parts bug 21: three true answers. I RODE IT logs the ride; I LEFT THE LINE ends the wait with no ride
         // logged and the Parts kept; STILL IN LINE goes back to the wait (and ends it quietly after 4 minutes away).
+        // The dialog stacks its main action on top: I RODE IT, then I LEFT THE LINE, then STILL IN LINE.
         buttons={[
-          { text: 'I rode it' },
           { text: 'I left the line', variant: 'secondary' },
+          { text: 'I rode it' },
           { text: 'Still in line', style: 'cancel', variant: 'secondary' },
         ]}
         // "I rode it" and "I left the line" end the wait at the tap, and the dialog fades only once the recap's hero is
