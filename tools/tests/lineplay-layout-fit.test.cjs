@@ -668,7 +668,7 @@ test('one word for one idea in VoiceOver: clues found everywhere, and the coin c
   assert.ok(nouns.length >= 6);
   assert.deepEqual([...new Set(nouns)], ['clues found']);
   const stage = read('src/screens/LinePlay/components/waitscreen/WaitCoinStage.tsx');
-  assert.match(stage, /accessibilityLabel=\{showCount \? progress\.label : label\}/);
+  assert.match(stage, /accessibilityLabel=\{canLevel \? 'Level up\. Shows what it costs\.' : showCount \? progress\.label : label\}/);
 });
 
 test('paused, the chapter PLAY and clue buttons are never a dead tap: one tap runs the 3 2 1, then that page opens', () => {

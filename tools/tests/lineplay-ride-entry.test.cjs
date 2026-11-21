@@ -6,8 +6,19 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../..');
 const ts = require(path.join(root, 'node_modules/typescript'));
 
+function loadPlain(file) {
+  const output = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
+    fileName: file,
+  }).outputText;
+  const moduleRef = { exports: {} };
+  vm.runInNewContext(output, { module: moduleRef, exports: moduleRef.exports }, { filename: file });
+  return moduleRef.exports;
+}
+
 function loadResolver(getRides, now = () => Date.now()) {
   const file = 'src/services/lineplay/resolveRide.ts';
+  const coinIndex = loadPlain('src/services/lineplay/coinRideIndex.ts');
   const output = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
     fileName: file,
@@ -21,6 +32,7 @@ function loadResolver(getRides, now = () => Date.now()) {
       if (name === '../../api/endpoints/rides') return { getRides };
       if (name === '../../constants/queueRideTypes') return { QUEUE_RIDE_TYPES: ['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride'] };
       if (name === './lineZone') return require('./helpers/lineplay-zone.cjs');
+      if (name === './coinRideIndex') return coinIndex;
       throw new Error(`Unexpected dependency: ${name}`);
     },
   }, { filename: file });
@@ -229,4 +241,61 @@ test('a queue story never fails: no catalog match or no catalog at all plays the
   assert.equal(offline.rideName, 'Mr. Lincoln');
   const unnamed = await down.resolveQueueStoryContext(8, 0, 'Some Ride');
   assert.equal(unnamed.rideId, 0);
+});
+
+// P2 (RIDE_PARTS_BUGS 9): every LinePlay door finds the ride by the coin id or the wait feed id, never by a name.
+// The fixture is the :8012 catalog (rides with task_id and metadata.themeparks_id, and each park's coins) on Nov 20.
+const catalog = require('./fixtures/parts-ride-catalog.json');
+const QUEUE = new Set(['attraction', 'coaster', 'dark_ride', 'flat_ride', 'water_ride']);
+const catalogResolver = () => loadResolver(async parkId => catalog.parks[parkId].rides.map(ride => ({
+  ...ride, image_url: null, metadata: ride.themeparks_id ? { themeparks_id: ride.themeparks_id } : null,
+})));
+const queueCoins = () => Object.entries(catalog.parks).flatMap(([parkId, park]) => {
+  const coins = new Map(park.coins.map(coin => [coin.id, coin]));
+  return park.rides.filter(ride => ride.task_id && QUEUE.has(ride.type) && coins.has(ride.task_id))
+    .map(ride => ({ parkId: Number(parkId), ride, coin: coins.get(ride.task_id), coins: park.coins }));
+});
+
+test('P2: every queue coin in all 7 parks opens its own ride by coin id, whatever the names say', async () => {
+  const rows = queueCoins();
+  assert.ok(rows.length >= 133, `queue coins in the fixture: ${rows.length}`);
+  const resolver = catalogResolver();
+  const misses = [];
+  for (const { parkId, ride, coin } of rows) {
+    const byCoin = await resolver.resolveCoinRideContext(parkId, coin);
+    const onMap = await resolver.resolveMapQueueContext(parkId, coin.name, coin.id);
+    if (byCoin.rideId !== ride.id || onMap?.rideId !== ride.id) misses.push(`${parkId} ${coin.name} -> ${byCoin.rideId}/${onMap?.rideId}, want ${ride.id}`);
+  }
+  assert.deepEqual(misses, []);
+});
+
+test('P2: the shelf passing only a coin name still resolves by that coin id once the shelf loaded', async () => {
+  const resolver = catalogResolver();
+  const before = await resolver.resolveRideContextOrOffline(2, "Buzz Lightyear's Space Ranger Spin");
+  for (const [parkId, park] of Object.entries(catalog.parks)) resolver.rememberParkCoins(Number(parkId), park.coins);
+  const misses = [];
+  for (const { parkId, ride, coin } of queueCoins()) {
+    const got = await resolver.resolveRideContextOrOffline(parkId, coin.name);
+    if (got.rideId !== ride.id) misses.push(`${parkId} ${coin.name} -> ${got.rideId}, want ${ride.id}`);
+  }
+  assert.deepEqual(misses, []);
+  // Buzz Lightyear (Magic Kingdom): the catalog row has a curly apostrophe; the name fallback folds it too.
+  assert.equal(before.rideId, 315);
+});
+
+test('P2: a wait-times row finds its ride by the feed id, so a holiday name still pays its coin', async () => {
+  const resolver = catalogResolver();
+  const misses = [];
+  for (const { parkId, ride } of queueCoins()) {
+    if (!ride.themeparks_id) continue;
+    const holiday = `Holiday ${ride.name} Jingle`;
+    const got = await resolver.resolveWaitRowRideContext(parkId, { id: ride.themeparks_id, name: holiday }, 25, 1);
+    const old = await resolver.resolveRideContextOrOffline(parkId, holiday, 25, 1, ride.themeparks_id);
+    const coin = await resolver.coinTasksByRideName(parkId, [{ id: ride.themeparks_id, name: holiday }]);
+    if (got.rideId !== ride.id || old.rideId !== ride.id || coin.get(holiday) !== ride.task_id) misses.push(`${parkId} ${ride.name}`);
+  }
+  assert.deepEqual(misses, []);
+  const jungle = await resolver.resolveWaitRowRideContext(2, { id: '796b0a25-c51e-456e-9bb8-50a324e301b3', name: 'Jingle Cruise' }, 30, 1);
+  assert.equal(jungle.rideId, 348);
+  assert.equal(jungle.lineRewardsReady, true);
 });

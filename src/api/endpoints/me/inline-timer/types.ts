@@ -130,6 +130,8 @@ export interface LineSessionResponse {
   signal: LineSignalSummary | null;
   bonus?: LineBonusSummary | null;
   wait_screen?: LineWaitScreenSummary | null;
+  /** Why this line pays no Parts (Nov 20 server): "coin_at_top" when the coin is at its top look. Absent: pays as usual. */
+  parts_stop?: 'coin_at_top' | null;
   /** Checkpoint crediting (L1). Absent or null while the server flag is off. */
   credit?: import('../../../../services/lineplay/checkpointCredit').ServerCreditSummary | null;
   park_project: import('../park-projects').ParkProject | null;

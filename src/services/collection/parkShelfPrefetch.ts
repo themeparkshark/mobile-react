@@ -17,6 +17,7 @@ import getVisitedPark from '../../api/endpoints/players/visited-parks/getPark';
 import type { ParkType } from '../../models/park-type';
 import type { SecretTaskType } from '../../models/secret-task-type';
 import type { TaskType } from '../../models/task-type';
+import { rememberParkCoins } from '../lineplay/coinRideIndex';
 
 export interface ParkShelfData {
   readonly visitedPark: ParkType;
@@ -48,8 +49,11 @@ export function fetchParkShelf(park: number, player: number): Promise<ParkShelfD
     getCompletedTasks(park, player), getCompletedSecretTasks(park, player),
     getArchivedTasks(park), getCompletedArchivedTasks(park, player),
     getLimitedTasks(park).catch(() => [] as TaskType[]),
-  ]).then(([visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited]) =>
-    ({ visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited }));
+  ]).then(([visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited]) => {
+    // LinePlay from this shelf finds each coin's ride by the coin's id (P2), even where a caller passes its name.
+    rememberParkCoins(park, [...available, ...completed, ...limited, ...archived, ...completedArchived]);
+    return { visitedPark, available, secret, completed, completedSecret, archived, completedArchived, limited };
+  });
 }
 
 /** Start loading a park shelf now (fire and forget). */

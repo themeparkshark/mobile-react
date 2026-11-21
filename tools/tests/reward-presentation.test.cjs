@@ -171,8 +171,8 @@ test('a coin that cannot power up offers its one next step, never a dead end', (
     '../share': {}, '../share/devDrive': { useDevAutoPress() {} }, '../share/handoff': { useModalHandoff: () => ({ handoff: async () => {}, onDismiss() {} }) },
     '../ui/modalLayers': {}, '../services/mapFlags': {},
   });
-  assert.equal(missingResourceAction(1, 40).label, 'Get 1 Ride Part');
-  assert.equal(missingResourceAction(3, 0).label, 'Get 3 Ride Parts');
+  assert.equal(missingResourceAction(1, 40).label, 'How to get Parts');
+  assert.equal(missingResourceAction(3, 0).label, 'How to get Parts', 'the way to earn them, never a gift (bug 27)');
   assert.equal(missingResourceAction(0, 15).label, 'Find 15 Energy');
   assert.equal(missingResourceAction(0, 0), null);
 });

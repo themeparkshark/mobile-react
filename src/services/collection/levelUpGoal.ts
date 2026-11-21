@@ -23,8 +23,8 @@ const emit = () => listeners.forEach(listener => {
 
 export const levelUpGoal = {
   /** Remember GET RIDE PARTS on this coin for this player (no player id: kept for nobody). */
-  set(taskId: number, playerId?: number | null): void {
-    if (!Number.isFinite(taskId)) return;
+  set(taskId: number, playerId?: number | null, atTop = false): void {
+    if (!Number.isFinite(taskId) || atTop) return;
     const who = playerId ?? null;
     if (goal === taskId && owner === who) return;
     goal = taskId;
@@ -35,9 +35,24 @@ export const levelUpGoal = {
   get(): number | null {
     return goal;
   },
-  /** The goal for the signed-in player only: another account, or no account, sees none. */
-  getFor(playerId: number | null | undefined): number | null {
-    return goal != null && playerId != null && owner === playerId ? goal : null;
+  /**
+   * The goal for the signed-in player only: another account, or no account, sees none. A coin at its top level is
+   * never a level-up goal (bug 29): pass isTop and the shelf reads none for it.
+   */
+  getFor(playerId: number | null | undefined, isTop?: (taskId: number) => boolean): number | null {
+    if (goal == null || playerId == null || owner !== playerId) return null;
+    return isTop?.(goal) ? null : goal;
+  },
+  /**
+   * A coin's level is known (its sheet opened, or it leveled up): at its top level it stops being the goal, wherever
+   * it got there (the shelf sheet or a level up in line).
+   */
+  noteLevel(taskId: number, level: number, maxLevel: number): void {
+    if (goal === taskId && Number.isFinite(level) && Number.isFinite(maxLevel) && level >= maxLevel) {
+      goal = null;
+      owner = null;
+      emit();
+    }
   },
   /** Forget it (after a level-up of that coin, or with no id for any coin). */
   clear(taskId?: number): void {

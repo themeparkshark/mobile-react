@@ -434,7 +434,7 @@ function shell(extra = {}) {
     './LinePlayMovementContext': { LinePlayMovementContext: { value: null }, shouldPauseForMovement: () => false },
     './RideChallengeContext': { RideChallengeContext: { value: false } },
     './ShellFrameContext': { ShellFrameContext: { value: null } },
-    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null }, RetryRoundContext: { value: 0 }, StageDealtContext: { value: true } },
+    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null }, RetryRoundContext: { value: 0 }, RoundStartContext: { value: null }, StageDealtContext: { value: true } },
     './Haptics': { Haptic: new Proxy({}, { get: () => () => {} }) }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => false },
     '../ui/GameIcon': { default: 'GameIcon' },

@@ -32,35 +32,51 @@ function levelSheet(props) {
     '../hooks/useReducedGameMotion': { default: () => true },
     '../helpers/haptics': { impactAsync() {}, notificationAsync() {}, ImpactFeedbackStyle: {}, NotificationFeedbackType: {} },
     '../constants/coinTiers': coinTiers,
+    '../services/collection/levelUpGoal': { levelUpGoal: { set() {}, clear() {}, noteLevel() {} } },
     ...progressionStubs,
-  }, { visible: true, rideCoin: { id: 13, ride_name: 'Jungle Cruise', current_level: 1, max_level: 5,
+  }, { visible: true, rideCoin: { id: 13, ride_id: 86, ride_name: 'Jungle Cruise', current_level: 1, max_level: 5,
     is_unlocked: true, parts_to_next_level: 3, energy_to_next_level: 10, next_level_perks: [], current_perks: [] },
   playerEnergy: 160, playerParts: 1, onClose() { closes.push(1); }, onLevelUp: async () => false, ...props });
-  const partsButton = () => view.find(node => node.type === './YellowButton' && /Ride Part/.test(node.props.text ?? ''));
+  const partsButton = () => view.find(node => node.type === './YellowButton' && /Parts/.test(node.props.text ?? ''));
   const modal = () => view.find(node => node.type === 'react-native-modal');
   return { view, partsButton, modal, closes };
 }
 
-test('GET RIDE PARTS at the park points the guide at the ride and starts the map on the press (must-fix 4, round 4)', () => {
-  let sent = 0;
-  const sheet = levelSheet({ onGetParts() { sent++; } });
-  assert.equal(sheet.partsButton().props.text, 'Get 2 Ride Parts');
+test('How to get Parts at the park with a line makes it the pick and opens its line (bug 27, P16)', () => {
+  let lines = 0, maps = 0;
+  const sheet = levelSheet({ onGetParts() { maps++; }, onPlayInLine() { lines++; } });
+  assert.equal(sheet.partsButton().props.text, 'How to get Parts');
   sheet.partsButton().props.onPress();
   assert.equal(sheet.closes.length, 1, 'the sheet closes');
-  assert.equal(sent, 1, 'the map starts sliding in under the 90 ms sheet exit, so the shelf never shows in between');
   sheet.modal().props.onModalHide();
-  assert.equal(sent, 1, 'only once: the sheet hiding never runs it again');
+  assert.equal(lines, 1, 'its line opens once the sheet is gone');
+  assert.equal(maps, 0, 'never the map with another ride on top');
+  sheet.modal().props.onModalHide();
+  assert.equal(lines, 1, 'only once');
 });
 
-test('GET RIDE PARTS away from the park opens a picture card in place (never a dead tap)', () => {
+test('How to get Parts away from the park opens the way in place (never a dead tap)', () => {
   const sheet = levelSheet({});
   const before = JSON.stringify(sheet.view.tree);
   sheet.partsButton().props.onPress();
   sheet.view.render();
   const card = sheet.view.find(node => typeof node.props?.accessibilityLabel === 'string' && /stand in its line/i.test(node.props.accessibilityLabel));
   assert.ok(card, 'a visible card says where Parts come from');
+  assert.doesNotMatch(card.props.accessibilityLabel, /again/, 'never a replay the server refuses');
   assert.notEqual(JSON.stringify(sheet.view.tree), before, 'the screen changed');
   assert.equal(sheet.closes.length, 0);
+});
+
+test('P17: a coin with no line (a sight, or no line at its park) says it grows when you play it', () => {
+  for (const props of [{ sight: true }, { onGetParts() {} }]) {
+    const sheet = levelSheet(props);
+    sheet.partsButton().props.onPress();
+    sheet.view.render();
+    const card = sheet.view.find(node => node.props?.testID === 'parts-way-card');
+    assert.ok(card);
+    assert.match(card.props.accessibilityLabel, /this coin grows when you play it/);
+    assert.equal(sheet.closes.length, 0, 'no line: nothing leaves for the map');
+  }
 });
 
 test('the coin card wires GET RIDE PARTS to guide.setTarget and the map path, and LinePlay never wears the pocket watch', () => {
@@ -333,9 +349,10 @@ test('round 2: one word for money: Shark Coins, never bare coins beside ride coi
   assert.equal(sharkCoinsWord('Shark Coins'), 'Shark Coins');
 });
 
-test('round 2: GET RIDE PARTS leaves for the map at once (no card fade, quick sheet exit)', () => {
+test('round 2: How to get Parts never leaves for the map with another ride on top (P16, bug 27)', () => {
   const sheet = read('src/components/CoinLevelingModal.tsx');
-  assert.match(sheet, /setFastExit\(true\); stopUpgradeEffects\(\); onGetParts\(\); onClose\(\);/);
+  assert.doesNotMatch(sheet, /onGetParts\(\); onClose\(\);/, 'the map path is gone from the Parts button');
+  assert.match(sheet, /guide\.setTarget\(rideCoin\.ride_id, 'coin_parts'\);/, 'the player\'s own tap makes it their pick');
   assert.doesNotMatch(sheet, /pendingGetPartsRef/, 'round 4: nothing waits for onModalHide');
   assert.match(sheet, /animationOutTiming=\{fastExit \? 90 :/);
   assert.match(sheet, /backdropTransitionOutTiming=\{fastExit \? 90 : undefined\}/);
@@ -355,8 +372,8 @@ test('round 2: Standings says wins (BLUEPRINT 5.9); help reads flags once per si
 
 test('round 2: a sight coin card never sends you to a line it does not have', () => {
   const sheet = read('src/components/CoinLevelingModal.tsx');
-  assert.match(sheet, /'Each new win of this coin earns a Ride Part\. Tap to see the way there\.'/);
-  assert.match(sheet, /\{sight \? 'Win it again' : 'Stand in its line'\}/);
+  assert.match(sheet, /partsWayWords\(!sight && /);
+  assert.doesNotMatch(sheet, /Win it again|earns one too|Each new win of this coin/, 'no replay promise (P17)');
   assert.match(read('src/components/TaskCoinModal.tsx'), /sight=\{sight\}/);
   assert.match(read('src/screens/ParkScreen.tsx'), /sight=\{section === 'normal' && rideKind\(task\.id\) === 'coin'\}/);
 });

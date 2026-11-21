@@ -646,8 +646,10 @@ function tick(s: WhackSim): void {
       }
     }
   }
-  // Auto Look-Up: freeze before any target can escape a disengaged player.
-  if (s.lookUpOn && t - s.lastTap >= LOOKUP_IDLE_MS) {
+  // Auto Look-Up: freeze before any target can escape a disengaged player. Never once the tap log is full
+  // (RIDE_PARTS_BUGS 6): a mash with many fingers fills MAX_TAPS, no tap can resume after that, and the board sat
+  // frozen on TAP TO KEEP BONKING until Leave. A player who tapped that much is not looking away.
+  if (s.lookUpOn && s.tapCount < MAX_TAPS && t - s.lastTap >= LOOKUP_IDLE_MS) {
     for (let h = 0; h < 9; h++) {
       if (s.hPh[h] !== P_UP || s.hSplat[h] === SPLAT_DOWN) continue;
       if (isDecoyKind(kindAt(s, h))) continue;

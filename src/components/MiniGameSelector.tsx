@@ -25,7 +25,7 @@ import { getLinePlayChapter } from '../services/lineplay/chapters';
 import { useHelp } from './help/HelpProvider';
 import GameIntroCard from './help/GameIntroCard';
 import { gameIntroTip } from '../services/help/helpTopics';
-import { RetryRoundContext, StageDealtContext, StageDrawnContext, StageHoldContext } from '../gamekit/StageHoldContext';
+import { RetryRoundContext, RoundStartContext, StageDealtContext, StageDrawnContext, StageHoldContext } from '../gamekit/StageHoldContext';
 import { stageHoldFor } from '../gamekit/stageHold';
 import { pressTrace } from '../ui/pressTrace';
 
@@ -75,6 +75,11 @@ interface Props {
   round?: number;
   /** w5 N04: false while TRY AGAIN's kept board counts ahead of the server's deal (GO waits for it). */
   dealt?: boolean;
+  /**
+   * Told when this try's round 1 really starts on screen (the shell's GO), once per try: the exact began mark
+   * (arcade plan T6). Never told by the how-to card, the punch or the 3 2 1.
+   */
+  onRoundStart?: () => void;
   onClose: () => void;
   onComplete: (multiplier: number, rewards: { coins: number; xp: number }, proof?: TaskGameProof) => void;
 }
@@ -99,6 +104,7 @@ function MiniGameSelector({
   onStageDrawn,
   round = 0,
   dealt = true,
+  onRoundStart,
   onClose,
   onComplete,
 }: Props) {
@@ -154,9 +160,17 @@ function MiniGameSelector({
     </ModalLayerContext.Provider>
   );
 
+  // The try's clock (elapsed_ms, RIDE_PARTS_BUGS 5): from this try's round start, never the first mount. A TRY AGAIN
+  // resets the board in place (round bumps), so the clock restarts with it, then again at its GO.
   useEffect(() => {
     if (visible && selectedGame && !showIntro) gameMountedAt.current = Date.now();
-  }, [visible, selectedGame, showIntro]);
+  }, [visible, selectedGame, showIntro, round]);
+  const onRoundStartRef = useRef(onRoundStart);
+  onRoundStartRef.current = onRoundStart;
+  const roundStarted = useCallback(() => {
+    gameMountedAt.current = Date.now();
+    onRoundStartRef.current?.();
+  }, []);
   useEffect(() => {
     if (showIntro && selectedGame) markTipSeen(gameIntroTip(selectedGame));
   }, [showIntro, selectedGame, markTipSeen]);
@@ -250,7 +264,9 @@ function MiniGameSelector({
     <StageDrawnContext.Provider value={onStageDrawn ?? null}>
       <RetryRoundContext.Provider value={round}>
         <StageDealtContext.Provider value={dealt}>
-          <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+          <RoundStartContext.Provider value={roundStarted}>
+            <StageHoldContext.Provider value={stageHeld}>{game}{intro}</StageHoldContext.Provider>
+          </RoundStartContext.Provider>
         </StageDealtContext.Provider>
       </RetryRoundContext.Provider>
     </StageDrawnContext.Provider>

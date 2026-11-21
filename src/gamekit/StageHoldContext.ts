@@ -36,6 +36,13 @@ export const RetryRoundContext = createContext<number>(0);
  */
 export const StageDealtContext = createContext<boolean>(true);
 
+/**
+ * Told each time a round really starts on screen (the shell's GO: after the how-to card, the punch and the 3 2 1),
+ * once per try. The ride challenge uses it as the exact began mark (arcade plan T6) and as the try's clock start, so
+ * a TRY AGAIN's elapsed time never includes the try before it (RIDE_PARTS_BUGS 5). Null outside a ride challenge.
+ */
+export const RoundStartContext = createContext<(() => void) | null>(null);
+
 /** The ride try number (see RetryRoundContext). */
 export function useRetryRound(): number {
   return useContext(RetryRoundContext);

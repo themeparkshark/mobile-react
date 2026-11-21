@@ -15,7 +15,7 @@ function shell(paid, reduced = false, extra = {}, movement = null, dealt = { val
     './LinePlayMovementContext': { LinePlayMovementContext: movementContext, shouldPauseForMovement: c => Boolean(c && c.moving && c.lineMovePolicy === 'pause') },
     './RideChallengeContext': { RideChallengeContext: { value: paid } },
     './ShellFrameContext': { ShellFrameContext: { value: null } },
-    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null }, RetryRoundContext: { value: 0 }, StageDealtContext: dealt },
+    './StageHoldContext': { StageHoldContext: { value: false }, StageDrawnContext: { value: null }, RetryRoundContext: { value: 0 }, RoundStartContext: { value: null }, StageDealtContext: dealt },
     './Haptics': { Haptic: haptic }, './SFX': { playSfx() {} },
     '../hooks/useReducedGameMotion': { default: () => preference.reduced },
     '../ui/GameIcon': { default: 'GameIcon' },
