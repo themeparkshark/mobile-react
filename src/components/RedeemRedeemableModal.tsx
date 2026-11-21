@@ -1482,12 +1482,12 @@ export default function RedeemRedeemableModal({
                     {coinUri ? <Image source={{ uri: coinUri }} style={styles.howCoin} contentFit="contain" />
                       : <GameIcon name="coin" size={30} />}
                   </View>}
-                  <View style={{
+                  <View style={[{
                     paddingTop: 16, paddingBottom: 16, paddingLeft: 16, paddingRight: 16,
                     backgroundColor: 'rgba(255, 255, 255, 0.1)',
                     borderColor: 'rgba(0, 0, 0, .6)', borderLeftWidth: 2, borderRightWidth: 2, borderBottomWidth: 2,
                     borderBottomLeftRadius: 16, borderBottomRightRadius: 16,
-                  }}>
+                  }, needTicket && arcade && styles.coinWellFolded]}>
                     {/* T7: short on Tickets, Get Tickets takes the big coin's room (the card fits an SE); its header shows the coin. */}
                     {!(needTicket && arcade) && <Box
                       background={require('../../assets/images/screens/explore/starburst.png')}
@@ -1814,6 +1814,8 @@ const styles = StyleSheet.create({
   wayEquals: { fontFamily: 'Shark', fontSize: 18, color: '#075b9b' },
   dealRow: { alignItems: 'center', marginBottom: 8 },
   // T3: the price pictures ride on PLAY!'s right end, inside the pill.
+  // T7: with Get Tickets up, the empty coin well folds away (no blank strip above the rows).
+  coinWellFolded: { paddingTop: 0, paddingBottom: 0, borderBottomWidth: 0, borderLeftWidth: 0, borderRightWidth: 0, backgroundColor: 'transparent' },
   playPips: { position: 'absolute', right: 22, top: 0, bottom: 0, justifyContent: 'center' },
   treatStack: { flexDirection: 'row', marginRight: -2 },
   mapLink: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 8, paddingVertical: 4 },
