@@ -328,3 +328,33 @@ test('C7: shelves name no ride the app chose: park header, Coin Guide, all-parks
   assert.match(waits, /const pickedNow = \(\) => \{ const held = guide\.current\(\); return held && playerChose\(held\) \? held\.taskId : null; \};/);
   assert.doesNotMatch(waits, /Your next coin/);
 });
+
+test('C8: the home card: NEXT PARK DAY with the jar and the treat meter, a limited count, Ride Parts with no coin named', () => {
+  const H = loadTs('src/services/guide/homeNext.ts');
+  const base = { levelUp: null, readyReward: null, daily3: null, treats: { onMap: 0, toTicket: 2, capped: false }, limited: null, parts: null,
+    practice: false, park: { parkName: 'Disneyland', tickets: 6, plan: null }, veteran: true, welcomeBack: false };
+  const jar = { held: 12, cap: 20, full: false };
+  const day = H.homeNextStep({ ...base, park: { ...base.park, plan: { name: 'Space Mountain', coinUrl: null, assetId: 73, parkId: 8 }, jar } });
+  assert.equal(day.copy.kicker, 'NEXT PARK DAY');
+  assert.equal(day.copy.title, '12 Tickets in your jar');
+  assert.equal(day.copy.line, '2 more treats = 1 Ticket. Your pick: Space Mountain');
+  const noPick = H.homeNextStep({ ...base, park: { ...base.park, jar } });
+  assert.equal(noPick.copy.title, '12 Tickets in your jar');
+  assert.doesNotMatch(noPick.copy.line, /Next coin|Space Mountain/);
+  assert.equal(H.homeJarOf({ home_jar: { held: 20, cap: 20, full: true } }).full, true);
+  assert.equal(H.homeJarOf({ tickets: 3 }), null, 'today\'s server: no jar');
+  const limited = H.homeNextStep({ ...base, limited: { name: 'Holiday Coaster', coinUrl: 'x', assetId: 99, parkId: 8, leavesOn: '2026-11-30' }, limitedCount: 5 });
+  assert.equal(limited.copy.title, '5 limited coins at Disneyland');
+  assert.equal(limited.action, 'limited');
+  assert.equal(limited.copy.button.label, 'SEE');
+  const parts = H.homeNextStep({ ...base, park: { ...base.park, plan: { name: 'Dumbo', coinUrl: null, assetId: 155, parkId: 8 } },
+    parts: { name: 'Autopia', coinUrl: 'a', assetId: 12, parkId: 8, partsToGo: 2, levelName: 'Shiny' } });
+  assert.equal(parts.copy.kicker, 'GET RIDE PARTS');
+  assert.equal(parts.copy.line, 'Wait in any ride\'s line to grow its coin');
+  assert.equal(parts.coin, null);
+  const ready = H.homeNextStep({ ...base, levelUp: { name: 'Haunted Mansion', coinUrl: null, assetId: 64, parkId: 8 } });
+  assert.equal(ready.copy.kicker, 'READY TO LEVEL UP', 'the player\'s own coin, no walk: stays');
+  const screen = read('src/screens/ExploreScreen.tsx');
+  assert.match(screen, /RootNavigation\.navigate\('Park', \{ park: coin\?\.parkId \?\? homeParkId \?\? homeShelfPark\(player\.current_park_id\), player: player\.id, tab: 'limited' \}\);/);
+  assert.match(read('src/screens/ParkScreen.tsx'), /setTab\(tabParam === 'limited' \|\| tabParam === 'sights' \? tabParam : 'rides'\);/);
+});

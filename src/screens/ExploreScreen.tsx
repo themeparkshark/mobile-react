@@ -171,7 +171,7 @@ import { applyLiveStub, liveStubMode } from '../components/guide/liveStub';
 import { useFlyAnchor, useProfileTabAnchor } from '../components/guide/flyAnchors';
 import { homeShelfPark } from '../components/guide/HomeShelfButton';
 import useHomeLimitedCoins from '../components/guide/useHomeLimitedCoins';
-import { homeLimitedCoin, homePartsCoin } from '../services/guide/homeNext';
+import { homeJarOf, homeLimitedCoin, homeLimitedCount, homePartsCoin } from '../services/guide/homeNext';
 import { practiceInMenu } from '../components/QuickAccessMenu';
 import type { HomeGuide } from './ExploreScreen/HomeExplore';
 import { refreshFeatureFlags } from '../api/endpoints/platform/feature-flags';
@@ -1745,10 +1745,13 @@ export function ExploreScreenBody() {
       readyReward: retention.homeNext?.readyReward ?? null,
       daily3: retention.homeNext?.daily3 ?? null,
       limited: homeCoinList.length > 0 ? homeLimitedCoin(homeLimitedTasks, owned, homeParkId) : null,
+      limitedCount: homeCoinList.length > 0 ? homeLimitedCount(homeLimitedTasks, owned) : 0,
       parts: coinLevelsRung.open ? homePartsCoin(homeCoinList.filter(coin => coin.park_id === homeParkId)) : null,
       practice: practiceInMenu(ladderCounters.homeDays, player.completed_tasks_count ?? player.ride_coins_collected ?? 0),
       park: { parkName: tripGoal?.park_name ?? null, tickets: player.tickets ?? 0,
-        plan: homePlan ? ref(homePlan.ride_name, homePlan.coin_url, homePlan.asset_id, homePlan.park_id) : null },
+        plan: homePlan ? ref(homePlan.ride_name, homePlan.coin_url, homePlan.asset_id, homePlan.park_id) : null,
+        // The arcade server's home jar (home Tickets wait in a jar of 20); missing on today's server.
+        jar: homeJarOf(player) },
       veteran: homeCoinList.length > 0,
       welcomeBack: welcome.daysAway != null && welcome.daysAway >= 14 && !welcome.done,
     };
@@ -1765,6 +1768,10 @@ export function ExploreScreenBody() {
               return;
             }
             break;
+          case 'limited':
+            // SEE on the limited count: that park's Limited tab, every limited coin shown the same way.
+            RootNavigation.navigate('Park', { park: coin?.parkId ?? homeParkId ?? homeShelfPark(player.current_park_id), player: player.id, tab: 'limited' });
+            return;
           case 'rewards': openRewards(); return;
           case 'find': setHighlightNearestFind(Date.now()); return;
           case 'closet': RootNavigation.navigate('Inventory'); return;

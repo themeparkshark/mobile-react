@@ -73,7 +73,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const { width, height } = useWindowDimensions();
   // Keep the familiar five-coin rows inside their shelves on smaller phones.
   const shelfCoinSize = Math.max(40, Math.min(62, (width - 88) / 5));
-  const { park, player, earnedCoin, openMastery, focusCoin, plan: planVisit } = route.params as {
+  const { park, player, earnedCoin, openMastery, focusCoin, plan: planVisit, tab: tabParam } = route.params as {
     park: number; player: number; earnedCoin?: EarnedShelfArrival;
     /** "Upgrade Your Coin": open mastery as soon as the coin lands (one hop). */
     openMastery?: boolean;
@@ -81,6 +81,8 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
     focusCoin?: { assetId: number };
     /** The home card's PLAN: the next park day's coin picker leads, never yesterday's park story (fix round w3 T016). */
     plan?: boolean;
+    /** Open on this shelf tab (the home card's limited count opens 'limited'). */
+    tab?: ShelfTab;
   };
   const navigation = useNavigation<NavigationProp<ParamListBase>>();
   const isFocused = useIsFocused();
@@ -116,7 +118,7 @@ export default function ParkScreen({ route }: NativeStackScreenProps<ParamListBa
   const [rideOnly, setRideOnly] = useState(false);
   // The shelf's tabs: Rides, Sights and Limited (Past events at the bottom of Limited).
   const [tab, setTab] = useState<ShelfTab>('rides');
-  useEffect(() => { setTab('rides'); }, [park]);
+  useEffect(() => { setTab(tabParam === 'limited' || tabParam === 'sights' ? tabParam : 'rides'); }, [park, tabParam]);
   // Unfound secret slots ("?") show once coin levels open (rung 3); secret coins you won always show.
   const coinLevels = useRung('coin_levels');
   // The guide's plan: GO and "Make this my next coin" both point the one guide (guide.setTarget).
