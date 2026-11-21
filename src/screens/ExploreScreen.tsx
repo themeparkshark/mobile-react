@@ -1726,8 +1726,10 @@ export function ExploreScreenBody() {
       case 'ok': nextCoin.finishArrive(); return;
       case 'near_me': setNearMe({ canPlay: false }); return;
       case 'get_tickets':
-        // The Get Tickets sheet (app-tickets T7) takes this over once it lands; until then the free ways, said plainly.
-        gameAlert('Ways to get Tickets', needTicketLines(guideFlags.queue_tickets === true, guideFlags.ride_rescue_pass === true).join(' '),
+        // Merged with app-tickets (Nov 20): their Get Tickets panel lives on the coin card a player is short at (it needs
+        // that coin's price); this top card names no coin, so it lists the free ways plainly, the arcade park gift included.
+        gameAlert('Ways to get Tickets', [...needTicketLines(guideFlags.queue_tickets === true, guideFlags.ride_rescue_pass === true),
+          ...(guideFlags.arcade_economy === true ? ['Tomorrow at any park: +3.'] : [])].join(' '),
           [{ text: 'NEAR ME', onPress: () => setNearMe({ canPlay: true }) }, { text: 'OK' }], { icon: 'ticket' });
         return;
       case 'unfold': setAdventureCelebrateRequest(n => n + 1); return;
@@ -1737,7 +1739,7 @@ export function ExploreScreenBody() {
         if (park && player) RootNavigation.navigate('Park', { park: park.id, player: player.id });
     }
   }, [nextCoin.targetTask, nextCoin.target?.taskId, nextCoin.target?.name, nextCoin.leavingParkId, openLinePlayFor, openLinePlayHere, claimTickets,
-    guideFlags.queue_tickets, guideFlags.ride_rescue_pass, park, player, welcome, nextCoin.finishArrive]);
+    guideFlags.queue_tickets, guideFlags.ride_rescue_pass, guideFlags.arcade_economy, park, player, welcome, nextCoin.finishArrive]);
   // The home guide card (core loop 4.1 "Home", fix pass w4 T007): one true next thing at a time, built from what
   // this player can do now (homeNextStep), never "nothing to do". HomeExplore adds the treats on its map.
   const homePlan = tripGoal && !tripGoal.coin_owned ? tripGoal : null;

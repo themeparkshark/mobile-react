@@ -214,6 +214,9 @@ test('C2: the card draws the pips, the X, the shelf gift bar and the three pictu
   assert.match(screen, /case 'ok': nextCoin\.finishArrive\(\); return;/);
   assert.match(screen, /case 'near_me': setNearMe\(\{ canPlay: false \}\); return;/);
   assert.match(screen, /case 'get_tickets':/);
+  // Integration (Nov 20): on the arcade server the free ways name the park gift, never a free try.
+  const getTickets = screen.slice(screen.indexOf("case 'get_tickets':"), screen.indexOf("case 'unfold':"));
+  assert.match(getTickets, /guideFlags\.arcade_economy === true \? \['Tomorrow at any park: \+3\.'\]/);
 });
 
 test('C3: Daily 3 GO closes to the map with no target; the island price is the served one', () => {
