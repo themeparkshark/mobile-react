@@ -17,6 +17,8 @@ import Ribbon from './Ribbon';
 import YellowButton from './YellowButton';
 import CoinUpgradeDemo from './CoinUpgradeDemo';
 import { AuthContext } from '../context/AuthProvider';
+import { guide } from '../services/guide/nextCoin';
+import { levelUpGoal } from '../services/collection/levelUpGoal';
 import { SoundEffectContext } from '../context/SoundEffectProvider';
 import { RideCoinLevelType } from '../models/ride-coin-level-type';
 import useReducedGameMotion from '../hooks/useReducedGameMotion';
@@ -87,13 +89,36 @@ type ModalState = 'preview' | 'confirm' | 'leveling' | 'success' | 'maxed';
 
 // Tier names, colours and looks come from the one tier token file.
 const TIER_NAMES = COIN_TIERS.map(tier => tier.name);
+
+/**
+ * Where a coin's Parts come from, in words that only name a way that works (bugs 27, 28). A coin with a line:
+ * time in that line. A show, landmark, walk-through or secret coin (no line): it grows when you play it. Never a
+ * promise to win an owned coin again (the server refuses that replay).
+ */
+export function partsWayWords(hasLine: boolean, rideName: string): { title: string; body: string; label: string; hint: string } {
+  return hasLine
+    ? { title: 'Stand in its line', body: 'On your park day, time in this ride’s line earns Ride Parts.',
+      label: `Ride Parts for ${rideName}: stand in its line on your park day. Time in line earns Parts.`,
+      hint: 'Time in this ride’s line earns Ride Parts.' }
+    : { title: 'Play it', body: 'This coin grows when you play it.',
+      label: `Ride Parts for ${rideName}: this coin grows when you play it.`, hint: 'This coin grows when you play it.' };
+}
+
+/**
+ * What How to get Parts does (bug 27): at the park with a line, open that ride's line and make it the player's pick
+ * (their own tap); every other case shows the way in place, on screen at once, and never leaves for the map.
+ */
+export function partsButtonAction(input: { readonly sight: boolean; readonly canPlayInLine: boolean }): 'line' | 'words' {
+  return !input.sight && input.canPlayInLine ? 'line' : 'words';
+}
 const TIER_VISUAL_REWARDS = COIN_TIERS.map(tier => tier.look);
 const TIER_COLORS = COIN_TIERS.map(tier => tier.ringDeep);
 const TOP_TIER = COIN_TIERS.length - 1;
 
 /** The one next step when a coin cannot power up yet (never a dead end). */
 export function missingResourceAction(missingParts: number, missingEnergy: number): { label: string; kind: 'parts' | 'energy' } | null {
-  if (missingParts > 0) return { label: `Get ${missingParts} Ride Part${missingParts === 1 ? '' : 's'}`, kind: 'parts' };
+  // Bug 27: "Get 3 Ride Parts" read like a gift. It is the way to earn them.
+  if (missingParts > 0) return { label: 'How to get Parts', kind: 'parts' };
   if (missingEnergy > 0) return { label: `Find ${missingEnergy} Energy`, kind: 'energy' };
   return null;
 }
@@ -312,6 +337,8 @@ export default function CoinLevelingModal({
   const hasParts = playerParts >= rideCoin.parts_to_next_level;
   const canLevelUp = !isMaxLevel && rideCoin.is_unlocked && hasEnergy && hasParts;
   const yourRides = (rideCoin as CollectedRideCoin).your_rides ?? null;
+  // A coin has a line when it is not a sight and, at its park, the shelf offers its line (passport rides).
+  const partsWay = partsWayWords(!sight && (onPlayInLine != null || onGetParts == null), rideCoin.ride_name);
   const missingAction = rideCoin.is_unlocked && !isMaxLevel
     ? missingResourceAction(Math.max(0, rideCoin.parts_to_next_level - playerParts), Math.max(0, rideCoin.energy_to_next_level - playerEnergy))
     : null;
@@ -982,6 +1009,21 @@ export default function CoinLevelingModal({
                         {upgradeError}
                       </Text>
                     </View>}
+                    {/* How to get Parts with no line to open: the way, drawn right above the button just tapped (bug 27: it used to
+                        open below the fold, so nothing seemed to happen). */}
+                    {!canLevelUp && !hasParts && showPartsHelp && (
+                      <View accessible accessibilityLiveRegion="polite" testID="parts-way-card"
+                        accessibilityLabel={partsWay.label}
+                        style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10,
+                          backgroundColor: '#E8F6FF', borderColor: '#7CC3EA', borderWidth: 2, borderRadius: 14, padding: 10 }}>
+                        <GameIcon name="ride" size={30} />
+                        <Image source={require('../../assets/images/ride-parts.png')} style={{ width: 30, height: 30 }} contentFit="contain" />
+                        <View style={{ flex: 1 }}>
+                          <Text style={{ fontFamily: 'Shark', fontSize: 14, color: '#05346E' }}>{partsWay.title}</Text>
+                          <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#17476B' }}>{partsWay.body}</Text>
+                        </View>
+                      </View>
+                    )}
                     {/* ── Level Up Button ── */}
                     {canLevelUp || !missingAction ? <YellowButton
                       text="Level Up!"
@@ -993,12 +1035,15 @@ export default function CoinLevelingModal({
                         // GET RIDE PARTS always does something you can see (must-fix 4):
                         // at this park the guide walks you to the ride's line; away, the
                         // sheet opens the picture card that says where Parts come from.
-                        if (missingAction.kind === 'parts' && onGetParts) {
+                        if (missingAction.kind === 'parts' && partsButtonAction({ sight, canPlayInLine: onPlayInLine != null }) === 'line') {
                           if (upgradeBusy.current) return;
-                          // The map starts sliding in under the 90 ms sheet exit, so the shelf never shows in between.
-                          setFastExit(true); stopUpgradeEffects(); onGetParts(); onClose();
-                        } else if (missingAction.kind === 'parts' && onPlayInLine) {
+                          // At the ride's park with a line: the player's own tap makes it their pick, then its line opens.
+                          guide.setTarget(rideCoin.ride_id, 'coin_parts');
+                          levelUpGoal.set(rideCoin.ride_id, viewer?.id);
                           pendingLinePlayRef.current = true; handleClose();
+                        } else if (missingAction.kind === 'parts') {
+                          // No line here, or away from the park: the way, in place, scrolled into view at once.
+                          setShowPartsHelp(true);
                         } else if (missingAction.kind === 'energy') {
                           pendingExploreRef.current = true; handleClose();
                         } else {
@@ -1007,25 +1052,6 @@ export default function CoinLevelingModal({
                       }}
                     />}
 
-                    {/* Away from this park, GET RIDE PARTS opens this picture card: where Parts come from. */}
-                    {!canLevelUp && !hasParts && showPartsHelp && (
-                      <View accessible accessibilityLiveRegion="polite"
-                        accessibilityLabel={sight
-                          ? `Ride Parts for ${rideCoin.ride_name}: win its coin again on your park day. Each new win earns a Part.`
-                          : `Ride Parts for ${rideCoin.ride_name}: stand in its line on your park day. Time in line earns Parts, and winning its coin again earns one too.`}
-                        style={{ alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10,
-                          backgroundColor: '#E8F6FF', borderColor: '#7CC3EA', borderWidth: 2, borderRadius: 14, padding: 10 }}>
-                        <GameIcon name="ride" size={30} />
-                        <Image source={require('../../assets/images/ride-parts.png')} style={{ width: 30, height: 30 }} contentFit="contain" />
-                        <View style={{ flex: 1 }}>
-                          <Text style={{ fontFamily: 'Shark', fontSize: 14, color: '#05346E' }}>{sight ? 'Win it again' : 'Stand in its line'}</Text>
-                          <Text style={{ fontFamily: 'Knockout', fontSize: 13, color: '#17476B' }}>
-                            {sight ? 'On your park day, each new win of this coin earns a Ride Part.'
-                              : 'On your park day, time in this ride\'s line earns Ride Parts. Winning its coin again earns one too.'}
-                          </Text>
-                        </View>
-                      </View>
-                    )}
                     {/* Helper text for what you're missing */}
                     {!canLevelUp && !(showPartsHelp && !hasParts) && (
                       <Text style={{
@@ -1033,15 +1059,7 @@ export default function CoinLevelingModal({
                         color: '#315D7B',
                         textAlign: 'center', marginTop: 8,
                       }}>
-                        {!hasParts
-                          ? sight
-                            ? onGetParts
-                              ? 'Each new win of this coin earns a Ride Part. Tap to see the way there.'
-                              : 'Each new win of this coin earns a Ride Part on your park day.'
-                            : onGetParts
-                            ? 'Time in this ride\'s line earns Ride Parts. Tap to see the way there.'
-                            : 'Win this ride again or play LinePlay in its line to earn Ride Parts.'
-                          : 'Energy comes from treats on your home map and your daily chest.'}
+                        {!hasParts ? partsWay.hint : 'Energy comes from treats on your home map and your daily chest.'}
                       </Text>
                     )}
                     {/* Ride Parts are earned at the ride and never sold. The shop
